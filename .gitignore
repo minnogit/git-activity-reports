@@ -1,0 +1,11 @@
+*.png
+
+# Eventuali file JSON di dati grezzi salvati manualmente (es. con "> file.json")
+# Se salvi il JSON intermedio in un file
+*.json 
+
+# Ambiente virtuale (virtual environment)
+venv/
+.venv/
+
+.vscode/
