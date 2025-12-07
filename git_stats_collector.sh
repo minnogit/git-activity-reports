@@ -1,0 +1,202 @@
+#!/bin/bash
+
+# ===============================================
+# Script per generare un rapporto sull'attività di Git
+# Utilizzo: ./g.sh <DATA_INIZIO> <DATA_FINE> [formato] [autore]
+# ===============================================
+
+START_DATE="$1"
+END_DATE="$2"
+OUTPUT_FORMAT="${3:-text}" # Predefinito a 'text'
+CLI_AUTHOR_FILTER="$4"     # Filtro opzionale da riga di comando
+
+# Variabile globale per il filtro corrente
+CURRENT_AUTHOR_FILTER="$CLI_AUTHOR_FILTER"
+
+# -----------------------------------------------
+# Funzioni Ausiliarie
+# -----------------------------------------------
+
+# Calcola righe aggiunte/rimosse
+get_lines() {
+    local date_str="$1"
+    
+    # Costruiamo il comando come array per gestire correttamente gli spazi
+    local cmd=(git log --since="$date_str 00:00:00" --until="$date_str 23:59:59" --pretty="format:" --numstat)
+    
+    # Se c'è un autore (diverso da TOTALE), lo aggiungiamo
+    if [[ -n "$CURRENT_AUTHOR_FILTER" && "$CURRENT_AUTHOR_FILTER" != "TOTALE" ]]; then
+        cmd+=(--author="$CURRENT_AUTHOR_FILTER")
+    fi
+
+    # Eseguiamo il comando espandendo l'array
+    "${cmd[@]}" | awk '
+        BEGIN {OFS=":"; sum_added=0; sum_deleted=0}
+        {
+            sum_added += $1;
+            sum_deleted += $2
+        }
+        END {
+            print sum_added, sum_deleted, (sum_added + sum_deleted)
+        }'
+}
+
+# Calcola numero di commit
+get_commits() {
+    local date_str="$1"
+    
+    local cmd=(git log --since="$date_str 00:00:00" --until="$date_str 23:59:59" --oneline)
+    
+    if [[ -n "$CURRENT_AUTHOR_FILTER" && "$CURRENT_AUTHOR_FILTER" != "TOTALE" ]]; then
+        cmd+=(--author="$CURRENT_AUTHOR_FILTER")
+    fi
+
+    "${cmd[@]}" | wc -l | tr -d ' '
+}
+
+# Ottiene la lista autori (gestisce spazi nei nomi)
+get_all_authors() {
+    git log --since="$START_DATE 00:00:00" --until="$END_DATE 23:59:59" --pretty=format:'%an' | sort | uniq
+}
+
+# -----------------------------------------------
+# Logica Principale del Report per Singolo Autore o Totale
+# -----------------------------------------------
+
+generate_single_author_data() {
+    local author_name="$1"
+    CURRENT_AUTHOR_FILTER="$author_name"
+
+    local start_ts=$(date -d "$START_DATE" +%s)
+    local end_ts=$(date -d "$END_DATE" +%s)
+    local current_ts=$start_ts
+
+    local daily_json_items=""
+    local day_first=true
+    local total_commits=0
+    local total_lines=0
+    local total_added=0
+    local total_deleted=0
+
+    # Intestazione specifica se siamo in modalità TEXT
+    if [[ "$OUTPUT_FORMAT" == "text" ]]; then
+        printf "\n## Report: %s\n" "$author_name"
+        echo "---------------------------------------------------------------------------------------"
+        printf "%-10s %-10s %10s %15s %15s %15s\n" "Giorno" "Data" "Commit" "Righe Tot." "Aggiunte" "Rimosse"
+        echo "---------------------------------------------------------------------------------------"
+    fi
+
+    # Iterazione giorni
+    while [[ $current_ts -le $end_ts ]]; do
+        local current_date=$(date -d @$current_ts +%Y-%m-%d)
+        local day_of_week=$(date -d @$current_ts +%A)
+
+        local commits=$(get_commits "$current_date")
+        local line_metrics=$(get_lines "$current_date")
+        
+        local added=$(echo $line_metrics | cut -d ':' -f 1)
+        local deleted=$(echo $line_metrics | cut -d ':' -f 2)
+        local lines=$(echo $line_metrics | cut -d ':' -f 3)
+
+        # Gestione valori vuoti se awk non ritorna nulla
+        added=${added:-0}
+        deleted=${deleted:-0}
+        lines=${lines:-0}
+
+        total_commits=$((total_commits + commits))
+        total_lines=$((total_lines + lines))
+        total_added=$((total_added + added))
+        total_deleted=$((total_deleted + deleted))
+
+        # Output Text (Corretto: Stampa sempre se formato è text)
+        if [[ "$OUTPUT_FORMAT" == "text" ]]; then
+             # Stampa solo se c'è attività o se vuoi vedere anche i giorni vuoti
+             if [[ "$commits" -gt 0 ]]; then
+                printf "%-10s %-10s %10d %15d %15d %15d\n" "${day_of_week:0:3}" "$current_date" "$commits" "$lines" "$added" "$deleted"
+             fi
+        fi
+
+        # Output JSON
+        if [[ "$OUTPUT_FORMAT" == "json" ]]; then
+            if [[ "$day_first" == true ]]; then day_first=false; else daily_json_items+=","; fi
+            daily_json_items+="{\"day\":\"$day_of_week\",\"date\":\"$current_date\",\"commits\":$commits,\"lines\":$lines,\"added\":$added,\"deleted\":$deleted}"
+        fi
+
+        current_ts=$((current_ts + 86400))
+    done
+
+    if [[ "$OUTPUT_FORMAT" == "text" ]]; then
+        echo "---------------------------------------------------------------------------------------"
+        printf "%-21s %10d %15d %15d %15d\n" "TOTALE:" "$total_commits" "$total_lines" "$total_added" "$total_deleted"
+    fi
+
+    # Ritorna blocco JSON per questo autore
+    if [[ "$OUTPUT_FORMAT" == "json" ]]; then
+        echo "{"
+        echo "  \"author\": \"$author_name\","
+        echo "  \"total_commits\": $total_commits,"
+        echo "  \"daily_data\": [$daily_json_items]"
+        echo "}"
+    fi
+}
+
+# -----------------------------------------------
+# Main
+# -----------------------------------------------
+
+main() {
+    # Validazioni base
+    if [ -z "$START_DATE" ] || [ -z "$END_DATE" ]; then
+        echo "Errore: specificare date. Uso: $0 <START> <END> [text|json] [autore]" >&2; exit 1
+    fi
+    
+    # Check git
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo "Errore: Non sei in un repository Git." >&2; exit 1
+    fi
+
+    # 1. Output JSON
+    if [[ "$OUTPUT_FORMAT" == "json" ]]; then
+        echo "[" 
+        
+        if [[ -n "$CLI_AUTHOR_FILTER" ]]; then
+            # Singolo autore richiesto esplicitamente
+            generate_single_author_data "$CLI_AUTHOR_FILTER"
+        else
+            # Tutti gli autori (Automatico)
+            # Usiamo un file temporaneo o process substitution per leggere riga per riga (gestione spazi)
+            local first_author=true
+            
+            while IFS= read -r auth; do
+                if [[ -z "$auth" ]]; then continue; fi
+                
+                if [[ "$first_author" == true ]]; then 
+                    first_author=false
+                else 
+                    echo "," 
+                fi
+                
+                generate_single_author_data "$auth"
+                
+            done < <(get_all_authors)
+        fi
+        echo "]" 
+    
+    # 2. Output TEXT
+    else
+        echo "Generazione report dal $START_DATE al $END_DATE..."
+        if [[ -n "$CLI_AUTHOR_FILTER" ]]; then
+            generate_single_author_data "$CLI_AUTHOR_FILTER"
+        else
+            # Modalità TEXT senza autore specifico:
+            # Opzione A: Stampare il totale aggregato (comportamento classico)
+            generate_single_author_data "TOTALE"
+            
+            # Opzione B: Se vuoi vedere la lista testuale di tutti gli autori separati, scommenta qui sotto:
+            # echo -e "\n=== DETTAGLIO PER AUTORE ==="
+            # get_all_authors | while IFS= read -r auth; do generate_single_author_data "$auth"; done
+        fi
+    fi
+}
+
+main
