@@ -107,6 +107,9 @@
 
 # Parsing delle opzioni
 PROJECT_FILE=""
+START_DATE=""
+END_DATE=""
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         --file)
@@ -117,41 +120,60 @@ while [[ $# -gt 0 ]]; do
             PROJECT_FILE="$2"
             shift 2
             ;;
-        --)
-            shift
-            break
+        --start)
+            START_DATE="$2"
+            shift 2
+            ;;
+        --end)
+            END_DATE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
             ;;
         -*)
             echo "Opzione non valida: $1" >&2
             exit 1
             ;;
         *)
+            # Resto sono percorsi
             break
             ;;
     esac
 done
 
-START_DATE="$1"
-END_DATE="$2"
-shift 2
+# Se date non specificate con --start/--end, usa i primi due argomenti
+if [[ -z "$START_DATE" ]]; then
+    START_DATE="$1"
+    shift
+fi
+if [[ -z "$END_DATE" ]]; then
+    END_DATE="$1"
+    shift
+fi
+
 PROJECT_PATHS=("$@")
 
-# Se specificato un file, leggere i percorsi aggiuntivi da esso
+# Lettura file con gestione corretta degli spazi
 if [ -n "$PROJECT_FILE" ]; then
     if [ ! -f "$PROJECT_FILE" ]; then
         echo "Errore: File $PROJECT_FILE non trovato." >&2
         exit 1
     fi
     while IFS= read -r line || [ -n "$line" ]; do
-        # Ignora linee vuote o commenti (inizianti con #)
         [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-        # Splita la riga in percorsi (assumendo spazi come separatori)
-        for path in $line; do
-            # Espandi ~ al home directory
-            path="${path/#\~/$HOME}"
-            PROJECT_PATHS+=("$path")
-        done
+        # Espansione tilde e aggiunta come elemento singolo
+        path="${line/#\~/$HOME}"
+        PROJECT_PATHS+=("$path")
     done < "$PROJECT_FILE"
+fi
+
+# Validazione date (formato base)
+if ! [[ "$START_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || \
+   ! [[ "$END_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    echo "Errore: Date devono essere in formato YYYY-MM-DD" >&2
+    exit 1
 fi
 
 # Inizializzazione della variabile JSON
