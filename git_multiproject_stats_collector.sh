@@ -4,15 +4,63 @@
 # Script per raccogliere statistiche aggregate (righe e commit)
 # per tutti gli autori in più repository Git.
 #
-# Utilizzo: ./git_stats_collector.sh <DATA_INIZIO> <DATA_FINE> <percorso_progetto1> [percorso_progetto2...]
-# Esempio: ./git_stats_collector.sh 2025-11-01 2025-11-30 ~/progetti/repoA ~/progetti/repoB
+# Utilizzo:
+#   ./git_multiproject_stats_collector.sh <DATA_INIZIO> <DATA_FINE> <percorso_progetto1> [percorso_progetto2...]
+#   ./git_multiproject_stats_collector.sh --file <file_percorsi> <DATA_INIZIO> <DATA_FINE>
+# Esempio:
+#   ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/progetti/repoA ~/progetti/repoB
+#   ./git_multiproject_stats_collector.sh --file progetti.txt 2025-11-01 2025-11-30
+# Nota: Il file deve contenere un percorso per riga.
 # ===============================================
+
+# Parsing delle opzioni
+PROJECT_FILE=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --file)
+            if [[ -z "$2" || "$2" =~ ^- ]]; then
+                echo "Errore: --file richiede un argomento." >&2
+                exit 1
+            fi
+            PROJECT_FILE="$2"
+            shift 2
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo "Opzione non valida: $1" >&2
+            exit 1
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 START_DATE="$1"
 END_DATE="$2"
-# Rimuoviamo i primi due parametri ($1 e $2) e consideriamo il resto come percorsi
 shift 2
-PROJECT_PATHS=("$@") 
+PROJECT_PATHS=("$@")
+
+# Se specificato un file, leggere i percorsi aggiuntivi da esso
+if [ -n "$PROJECT_FILE" ]; then
+    if [ ! -f "$PROJECT_FILE" ]; then
+        echo "Errore: File $PROJECT_FILE non trovato." >&2
+        exit 1
+    fi
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Ignora linee vuote o commenti (inizianti con #)
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        # Splita la riga in percorsi (assumendo spazi come separatori)
+        for path in $line; do
+            # Espandi ~ al home directory
+            path="${path/#\~/$HOME}"
+            PROJECT_PATHS+=("$path")
+        done
+    done < "$PROJECT_FILE"
+fi
 
 # Inizializzazione della variabile JSON
 FULL_JSON="[\n"
@@ -96,7 +144,10 @@ main() {
     # Validazioni iniziali
     if [ ${#PROJECT_PATHS[@]} -eq 0 ] || [ -z "$START_DATE" ] || [ -z "$END_DATE" ]; then
         echo "Errore: Specificare date e almeno un percorso progetto." >&2
-        echo "Utilizzo: $0 <DATA_INIZIO> <DATA_FINE> <percorso_progetto1> [percorso_progetto2...]" >&2
+        echo "Utilizzo:" >&2
+        echo "  $0 <DATA_INIZIO> <DATA_FINE> <percorso_progetto1> [percorso_progetto2...]" >&2
+        echo "  $0 --file <file_percorsi> <DATA_INIZIO> <DATA_FINE>" >&2
+        echo "Nota: Il file deve contenere un percorso per riga." >&2
         exit 1
     fi
     
