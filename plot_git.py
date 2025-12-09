@@ -48,7 +48,7 @@ def main():
     # Creazione DataFrame
     df = pd.DataFrame(flattened_data)
     # Converti in datetime per l'ordinamento
-    df['date'] = pd.to_datetime(df['date']) 
+    df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
     
     # Pivot dei dati: Aggrega i dati per giorno e autore
     pivot_df = df.pivot_table(
@@ -70,16 +70,9 @@ def main():
         ax=ax # Disegna sul nostro asse
     )
     
-    # **********************************************
-    # NUOVA SEZIONE: Formattazione delle ascisse (Asse X)
-    # **********************************************
-    
-    # Definisce il formato della data: Anno-Mese-Giorno
-    date_form = mdates.DateFormatter("%Y-%m-%d")
-    ax.xaxis.set_major_formatter(date_form)
-    
-    # Ottiene tutte le etichette delle date e le ruota per leggibilità
-    fig.autofmt_xdate(rotation=45, ha='right')
+    # Formatta le etichette delle date per mostrare solo YYYY-MM-DD
+    ax.set_xticks(range(len(pivot_df.index)))
+    ax.set_xticklabels([d.strftime('%Y-%m-%d') for d in pivot_df.index], rotation=45, ha='right')
 
     # Rimuove l'etichetta "date" dall'asse X
     ax.set_xlabel('Data') 
