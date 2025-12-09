@@ -1,8 +1,71 @@
 #!/bin/bash
 
 # ===============================================
-# Script per generare un rapporto sull'attività di Git
-# Utilizzo: ./g.sh <DATA_INIZIO> <DATA_FINE> [formato] [autore]
+# GIT STATS COLLECTOR - Singolo Repository
+# ===============================================
+#
+# DESCRIZIONE:
+#   Analizza l'attività Git di un singolo repository con dettaglio giornaliero.
+#   Genera statistiche su commit e righe modificate per autore.
+#
+# UTILIZZO:
+#   ./git_stats_collector.sh <DATA_INIZIO> <DATA_FINE> [formato] [autore]
+#
+# PARAMETRI:
+#   DATA_INIZIO    Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
+#   DATA_FINE      Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
+#   formato        Formato output: 'text' o 'json' (default: text)
+#   autore         Filtra per autore specifico (default: tutti, modalità TOTALE)
+#
+# ESEMPI:
+#   # Report testuale per tutti gli autori (aggregato)
+#   ./git_stats_collector.sh 2025-11-01 2025-11-30
+#
+#   # Report testuale per autore specifico
+#   ./git_stats_collector.sh 2025-11-01 2025-11-30 text "Mario Rossi"
+#
+#   # JSON per visualizzazione grafica
+#   ./git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py
+#
+#   # JSON per singolo autore
+#   ./git_stats_collector.sh 2025-11-01 2025-11-30 json "Laura Bianchi"
+#
+# OUTPUT:
+#   - Formato TEXT: Tabella giornaliera con commit, righe aggiunte/rimosse
+#   - Formato JSON: Array di oggetti con statistiche giornaliere per autore
+#
+# FORMATO JSON:
+#   [
+#     {
+#       "author": "Nome Autore",
+#       "total_commits": 15,
+#       "daily_data": [
+#         {
+#           "day": "Monday",
+#           "date": "2025-11-04",
+#           "commits": 3,
+#           "lines": 450,
+#           "added": 280,
+#           "deleted": 170
+#         }
+#       ]
+#     }
+#   ]
+#
+# NOTE:
+#   - Lo script deve essere eseguito all'interno di un repository Git
+#   - I merge commits sono esclusi dalle statistiche
+#   - Le righe totali sono calcolate come: aggiunte + eliminate
+#   - Richiede GNU date (su macOS: brew install coreutils, usa gdate)
+#
+# REQUISITI:
+#   - Bash 4.0+
+#   - Git installato e configurato
+#   - GNU coreutils (comando date con opzione -d)
+#
+# AUTORE: Michele Innocenti
+# VERSIONE: 1.0
+# DATA: Dicembre 2025
 # ===============================================
 
 START_DATE="$1"

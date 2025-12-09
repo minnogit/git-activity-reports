@@ -1,16 +1,108 @@
 #!/bin/bash
 
 # ===============================================
-# Script per raccogliere statistiche aggregate (righe e commit)
-# per tutti gli autori in più repository Git.
+# GIT MULTI-PROJECT STATS COLLECTOR
+# ===============================================
 #
-# Utilizzo:
-#   ./git_multiproject_stats_collector.sh <DATA_INIZIO> <DATA_FINE> <percorso_progetto1> [percorso_progetto2...]
-#   ./git_multiproject_stats_collector.sh --file <file_percorsi> <DATA_INIZIO> <DATA_FINE>
-# Esempio:
-#   ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/progetti/repoA ~/progetti/repoB
+# DESCRIZIONE:
+#   Analizza l'attività Git su multipli repository contemporaneamente.
+#   Genera statistiche aggregate per progetto e autore nel periodo specificato.
+#
+# UTILIZZO:
+#   ./git_multiproject_stats_collector.sh [OPZIONI] <DATA_INIZIO> <DATA_FINE> [percorsi...]
+#
+# OPZIONI:
+#   --file <file>    Legge i percorsi dei repository da file (uno per riga)
+#   --start <data>   Data di inizio periodo (alternativa a posizionale)
+#   --end <data>     Data di fine periodo (alternativa a posizionale)
+#   -h, --help       Mostra questo help
+#
+# PARAMETRI POSIZIONALI:
+#   DATA_INIZIO      Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
+#   DATA_FINE        Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
+#   percorsi...      Percorsi ai repository Git (opzionale se si usa --file)
+#
+# ESEMPI:
+#   # Analisi di repository specifici
+#   ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/repo1 ~/repo2
+#
+#   # Repository da file di configurazione
 #   ./git_multiproject_stats_collector.sh --file progetti.txt 2025-11-01 2025-11-30
-# Nota: Il file deve contenere un percorso per riga.
+#
+#   # Con opzioni per le date
+#   ./git_multiproject_stats_collector.sh --start 2025-11-01 --end 2025-11-30 ~/repo1
+#
+#   # Pipeline completa con visualizzazione
+#   ./git_multiproject_stats_collector.sh --file repos.txt 2025-11-01 2025-11-30 \
+#     | python3 plot_multiproject.py
+#
+# FORMATO FILE PERCORSI:
+#   Il file specificato con --file deve contenere un percorso per riga:
+#
+#     # Commenti sono ignorati
+#     ~/progetti/backend
+#     ~/progetti/frontend
+#     /var/www/api-service
+#     # Percorsi con spazi sono supportati
+#     /home/user/My Projects/mobile-app
+#
+#   Note sul file:
+#   - Un percorso per riga
+#   - Supporta tilde (~) per home directory
+#   - Linee vuote e commenti (#) sono ignorati
+#   - Percorsi con spazi sono supportati
+#
+# OUTPUT JSON:
+#   [
+#     {
+#       "project": "backend",
+#       "author": "Mario Rossi",
+#       "lines": 3450,
+#       "commits": 24
+#     },
+#     {
+#       "project": "backend",
+#       "author": "Laura Bianchi",
+#       "lines": 2890,
+#       "commits": 18
+#     }
+#   ]
+#
+# NOTE:
+#   - Lo script può essere eseguito da qualsiasi directory
+#   - Ogni percorso deve puntare a un repository Git valido (.git presente)
+#   - Repository non validi vengono saltati con warning
+#   - I merge commits sono esclusi dalle statistiche
+#   - Le righe totali sono calcolate come: aggiunte + eliminate
+#   - Il nome del progetto è estratto dal nome della cartella
+#   - L'output è sempre in formato JSON (per uso con plot_multiproject.py)
+#
+# CASI D'USO:
+#   - Confronto attività tra progetti diversi
+#   - Report di team distribuiti su più repository
+#   - Analisi portfolio completo di progetti
+#   - Sprint review multi-progetto
+#   - Identificazione di sbilanciamenti nel carico di lavoro
+#
+# REQUISITI:
+#   - Bash 4.0+
+#   - Git installato e configurato
+#   - Accesso in lettura ai repository da analizzare
+#   - GNU coreutils (comando date con opzione -d)
+#
+# PERFORMANCE:
+#   - Repository grandi (>10K commits) richiedono più tempo
+#   - Consigliato: max 10-15 repository per esecuzione
+#   - Per analisi massive, considerare esecuzioni parallele
+#
+# TROUBLESHOOTING:
+#   - Se un percorso viene saltato, verifica la presenza di .git
+#   - Per percorsi con spazi, usa il formato --file
+#   - JSON malformato: verifica nomi autori con caratteri speciali
+#
+# AUTORE: Michele Innocenti
+# VERSIONE: 2.0
+# DATA: Dicembre 2025
 # ===============================================
 
 # Parsing delle opzioni
