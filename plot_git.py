@@ -1,8 +1,25 @@
 import sys
 import json
+import subprocess
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates # Importiamo il modulo per la gestione delle date
+
+def get_git_project_name():
+    """Estrae il nome del progetto git dalla directory corrente."""
+    try:
+        # Ottieni il path della directory root del repository git
+        result = subprocess.run(['git', 'rev-parse', '--show-toplevel'], 
+                              capture_output=True, text=True, check=True)
+        repo_path = result.stdout.strip()
+        
+        # Estrai il nome della directory dal path
+        project_name = os.path.basename(repo_path)
+        return project_name
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # Se git non è disponibile o non siamo in un repository git
+        return None
 
 def main():
     # Legge tutto l'input da stdin
@@ -78,7 +95,11 @@ def main():
     ax.set_xlabel('Data') 
 
     # Titoli e Legenda
-    ax.set_title('Produttività Git per Autore (Righe Modificate)')
+    project_name = get_git_project_name()
+    title = 'Produttività Git per Autore (Righe Modificate)'
+    if project_name:
+        title = f'{project_name} - {title}'
+    ax.set_title(title)
     ax.set_ylabel('Righe Totali (Aggiunte + Rimosse)')
     ax.legend(title='Autore', bbox_to_anchor=(1.02, 1), loc='upper left')
     ax.grid(axis='y', linestyle='--', alpha=0.5)
