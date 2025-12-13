@@ -177,7 +177,12 @@ if ! [[ "$START_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || \
 fi
 
 # Inizializzazione della variabile JSON
-FULL_JSON="[\n"
+FULL_JSON="{\n"
+FULL_JSON+="  \"metadata\": {\n"
+FULL_JSON+="    \"start_date\": \"$START_DATE\",\n"
+FULL_JSON+="    \"end_date\": \"$END_DATE\"\n"
+FULL_JSON+="  },\n"
+FULL_JSON+="  \"data\": [\n"
 FIRST_PROJECT=true
 
 # -----------------------------------------------
@@ -271,7 +276,8 @@ main() {
     done
     
     # Stampa il JSON finale completo
-    FULL_JSON+="\n]"
+    FULL_JSON+="\n  ]\n"
+    FULL_JSON+="}\n"
     echo -e "$FULL_JSON"
 }
 

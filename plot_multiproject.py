@@ -14,15 +14,29 @@ def main():
 
     try:
         data = json.loads(raw_input)
-    except json.JSONDecodeError as e:
+        
+        # Gestione del nuovo formato con metadata
+        if isinstance(data, dict) and 'data' in data and 'metadata' in data:
+            start_date = data['metadata']['start_date']
+            end_date = data['metadata']['end_date']
+            df_data = data['data']
+        elif isinstance(data, list):
+            # Formato legacy senza metadata
+            start_date = "N/A"
+            end_date = "N/A"
+            df_data = data
+        else:
+            raise ValueError("Formato JSON non riconosciuto")
+            
+        df = pd.DataFrame(df_data)
+        
+        if df.empty:
+            print("Nessun dato valido nel JSON per generare i grafici.")
+            sys.exit(0)
+            
+    except (json.JSONDecodeError, ValueError) as e:
         print(f"Errore nel parsing del JSON: {e}")
         sys.exit(1)
-
-    if not data:
-        print("Nessun dato valido nel JSON per generare i grafici.")
-        sys.exit(0)
-
-    df = pd.DataFrame(data)
 
     # Controlli essenziali
     if df['lines'].sum() == 0:
@@ -48,7 +62,10 @@ def main():
     
     # Creazione di una figura con 3 sotto-grafici
     fig = plt.figure(figsize=(18, 16))
-    plt.suptitle('Analisi Git Multi-Progetto e Autore', fontsize=18, y=0.95)
+    
+    # Titolo con range di date
+    title = f'Analisi Git Multi-Progetto e Autore ({start_date} → {end_date})'
+    plt.suptitle(title, fontsize=18, y=0.95)
 
     # Grafico 1: Contributo per Progetto e Autore (Stacked Bar)
     ax1 = fig.add_subplot(2, 2, 1)
