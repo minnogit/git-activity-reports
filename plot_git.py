@@ -96,9 +96,9 @@ def main():
 
     # Titoli e Legenda
     project_name = get_git_project_name()
-    title = 'Produttività Git per Autore (Righe Modificate)'
+    title = 'Modifiche Git per Autore'
     if project_name:
-        title = f'{project_name} - {title}'
+        title = f'Progetto {project_name} - {title}'
     ax.set_title(title)
     ax.set_ylabel('Righe Totali (Aggiunte + Rimosse)')
     ax.legend(title='Autore', bbox_to_anchor=(1.02, 1), loc='upper left')
