@@ -57,6 +57,8 @@
 #   - I merge commits sono esclusi dalle statistiche
 #   - Le righe totali sono calcolate come: aggiunte + eliminate
 #   - Richiede GNU date (su macOS: brew install coreutils, usa gdate)
+#   - Il repository remoto viene aggiornato automaticamente con git fetch
+#   - In caso di problemi di rete, vengono analizzati solo i commit locali
 #
 # REQUISITI:
 #   - Bash 4.0+
@@ -216,6 +218,15 @@ main() {
     # Check git
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         echo "Errore: Non sei in un repository Git." >&2; exit 1
+    fi
+
+    # Aggiorna le informazioni remote per includere tutti i cambiamenti più recenti
+    echo "Aggiornamento informazioni remote..." >&2
+    if git fetch --quiet 2>/dev/null; then
+        echo "Repository aggiornato con successo." >&2
+    else
+        echo "Avviso: Impossibile aggiornare il repository remoto (problemi di connettività o repository senza remote)." >&2
+        echo "Verranno analizzati solo i commit locali disponibili." >&2
     fi
 
     # 1. Output JSON

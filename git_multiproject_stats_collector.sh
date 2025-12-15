@@ -76,6 +76,8 @@
 #   - Le righe totali sono calcolate come: aggiunte + eliminate
 #   - Il nome del progetto è estratto dal nome della cartella
 #   - L'output è sempre in formato JSON (per uso con plot_multiproject.py)
+#   - Ogni repository viene aggiornato automaticamente con git fetch
+#   - In caso di problemi di rete, vengono analizzati solo i commit locali
 #
 # CASI D'USO:
 #   - Confronto attività tra progetti diversi
@@ -199,6 +201,14 @@ analyze_project() {
     fi
     
     cd "$project_path" || return
+
+    echo "Aggiornamento remote per $project_name..." >&2
+    if git fetch --quiet 2>/dev/null; then
+        echo "$project_name aggiornato con successo." >&2
+    else
+        echo "Avviso: Impossibile aggiornare $project_name (problemi di connettività o repository senza remote)." >&2
+        echo "Verranno analizzati solo i commit locali disponibili." >&2
+    fi
 
     echo "Analisi di $project_name ($project_path)..." >&2
 
