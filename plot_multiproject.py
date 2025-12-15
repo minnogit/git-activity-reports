@@ -114,7 +114,12 @@ def main():
     plt.tight_layout(rect=[0, 0, 1, 0.96]) # Regola layout per fare spazio al suptitle
     
     # Salvataggio
-    output_filename = "git_multi_project_report.png"
+    # Crea un nome file dinamico che includa il range delle date
+    # Sostituisce caratteri non validi per i nomi file
+    safe_start_date = start_date.replace('→', '_to_').replace(' ', '_')
+    safe_end_date = end_date.replace('→', '_to_').replace(' ', '_')
+    
+    output_filename = f"git_multi_project_report_{safe_start_date}_{safe_end_date}.png"
     plt.savefig(output_filename)
     print(f"\nReport multi-progetto generato con successo: {output_filename}")
 
