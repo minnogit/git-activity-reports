@@ -946,5 +946,188 @@ Git usa il nome da `git config user.name`. Se un autore ha commit con nomi diver
 ```
 
 ### Gli script influenzano il repository?
-
+ 
 No, sono **read-only**. Eseguono solo `git log`, non modificano nulla.
+
+---
+
+## 🚀 Comandi Semplificati
+
+Per semplificare ulteriormente l'uso degli strumenti, puoi installare gli script autonomi che nascondono i percorsi complessi.
+
+### Installazione
+
+Dopo aver copiato o linkato gli script principali in `/usr/local/bin`, puoi creare questi comandi semplificati:
+
+```bash
+# Script per singolo repository
+sudo tee /usr/local/bin/gitstats > /dev/null << 'EOF'
+#!/bin/bash
+
+# ===============================================
+# GIT STATS - Singolo Repository
+# ===============================================
+#
+# DESCRIZIONE:
+#   Comando semplificato per analizzare e visualizzare statistiche Git
+#   di un singolo repository con dettaglio giornaliero.
+#
+# UTILIZZO:
+#   gitstats <DATA_INIZIO> <DATA_FINE> [autore]
+#
+# PARAMETRI:
+#   DATA_INIZIO    Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
+#   DATA_FINE      Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
+#   autore         Filtra per autore specifico (opzionale)
+#
+# ESEMPI:
+#   # Report per tutti gli autori
+#   gitstats 2025-12-01 2025-12-31
+#
+#   # Report per autore specifico
+#   gitstats 2025-12-01 2025-12-31 "Mario Rossi"
+#
+# REQUISITI:
+#   - git_stats_collector.sh e plot_git.py devono essere disponibili globalmente
+#   - Python3 con pandas e matplotlib installati
+#   - Essere in una cartella di repository Git
+#
+# AUTORE: Michele Innocenti
+# VERSIONE: 1.0
+# DATA: Gennaio 2026
+# ===============================================
+
+if [[ $# -lt 2 ]]; then
+    echo "Uso: $0 <DATA_INIZIO> <DATA_FINE> [autore]"
+    echo "Esempio: $0 2025-12-01 2025-12-31"
+    echo "Esempio con autore: $0 2025-12-01 2025-12-31 'Mario Rossi'"
+    exit 1
+fi
+
+START_DATE="$1"
+END_DATE="$2"
+AUTHOR_FILTER="${3:-}"
+
+# Verifica che siamo in un repository git
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Errore: Non sei in un repository Git"
+    exit 1
+fi
+
+# Verifica che gli strumenti siano disponibili
+if ! command -v git_stats_collector.sh >/dev/null 2>&1; then
+    echo "Errore: git_stats_collector.sh non trovato globalmente"
+    exit 1
+fi
+
+if ! command -v plot_git.py >/dev/null 2>&1; then
+    echo "Errore: plot_git.py non trovato globalmente"
+    exit 1
+fi
+
+# Esegui il comando con o senza filtro autore
+if [[ -n "$AUTHOR_FILTER" ]]; then
+    git_stats_collector.sh "$START_DATE" "$END_DATE" json "$AUTHOR_FILTER" | python3 plot_git.py
+else
+    git_stats_collector.sh "$START_DATE" "$END_DATE" json | python3 plot_git.py
+fi
+EOF
+
+sudo chmod +x /usr/local/bin/gitstats
+```
+
+E per il multi-repository:
+
+```bash
+# Script per multi repository
+sudo tee /usr/local/bin/gitstats-multi > /dev/null << 'EOF'
+#!/bin/bash
+
+# ===============================================
+# GIT STATS MULTI - Multi Repository
+# ===============================================
+#
+# DESCRIZIONE:
+#   Comando semplificato per analizzare e visualizzare statistiche Git
+#   di più repository contemporaneamente.
+#
+# UTILIZZO:
+#   gitstats-multi <DATA_INIZIO> <DATA_FINE> [percorso1] [percorso2] ...
+#
+# PARAMETRI:
+#   DATA_INIZIO    Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
+#   DATA_FINE      Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
+#   percorsoN      Percorsi ai repository Git (opzionali, default: corrente)
+#
+# ESEMPI:
+#   # Analizza repository corrente
+#   gitstats-multi 2025-12-01 2025-12-31
+#
+#   # Analizza repository specifici
+#   gitstats-multi 2025-12-01 2025-12-31 ~/progetti/repo1 ~/progetti/repo2
+#
+#   # Con file di configurazione
+#   gitstats-multi --file progetti.txt 2025-12-01 2025-12-31
+#
+# REQUISITI:
+#   - git_multiproject_stats_collector.sh e plot_multiproject.py devono essere disponibili globalmente
+#   - Python3 con pandas e matplotlib installati
+#
+# AUTORE: Michele Innocenti
+# VERSIONE: 1.0
+# DATA: Gennaio 2026
+# ===============================================
+
+if [[ $# -lt 2 ]]; then
+    echo "Uso: $0 <DATA_INIZIO> <DATA_FINE> [opzioni] [percorsi...]"
+    echo "Esempio: $0 2025-12-01 2025-12-31"
+    echo "Esempio con repository specifici: $0 2025-12-01 2025-12-31 ~/repo1 ~/repo2"
+    echo "Esempio con file: $0 --file repos.txt 2025-12-01 2025-12-31"
+    exit 1
+fi
+
+# Verifica che gli strumenti siano disponibili
+if ! command -v git_multiproject_stats_collector.sh >/dev/null 2>&1; then
+    echo "Errore: git_multiproject_stats_collector.sh non trovato globalmente"
+    exit 1
+fi
+
+if ! command -v plot_multiproject.py >/dev/null 2>&1; then
+    echo "Errore: plot_multiproject.py non trovato globalmente"
+    exit 1
+fi
+
+# Esegui il comando
+git_multiproject_stats_collector.sh "$@" | python3 plot_multiproject.py
+EOF
+
+sudo chmod +x /usr/local/bin/gitstats-multi
+```
+
+### Utilizzo
+
+Dopo l'installazione, puoi usare i comandi semplificati:
+
+#### Singolo Repository
+```bash
+# Nella cartella di un repository Git
+gitstats 2025-12-01 2025-12-31
+```
+
+```bash
+# Con filtro autore
+gitstats 2025-12-01 2025-12-31 "Mario Rossi"
+```
+
+#### Multi-Repository
+```bash
+# Da qualsiasi posizione
+gitstats-multi 2025-12-01 2025-12-31 ~/repo1 ~/repo2
+```
+
+```bash
+# Con file di configurazione
+gitstats-multi --file repos.txt 2025-12-01 2025-12-31
+```
+
+Questi comandi nascondono la complessità dei percorsi relativi e forniscono un'interfaccia pulita per l'uso quotidiano degli strumenti di analisi Git.
