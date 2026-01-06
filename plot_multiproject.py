@@ -52,7 +52,18 @@ def main():
     
     # 2. Grafico a torta (Distribuzione per Progetto)
     project_totals = df.groupby('project')['lines'].sum().sort_values(ascending=False)
-    
+
+    # Accorpamento valori piccoli in "Altro" per migliorare leggibilità
+    total_lines = project_totals.sum()
+    project_percent = project_totals / total_lines
+    threshold = 0.05  # Soglia del 5% per considerare un progetto "piccolo"
+    small_projects = project_percent <= threshold
+    if small_projects.any():
+        altro_value = project_totals[small_projects].sum()
+        project_totals = project_totals[~small_projects]
+        project_totals['Altro'] = altro_value
+        project_totals = project_totals.sort_values(ascending=False)
+
     # 3. Grafico a barre (Classifica Autori)
     author_totals = df.groupby('author')['lines'].sum().sort_values(ascending=False)
 
