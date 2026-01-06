@@ -1,0 +1,112 @@
+name: Build Debian Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-pandas python3-matplotlib python3-numpy
+
+    - name: Extract version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        VERSION=${VERSION#v}  # Rimuove eventuale doppio prefisso v
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
+    - name: Verify files exist
+      run: |
+        ls -la
+        test -f git_stats_collector.sh
+        test -f git_multiproject_stats_collector.sh
+        test -f plot_git.py
+        test -f plot_multiproject.py
+        test -f gitstat.sh
+        test -f gitstat-multi.sh
+    - name: Create package structure
+      run: |
+        mkdir -p git-activity-reports/DEBIAN
+        mkdir -p git-activity-reports/usr/local/bin
+        mkdir -p git-activity-reports/usr/share/doc/git-activity-reports
+
+    - name: Copy files to package
+      run: |
+        cp git_stats_collector.sh git-activity-reports/usr/local/bin/
+        cp git_multiproject_stats_collector.sh git-activity-reports/usr/local/bin/
+        cp plot_git.py git-activity-reports/usr/local/bin/
+        cp plot_multiproject.py git-activity-reports/usr/local/bin/
+        cp gitstat.sh git-activity-reports/usr/local/bin/gitstats
+        cp gitstat-multi.sh git-activity-reports/usr/local/bin/gitstats-multi
+        cp README.md git-activity-reports/usr/share/doc/git-activity-reports/
+
+    - name: Make scripts executable
+      run: |
+        chmod +x git-activity-reports/usr/local/bin/*
+
+    - name: Create control file
+      run: |
+        SIZE=$(du -s git-activity-reports | cut -f1)
+        cat > git-activity-reports/DEBIAN/control << EOF
+        Package: git-activity-reports
+        Version: ${{ env.VERSION }}
+        Section: utils
+        Priority: optional
+        Architecture: all
+        Depends: bash, git, python3, python3-pandas, python3-matplotlib, python3-numpy
+        Maintainer: Michele Innocenti
+        Description: Strumenti per analizzare e visualizzare statistiche Git
+         Strumenti completi per analizzare l'attività Git di singoli e multipli repository
+         con visualizzazioni grafiche. Include:
+         - git_stats_collector.sh: Analisi dettagliata per singolo repository
+         - git_multiproject_stats_collector.sh: Analisi aggregata per più repository
+         - plot_git.py: Grafici per singolo repository
+         - plot_multiproject.py: Grafici per multi-repository
+         - gitstats: Comando semplificato per singolo repository
+         - gitstats-multi: Comando semplificato per multi-repository
+        EOF
+
+    - name: Build Debian package
+      run: |
+        dpkg-deb --build git-activity-reports
+        mv git-activity-reports.deb git-activity-reports_${{ env.VERSION }}_all.deb
+    - name: Validate Debian package
+      run: |
+        dpkg-deb --info git-activity-reports_${{ env.VERSION }}_all.deb
+        dpkg-deb --contents git-activity-reports_${{ env.VERSION }}_all.deb
+    - name: Cleanup
+      if: always()
+      run: |
+        rm -rf git-activity-reports/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          git-activity-reports_${{ env.VERSION }}_all.deb
+        name: Release v${{ env.VERSION }}
+        tag_name: ${{ github.ref }}
+        body: |
+          Release automatico del pacchetto Debian per la versione ${{ env.VERSION }}
+          
+          Contiene:
+          - Strumenti di analisi Git per singolo e multi-repository
+          - Script semplificati gitstats e gitstats-multi
+          - Dipendenze automatiche: bash, git, python3, python3-pandas, python3-matplotlib, python3-numpy
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
