@@ -63,6 +63,6 @@ fi
 
 # Esegui il comando con o senza filtro autore
 if [[ -n "$AUTHOR_FILTER" ]]; then
-    git_stats_collector.sh "$START_DATE" "$END_DATE" json "$AUTHOR_FILTER" | python3 plot_git.py
+    git_stats_collector.sh "$START_DATE" "$END_DATE" json "$AUTHOR_FILTER" | plot_git.py
 else
-    git_stats_collector.sh "$START_DATE" "$END_DATE" json | python3 plot_git.py
+    git_stats_collector.sh "$START_DATE" "$END_DATE" json | plot_git.py

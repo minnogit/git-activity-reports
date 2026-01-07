@@ -55,4 +55,4 @@ if ! command -v plot_multiproject.py >/dev/null 2>&1; then
 fi
 
 # Esegui il comando
-git_multiproject_stats_collector.sh "$@" | python3 plot_multiproject.py
+git_multiproject_stats_collector.sh "$@" | plot_multiproject.py
