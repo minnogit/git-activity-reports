@@ -15,6 +15,7 @@
 #   --file <file>    Legge i percorsi dei repository da file (uno per riga)
 #   --start <data>   Data di inizio periodo (alternativa a posizionale)
 #   --end <data>     Data di fine periodo (alternativa a posizionale)
+#   --fetch          Abilita l'aggiornamento dei repository con git fetch
 #   -h, --help       Mostra questo help
 #
 # PARAMETRI POSIZIONALI:
@@ -76,7 +77,7 @@
 #   - Le righe totali sono calcolate come: aggiunte + eliminate
 #   - Il nome del progetto è estratto dal nome della cartella
 #   - L'output è sempre in formato JSON (per uso con plot_multiproject.py)
-#   - Ogni repository viene aggiornato automaticamente con git fetch
+#   - Di default, i repository non vengono aggiornati con git fetch (usa --fetch per abilitare)
 #   - In caso di problemi di rete, vengono analizzati solo i commit locali
 #
 # CASI D'USO:
@@ -111,6 +112,7 @@
 PROJECT_FILE=""
 START_DATE=""
 END_DATE=""
+FETCH_ENABLED=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -130,8 +132,40 @@ while [[ $# -gt 0 ]]; do
             END_DATE="$2"
             shift 2
             ;;
+        --fetch)
+            FETCH_ENABLED=true
+            shift
+            ;;
         -h|--help)
-            show_usage
+            cat << 'EOF'
+UTILIZZO:
+  ./git_multiproject_stats_collector.sh [OPZIONI] <DATA_INIZIO> <DATA_FINE> [percorsi...]
+
+OPZIONI:
+  --file <file>    Legge i percorsi dei repository da file (uno per riga)
+  --start <data>   Data di inizio periodo (alternativa a posizionale)
+  --end <data>     Data di fine periodo (alternativa a posizionale)
+  --fetch          Abilita l'aggiornamento dei repository con git fetch
+  -h, --help       Mostra questo help
+
+PARAMETRI POSIZIONALI:
+  DATA_INIZIO      Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
+  DATA_FINE        Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
+  percorsi...      Percorsi ai repository Git (opzionale se si usa --file)
+
+ESEMPI:
+  # Analisi di repository specifici
+  ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/repo1 ~/repo2
+
+  # Repository da file di configurazione
+  ./git_multiproject_stats_collector.sh --file progetti.txt 2025-11-01 2025-11-30
+
+  # Con opzioni per le date
+  ./git_multiproject_stats_collector.sh --start 2025-11-01 --end 2025-11-30 ~/repo1
+
+  # Con aggiornamento esplicito dei repository
+  ./git_multiproject_stats_collector.sh --fetch --file repos.txt 2025-11-01 2025-11-30
+EOF
             exit 0
             ;;
         -*)
@@ -202,12 +236,16 @@ analyze_project() {
     
     cd "$project_path" || return
 
-    echo "Aggiornamento remote per $project_name..." >&2
-    if git fetch --quiet 2>/dev/null; then
-        echo "$project_name aggiornato con successo." >&2
+    if [[ "$FETCH_ENABLED" == true ]]; then
+        echo "Aggiornamento remote per $project_name..." >&2
+        if git fetch --quiet 2>/dev/null; then
+            echo "$project_name aggiornato con successo." >&2
+        else
+            echo "Avviso: Impossibile aggiornare $project_name (problemi di connettività o repository senza remote)." >&2
+            echo "Verranno analizzati solo i commit locali disponibili." >&2
+        fi
     else
-        echo "Avviso: Impossibile aggiornare $project_name (problemi di connettività o repository senza remote)." >&2
-        echo "Verranno analizzati solo i commit locali disponibili." >&2
+        echo "Skip aggiornamento per $project_name (usa --fetch per abilitare)." >&2
     fi
 
     echo "Analisi di $project_name ($project_path)..." >&2

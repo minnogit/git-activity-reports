@@ -167,6 +167,7 @@ Analizza più repository contemporaneamente con statistiche **aggregate per prog
 | `--file` | `<file>` | Legge i percorsi dei repository da file (uno per riga) |
 | `--start` | `<data>` | Data di inizio periodo (formato: YYYY-MM-DD) |
 | `--end` | `<data>` | Data di fine periodo (formato: YYYY-MM-DD) |
+| `--fetch` | - | Abilita l'aggiornamento dei repository con git fetch |
 | `-h, --help` | - | Mostra l'help |
 
 ---
@@ -220,6 +221,16 @@ Analizza più repository contemporaneamente con statistiche **aggregate per prog
 ```bash
 # Genera JSON e crea grafici
 ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/repo1 ~/repo2 | python3 plot_multiproject.py
+```
+
+### 5. Con aggiornamento esplicito dei repository
+
+```bash
+# Esegue git fetch prima dell'analisi
+./git_multiproject_stats_collector.sh --fetch --file progetti.txt 2025-11-01 2025-11-30
+
+# Oppure con repository specifici
+./git_multiproject_stats_collector.sh --fetch 2025-11-01 2025-11-30 ~/repo1 ~/repo2
 ```
 
 **Output:** File `git_multi_project_report.png` con 3 grafici.
@@ -546,13 +557,21 @@ mv git_multi_project_report.png q4_report.png
 - Formato richiesto: `YYYY-MM-DD`
 - Range inclusivo: include sia la data di inizio che quella di fine
 - Orari considerati: `00:00:00` (inizio) - `23:59:59` (fine)
-
 ### Performance
 
 Per repository molto grandi (>10K commits), l'analisi può richiedere alcuni minuti. Considera di:
 
 - Ridurre l'intervallo temporale
 - Analizzare i repository in batch separati
+
+### Aggiornamento Repository
+
+Di default, i repository **non vengono aggiornati** automaticamente con git fetch. Per abilitare l'aggiornamento esplicito, usa l'opzione `--fetch`:
+
+```bash
+./git_multiproject_stats_collector.sh --fetch --file repos.txt 2025-11-01 2025-11-30
+```
+
 
 ---
 
