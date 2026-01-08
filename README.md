@@ -946,7 +946,7 @@ Git usa il nome da `git config user.name`. Se un autore ha commit con nomi diver
 ```
 
 ### Gli script influenzano il repository?
- 
+
 No, sono **read-only**. Eseguono solo `git log`, non modificano nulla.
 
 ---
@@ -1109,6 +1109,7 @@ sudo chmod +x /usr/local/bin/gitstats-multi
 Dopo l'installazione, puoi usare i comandi semplificati:
 
 #### Singolo Repository
+
 ```bash
 # Nella cartella di un repository Git
 gitstats 2025-12-01 2025-12-31
@@ -1120,6 +1121,7 @@ gitstats 2025-12-01 2025-12-31 "Mario Rossi"
 ```
 
 #### Multi-Repository
+
 ```bash
 # Da qualsiasi posizione
 gitstats-multi 2025-12-01 2025-12-31 ~/repo1 ~/repo2

@@ -66,3 +66,4 @@ if [[ -n "$AUTHOR_FILTER" ]]; then
     git_stats_collector.sh "$START_DATE" "$END_DATE" json "$AUTHOR_FILTER" | plot_git.py
 else
     git_stats_collector.sh "$START_DATE" "$END_DATE" json | plot_git.py
+fi
