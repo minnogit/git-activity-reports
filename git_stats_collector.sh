@@ -57,7 +57,7 @@
 #   - I merge commits sono esclusi dalle statistiche
 #   - Le righe totali sono calcolate come: aggiunte + eliminate
 #   - Richiede GNU date (su macOS: brew install coreutils, usa gdate)
-#   - Il repository remoto viene aggiornato automaticamente con git fetch
+#   - Di default, il repository non viene aggiornato con git fetch (usa --fetch per abilitare)
 #   - In caso di problemi di rete, vengono analizzati solo i commit locali
 #
 # REQUISITI:
@@ -70,6 +70,64 @@
 # DATA: Dicembre 2025
 # ===============================================
 
+# Parsing delle opzioni
+START_DATE=""
+END_DATE=""
+OUTPUT_FORMAT="text"
+CLI_AUTHOR_FILTER=""
+FETCH_ENABLED=false
+
+# Parse positional and optional arguments
+TEMP_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --fetch)
+            FETCH_ENABLED=true
+            shift
+            ;;
+        -h|--help)
+            cat << 'EOF'
+UTILIZZO:
+  ./git_stats_collector.sh [OPZIONI] <DATA_INIZIO> <DATA_FINE> [formato] [autore]
+
+OPZIONI:
+  --fetch          Abilita l'aggiornamento del repository con git fetch
+  -h, --help       Mostra questo help
+
+PARAMETRI:
+  DATA_INIZIO      Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
+  DATA_FINE        Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
+  formato          Formato output: 'text' o 'json' (default: text)
+  autore           Filtra per autore specifico (default: tutti, modalità TOTALE)
+
+ESEMPI:
+  # Report testuale per tutti gli autori (aggregato)
+  ./git_stats_collector.sh 2025-11-01 2025-11-30
+  
+  # Report testuale per autore specifico
+  ./git_stats_collector.sh 2025-11-01 2025-11-30 text "Mario Rossi"
+  
+  # JSON per visualizzazione grafica
+  ./git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py
+  
+  # Con aggiornamento esplicito del repository
+  ./git_stats_collector.sh --fetch 2025-11-01 2025-11-30 json
+EOF
+            exit 0
+            ;;
+        -*)
+            echo "Opzione non valida: $1" >&2
+            exit 1
+            ;;
+        *)
+            TEMP_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Ripristina gli argomenti posizionali
+set -- "${TEMP_ARGS[@]}"
 START_DATE="$1"
 END_DATE="$2"
 OUTPUT_FORMAT="${3:-text}" # Predefinito a 'text'
@@ -221,12 +279,16 @@ main() {
     fi
 
     # Aggiorna le informazioni remote per includere tutti i cambiamenti più recenti
-    echo "Aggiornamento informazioni remote..." >&2
-    if git fetch --quiet 2>/dev/null; then
-        echo "Repository aggiornato con successo." >&2
+    if [[ "$FETCH_ENABLED" == true ]]; then
+        echo "Aggiornamento informazioni remote..." >&2
+        if git fetch --quiet 2>/dev/null; then
+            echo "Repository aggiornato con successo." >&2
+        else
+            echo "Avviso: Impossibile aggiornare il repository remoto (problemi di connettività o repository senza remote)." >&2
+            echo "Verranno analizzati solo i commit locali disponibili." >&2
+        fi
     else
-        echo "Avviso: Impossibile aggiornare il repository remoto (problemi di connettività o repository senza remote)." >&2
-        echo "Verranno analizzati solo i commit locali disponibili." >&2
+        echo "Skip aggiornamento (usa --fetch per abilitare)." >&2
     fi
 
     # 1. Output JSON

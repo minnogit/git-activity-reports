@@ -69,6 +69,13 @@ Analizza un singolo repository Git con dettaglio **giornaliero**, ideale per:
 | 3 | `formato` | ✗ | Formato output: `text` o `json` | `text` |
 | 4 | `autore` | ✗ | Filtra per autore specifico | tutti |
 
+### Opzioni Disponibili
+
+| Opzione | Argomento | Descrizione |
+|---------|-----------|-------------|
+| `--fetch` | - | Abilita l'aggiornamento del repository con git fetch |
+| `-h, --help` | - | Mostra l'help |
+
 ### Esempi - Singolo Repository
 
 #### 1. Report testuale per tutti gli autori (modalità totale)
@@ -128,7 +135,6 @@ TOTALE:                       10           1498           1030            468
   }
 ]
 ```
-
 #### 5. Salvataggio dati per analisi successive
 
 ```bash
@@ -141,6 +147,17 @@ cat novembre.json | python3 plot_git.py
 # Oppure ispeziona i dati
 cat novembre.json | jq '.[] | {author, total_commits}'
 ```
+
+#### 6. Con aggiornamento esplicito del repository
+
+```bash
+# Esegue git fetch prima dell'analisi
+./git_stats_collector.sh --fetch 2025-11-01 2025-11-30 json | python3 plot_git.py
+
+# Con formato testuale
+./git_stats_collector.sh --fetch 2025-11-01 2025-11-30 text "Mario Rossi"
+```
+
 
 ---
 
@@ -563,14 +580,20 @@ Per repository molto grandi (>10K commits), l'analisi può richiedere alcuni min
 
 - Ridurre l'intervallo temporale
 - Analizzare i repository in batch separati
-
 ### Aggiornamento Repository
 
 Di default, i repository **non vengono aggiornati** automaticamente con git fetch. Per abilitare l'aggiornamento esplicito, usa l'opzione `--fetch`:
 
+**Multi-repository:**
 ```bash
 ./git_multiproject_stats_collector.sh --fetch --file repos.txt 2025-11-01 2025-11-30
 ```
+
+**Singolo repository:**
+```bash
+./git_stats_collector.sh --fetch 2025-11-01 2025-11-30 json
+```
+
 
 
 ---
