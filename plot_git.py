@@ -45,18 +45,29 @@ def main():
 
     flattened_data = []
     
-    # Processa i dati estraendo i valori
+    MAX_LINES_PER_DAY = 1000  # Tetto massimo per riga di codice al giorno per autore
+
     for entry in data:
         author = entry.get('author', 'Unknown')
-        
-        if author == "TOTALE":
-            continue
+        if author == "TOTALE": continue
             
         for day in entry.get('daily_data', []):
+            added = day.get('added', 0)
+            files = day.get('files', 0)
+            
+            # 1. Applicazione della strategia di tetto massimo (Ceiling)
+            # Se le linee aggiunte superano il tetto, le limitiamo per non falsare il grafico
+            capped_added = min(added, MAX_LINES_PER_DAY)
+            
+            # 2. Calcolo della Rilevanza (Impact Score)
+            # Formula: log(linee_aggiunte + 1) * numero_file_modificati
+            # Usiamo np.log1p che calcola log(1+x) in modo accurato
+            relevance = np.log1p(capped_added) * files
+
             flattened_data.append({
                 'date': day['date'],
                 'author': author,
-                'lines': day.get('lines', 0),
+                'relevance': relevance, # Usiamo questa come metrica principale
                 'commits': day.get('commits', 0)
             })
 
@@ -69,11 +80,11 @@ def main():
     # Converti in datetime per l'ordinamento
     df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
     
-    # Pivot dei dati: Aggrega i dati per giorno e autore
+    # Pivot dei dati: ora usiamo 'relevance' invece di 'lines'
     pivot_df = df.pivot_table(
         index='date', 
         columns='author', 
-        values='lines',
+        values='relevance',
         aggfunc='sum'
     ).fillna(0)
 
@@ -101,8 +112,8 @@ def main():
     title = 'Modifiche Git per Autore'
     if project_name:
         title = f'Progetto {project_name} - {title}'
-    ax.set_title(title)
-    ax.set_ylabel('Righe Totali (Aggiunte + Rimosse)')
+    ax.set_ylabel('Impact Score (Log lines * Files)')
+    ax.set_title('Impatto Sviluppo per Autore (Dati Filtrati)')
     ax.legend(title='Autore', bbox_to_anchor=(1.02, 1), loc='upper left')
     ax.grid(axis='y', linestyle='--', alpha=0.5)
     plt.tight_layout()

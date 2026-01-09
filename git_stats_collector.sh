@@ -140,35 +140,44 @@ CURRENT_AUTHOR_FILTER="$CLI_AUTHOR_FILTER"
 # Funzioni Ausiliarie
 # -----------------------------------------------
 
-# Calcola righe aggiunte/rimosse
+# Calcola righe aggiunte/rimosse e numero di file toccati
 get_lines() {
     local date_str="$1"
     
-    # Costruiamo il comando come array per gestire correttamente gli spazi
-    local cmd=(git log --since="$date_str 00:00:00" --until="$date_str 23:59:59" --pretty="format:" --numstat)
+    # Aggiunti: --no-merges e filtri :(exclude) per escludere file non desiderati dai conteggi
+    local cmd=(git log --since="$date_str 00:00:00" --until="$date_str 23:59:59" \
+        --pretty="format:" --numstat --no-merges \
+        -- . ":(exclude)*.lock" \
+        ":(exclude)node_modules/*" \
+        ":(exclude)dist/*" \
+        ":(exclude)vendor/*" \
+        ":(exclude)*.min.js" \
+        ":(exclude)package-lock.json" \
+        ":(exclude)prisma/migrations/*" \
+        ":(exclude)prisma/client/*" \
+        ":(exclude)**/generated/*")
     
-    # Se c'è un autore (diverso da TOTALE), lo aggiungiamo
     if [[ -n "$CURRENT_AUTHOR_FILTER" && "$CURRENT_AUTHOR_FILTER" != "TOTALE" ]]; then
         cmd+=(--author="$CURRENT_AUTHOR_FILTER")
     fi
 
-    # Eseguiamo il comando espandendo l'array
     "${cmd[@]}" | awk '
-        BEGIN {OFS=":"; sum_added=0; sum_deleted=0}
-        {
+        BEGIN {OFS=":"; sum_added=0; sum_deleted=0; files_count=0}
+        $1 ~ /^[0-9]+$/ { # Considera solo file non binari
             sum_added += $1;
-            sum_deleted += $2
+            sum_deleted += $2;
+            files_count++;
         }
         END {
-            print sum_added, sum_deleted, (sum_added + sum_deleted)
+            # Restituiamo anche il conteggio dei file per la formula in Python
+            print sum_added, sum_deleted, (sum_added + sum_deleted), files_count
         }'
 }
 
-# Calcola numero di commit
 get_commits() {
     local date_str="$1"
-    
-    local cmd=(git log --since="$date_str 00:00:00" --until="$date_str 23:59:59" --oneline)
+    # Aggiunto --no-merges per evitare di contare i merge dei rami
+    local cmd=(git log --since="$date_str 00:00:00" --until="$date_str 23:59:59" --oneline --no-merges)
     
     if [[ -n "$CURRENT_AUTHOR_FILTER" && "$CURRENT_AUTHOR_FILTER" != "TOTALE" ]]; then
         cmd+=(--author="$CURRENT_AUTHOR_FILTER")
@@ -220,6 +229,7 @@ generate_single_author_data() {
         local added=$(echo $line_metrics | cut -d ':' -f 1)
         local deleted=$(echo $line_metrics | cut -d ':' -f 2)
         local lines=$(echo $line_metrics | cut -d ':' -f 3)
+        local files_count=$(echo $line_metrics | cut -d ':' -f 4)
 
         # Gestione valori vuoti se awk non ritorna nulla
         added=${added:-0}
@@ -242,7 +252,7 @@ generate_single_author_data() {
         # Output JSON
         if [[ "$OUTPUT_FORMAT" == "json" ]]; then
             if [[ "$day_first" == true ]]; then day_first=false; else daily_json_items+=","; fi
-            daily_json_items+="{\"day\":\"$day_of_week\",\"date\":\"$current_date\",\"commits\":$commits,\"lines\":$lines,\"added\":$added,\"deleted\":$deleted}"
+            daily_json_items+="{\"day\":\"$day_of_week\",\"date\":\"$current_date\",\"commits\":$commits,\"lines\":$lines,\"added\":$added,\"deleted\":$deleted,\"files\":${files_count:-0}}"
         fi
 
         current_ts=$((current_ts + 86400))
