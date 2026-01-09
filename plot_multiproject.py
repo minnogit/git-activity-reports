@@ -7,6 +7,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
+# Costante per il tetto massimo alle righe aggiunte per evitare outlier
+MAX_LINES_PER_DAY = 1000
+
 def main():
     # Legge l'input JSON dallo standard input (pipe)
     raw_input = sys.stdin.read().strip()
@@ -57,8 +60,11 @@ def main():
             if commits == 0 or files == 0:
                 relevance = 0
             else:
-                # Formula: Impact Score = ln(min(added, 1000) + 1) * ln(files + 1)
-                capped_added = min(added, 1000)
+                # 1. Tetto massimo alle righe (outlier)
+                capped_added = min(added, MAX_LINES_PER_DAY)
+                
+                # 2. DOPPIO LOGARITMO (Scala logaritmica su entrambi)
+                # Questo risolve il problema dei trova/sostituisci su molti file
                 relevance = np.log1p(capped_added) * np.log1p(files)
             
             # Aggiorniamo l'autore con il nome mappato
@@ -95,7 +101,7 @@ def main():
     # Accorpamento valori piccoli in "Altro" per migliorare leggibilità
     total_relevance = project_totals.sum()
     project_percent = project_totals / total_relevance
-    threshold = 0.02  # Soglia del 2% per considerare un progetto "piccolo"
+    threshold = 0.05  # Soglia del 5% per considerare un progetto "piccolo"
     small_projects = project_percent <= threshold
     if small_projects.any():
         altro_value = project_totals[small_projects].sum()

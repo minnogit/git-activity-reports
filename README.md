@@ -913,7 +913,10 @@ Dove:
 - `files`: numero di file modificati in quel periodo
 - `commits`: numero di commit effettuati
 
-Questa metrica fornisce un'indicazione dell'impatto relativo del lavoro, considerando sia la quantità di codice aggiunto che il numero di file interessati, con una capatura a 1000 righe aggiunte per evitare che singoli grandi commit dominino la metrica.
+Questa metrica fornisce un'indicazione dell'impatto relativo del lavoro, considerando sia la quantità di codice aggiunto che il numero di file interessati. Sono stati implementati due importanti accorgimenti per migliorare la qualità della metrica:
+
+1. **Tetto massimo alle righe**: Viene applicato un limite massimo di 1000 righe aggiunte per periodo per evitare che singoli grandi commit dominino la metrica
+2. **Doppio logaritmo**: Vengono applicate trasformazioni logaritmiche sia al numero di righe che al numero di file interessati, per ridurre l'impatto di operazioni di trova/sostituisci su molti file
 
 ### Commit
 
