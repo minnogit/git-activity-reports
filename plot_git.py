@@ -55,21 +55,23 @@ def main():
         for day in entry.get('daily_data', []):
             added = day.get('added', 0)
             files = day.get('files', 0)
-            
-            # 1. Applicazione della strategia di tetto massimo (Ceiling)
-            # Se le linee aggiunte superano il tetto, le limitiamo per non falsare il grafico
-            capped_added = min(added, MAX_LINES_PER_DAY)
-            
-            # 2. Calcolo della Rilevanza (Impact Score)
-            # Formula: log(linee_aggiunte + 1) * numero_file_modificati
-            # Usiamo np.log1p che calcola log(1+x) in modo accurato
-            relevance = np.log1p(capped_added) * files
+            commits = day.get('commits', 0)
+
+            # Se non ci sono commit, l'impatto è zero
+            if commits == 0 or files == 0:
+                relevance = 0
+            else:
+                # 1. Tetto massimo alle righe (outlier)
+                capped_added = min(added, MAX_LINES_PER_DAY)
+                
+                # 2. DOPPIO LOGARITMO (Scala logaritmica su entrambi)
+                # Questo risolve il problema dei trova/sostituisci su molti file
+                relevance = np.log1p(capped_added) * np.log1p(files)
 
             flattened_data.append({
                 'date': day['date'],
                 'author': author,
-                'relevance': relevance, # Usiamo questa come metrica principale
-                'commits': day.get('commits', 0)
+                'relevance': relevance
             })
 
     if not flattened_data:

@@ -143,34 +143,33 @@ CURRENT_AUTHOR_FILTER="$CLI_AUTHOR_FILTER"
 # Calcola righe aggiunte/rimosse e numero di file toccati
 get_lines() {
     local date_str="$1"
+    local git_args=(--since="$date_str 00:00:00" --until="$date_str 23:59:59" --pretty="format:" --numstat --no-merges)
     
-    # Aggiunti: --no-merges e filtri :(exclude) per escludere file non desiderati dai conteggi
-    local cmd=(git log --since="$date_str 00:00:00" --until="$date_str 23:59:59" \
-        --pretty="format:" --numstat --no-merges \
-        -- . ":(exclude)*.lock" \
+    if [[ -n "$CURRENT_AUTHOR_FILTER" && "$CURRENT_AUTHOR_FILTER" != "TOTALE" ]]; then
+        git_args+=(--author="$CURRENT_AUTHOR_FILTER")
+    fi
+
+    # Mantiene i tuoi exclude personalizzati
+    git log "${git_args[@]}" -- . \
         ":(exclude)node_modules/*" \
         ":(exclude)dist/*" \
         ":(exclude)vendor/*" \
+        ":(exclude)*.lock" \
         ":(exclude)*.min.js" \
         ":(exclude)package-lock.json" \
-        ":(exclude)prisma/migrations/*" \
-        ":(exclude)prisma/client/*" \
-        ":(exclude)**/generated/*")
-    
-    if [[ -n "$CURRENT_AUTHOR_FILTER" && "$CURRENT_AUTHOR_FILTER" != "TOTALE" ]]; then
-        cmd+=(--author="$CURRENT_AUTHOR_FILTER")
-    fi
-
-    "${cmd[@]}" | awk '
-        BEGIN {OFS=":"; sum_added=0; sum_deleted=0; files_count=0}
-        $1 ~ /^[0-9]+$/ { # Considera solo file non binari
-            sum_added += $1;
-            sum_deleted += $2;
-            files_count++;
+        ":(exclude)prisma/*" \
+        ":(exclude)**/generated/*" | awk '
+        BEGIN {sum_added=0; sum_deleted=0; files_count=0}
+        {
+            if ($1 ~ /^[0-9]+$/) {
+                sum_added += $1;
+                sum_deleted += $2;
+                files_count++;
+            }
         }
         END {
-            # Restituiamo anche il conteggio dei file per la formula in Python
-            print sum_added, sum_deleted, (sum_added + sum_deleted), files_count
+            # Restituiamo 3 valori separati da :
+            print sum_added ":" sum_deleted ":" files_count
         }'
 }
 
@@ -226,10 +225,13 @@ generate_single_author_data() {
         local commits=$(get_commits "$current_date")
         local line_metrics=$(get_lines "$current_date")
         
+        # Estrazione corretta basata sui 3 valori restituiti da get_lines
         local added=$(echo $line_metrics | cut -d ':' -f 1)
         local deleted=$(echo $line_metrics | cut -d ':' -f 2)
-        local lines=$(echo $line_metrics | cut -d ':' -f 3)
-        local files_count=$(echo $line_metrics | cut -d ':' -f 4)
+        local files_count=$(echo $line_metrics | cut -d ':' -f 3)
+        
+        # Calcolo righe totali per compatibilità
+        local lines=$((added + deleted))
 
         # Gestione valori vuoti se awk non ritorna nulla
         added=${added:-0}
