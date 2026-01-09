@@ -7,6 +7,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates # Importiamo il modulo per la gestione delle date
+import numpy as np
 
 def get_git_project_name():
     """Estrae il nome del progetto git dalla directory corrente."""
