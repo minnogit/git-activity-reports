@@ -165,7 +165,7 @@ cat novembre.json | jq '.[] | {author, total_commits}'
 
 ### Panoramica
 
-Analizza più repository contemporaneamente con statistiche **aggregate per progetto**, ideale per:
+Analizza più repository contemporaneamente con statistiche **aggregate per progetto** utilizzando l'Impact Score come metrica principale (calcolato come log(lines + 1) * log(files + 1)), ideale per:
 
 - Confronto attività tra progetti diversi
 - Report di team distribuiti su più repository
@@ -250,7 +250,7 @@ Analizza più repository contemporaneamente con statistiche **aggregate per prog
 ./git_multiproject_stats_collector.sh --fetch 2025-11-01 2025-11-30 ~/repo1 ~/repo2
 ```
 
-**Output:** File `git_multi_project_report.png` con 3 grafici.
+**Output:** File `git_impact_multi_project_report.png` con 3 grafici.
 
 ---
 
@@ -341,12 +341,12 @@ done
 # Q3: Multi-repo
 ./git_multiproject_stats_collector.sh --file all-repos.txt 2025-07-01 2025-09-30 \
   | python3 plot_multiproject.py
-mv git_multi_project_report.png q3_portfolio.png
+mv git_impact_multi_project_report.png q3_portfolio.png
 
 # Q4: Multi-repo
 ./git_multiproject_stats_collector.sh --file all-repos.txt 2025-10-01 2025-12-31 \
   | python3 plot_multiproject.py
-mv git_multi_project_report.png q4_portfolio.png
+mv git_impact_multi_project_report.png q4_portfolio.png
 
 # Dettaglio Q4 su progetto strategico
 cd ~/progetti/strategic-project
@@ -381,21 +381,21 @@ mv git_stats.png q4_strategic_daily.png
 
 #### 1. Contributo per Progetto e Autore (Stacked Bar)
 
-- Confronto diretto tra progetti
-- Chi lavora su cosa
-- Identificazione progetti "hot"
+- Confronto diretto tra progetti in termini di Impact Score
+- Chi lavora su cosa (basato sull'Impact Score)
+- Identificazione progetti "hot" (ad alto impatto)
 
 #### 2. Distribuzione per Progetto (Donut)
 
-- Percentuale di effort per repository
+- Percentuale di Impact Score per repository
 - Sbilanciamenti nel portfolio
-- Focus del team
+- Focus del team in termini di impatto
 
 #### 3. Classifica Autori (Bar)
 
-- Produttività individuale aggregata
-- Contributo totale di ogni membro
-- Identificazione top contributors
+- Impact Score totale per ciascun autore
+- Contributo totale di ogni membro in termini di impatto
+- Identificazione top contributors in termini di impatto
 
 ---
 
@@ -463,6 +463,8 @@ Il file specificato con `--file` deve seguire queste regole:
 /home/utente/My Projects/repo name
 ```
 
+**Nota:** I dati raccolti da questi percorsi vengono elaborati dallo script Python `plot_multiproject.py` che calcola un Impact Score basato sui campi `added` e `files` secondo la formula: `ln(min(added, 1000) + 1) * ln(files + 1)`.
+
 ---
 
 ## Output JSON
@@ -475,19 +477,25 @@ Lo script bash produce un array JSON con questa struttura:
     "project": "repoA",
     "author": "Mario Rossi",
     "lines": 1250,
-    "commits": 15
+    "commits": 15,
+    "added": 800,
+    "files": 12
   },
   {
     "project": "repoA",
     "author": "Laura Bianchi",
     "lines": 890,
-    "commits": 12
+    "commits": 12,
+    "added": 650,
+    "files": 8
   },
   {
     "project": "repoB",
     "author": "Mario Rossi",
     "lines": 450,
-    "commits": 8
+    "commits": 8,
+    "added": 300,
+    "files": 5
   }
 ]
 ```
@@ -498,6 +506,10 @@ Lo script bash produce un array JSON con questa struttura:
 - `author`: Nome dell'autore Git (da `git config user.name`)
 - `lines`: Righe totali modificate (aggiunte + eliminate)
 - `commits`: Numero di commit (escludendo merge commits)
+- `added`: Righe aggiunte (usato per calcolare l'Impact Score)
+- `files`: Numero di file modificati (usato per calcolare l'Impact Score)
+
+**Nota:** Lo script Python `plot_multiproject.py` calcola un campo aggiuntivo `relevance` (Impact Score) utilizzando la formula: `ln(min(added, 1000) + 1) * ln(files + 1)` quando `commits` e `files` sono maggiori di zero.
 
 ---
 
@@ -507,18 +519,18 @@ Lo script Python crea 3 grafici in un'unica immagine:
 
 ### 1. **Contributo per Progetto e Autore** (Stacked Bar)
 
-- Mostra la distribuzione delle righe modificate
+- Mostra la distribuzione dell'Impact Score (calcolato come log(lines + 1) * log(files + 1))
 - Ogni barra rappresenta un progetto
 - I colori distinguono gli autori
 
 ### 2. **Distribuzione per Progetto** (Donut Chart)
 
-- Percentuale del lavoro totale per progetto
-- Utile per identificare i repository più attivi
+- Percentuale dell'Impact Score totale per progetto
+- Utile per identificare i repository con maggiore impatto
 
 ### 3. **Classifica Autori** (Bar Chart)
 
-- Righe modificate totali per ogni autore
+- Impact Score totale per ogni autore
 - Somma di tutti i progetti
 - Ordinamento decrescente
 
@@ -839,6 +851,22 @@ lines = righe_aggiunte + righe_eliminate
 - Non distingue tra aggiunte e rimozioni nel totale
 - Include file binari convertiti in numstat
 
+### Impact Score (Relevance)
+
+Nello script `plot_multiproject.py`, viene calcolato un Impact Score aggiuntivo utilizzando la formula:
+
+```txt
+relevance = ln(min(added, 1000) + 1) * ln(files + 1) se commits > 0 e files > 0
+relevance = 0 altrimenti
+```
+
+Dove:
+- `added`: righe aggiunte (da git log --numstat)
+- `files`: numero di file modificati in quel periodo
+- `commits`: numero di commit effettuati
+
+Questa metrica fornisce un'indicazione dell'impatto relativo del lavoro, considerando sia la quantità di codice aggiunto che il numero di file interessati, con una capatura a 1000 righe aggiunte per evitare che singoli grandi commit dominino la metrica.
+
 ### Commit
 
 - Ogni commit SHA unico nel periodo
@@ -860,7 +888,7 @@ lines = righe_aggiunte + righe_eliminate
 
 ❌ **Non usare come KPI per valutazione performance**
 
-- Le righe di codice non misurano qualità o valore
+- Le righe di codice e l'Impact Score non misurano qualità o valore
 - Refactoring appare come alta produttività
 - Deletion di codice legacy è positivo ma riduce metriche
 
@@ -869,6 +897,12 @@ lines = righe_aggiunte + righe_eliminate
 - Complessità delle task varia enormemente
 - Bug fix piccoli ≠ feature grandi
 - Code review e mentoring non appare
+
+❌ **Non considerare l'Impact Score come indicatore assoluto**
+
+- L'Impact Score è un'indicazione relativa, non una misura di qualità del codice
+- Non tiene conto della difficoltà tecnica delle modifiche
+- Può essere influenzato da fattori esterni non correlati alla produttività
 
 ### ✅ Cosa Fare
 
@@ -883,6 +917,12 @@ lines = righe_aggiunte + righe_eliminate
 - "Perché questo progetto ha richiesto così tanto effort?"
 - "Chi ha lavorato su cosa e possiamo bilanciare meglio?"
 - "Ci sono colli di bottiglia?"
+
+✓ **Usa l'Impact Score per confronti relativi**
+
+- Identificare progetti con maggiore attività di sviluppo
+- Capire dove si concentrano gli sforzi del team
+- Supportare decisioni di allocazione risorse
 
 ✓ **Usa per planning**
 

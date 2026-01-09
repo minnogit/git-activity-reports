@@ -261,31 +261,42 @@ analyze_project() {
         # Ignoriamo i commit di merge per una metrica più pulita (come discusso)
         # Usiamo --no-merges per escluderli
         
-        # a) Ottieni righe aggiunte/eliminate e totale
+        # a) Ottieni righe aggiunte/eliminate e numero di file toccati
         local LINE_METRICS=$(git log --no-merges --since="$START_DATE" --until="$END_DATE" --author="$AUTHOR_NAME" --pretty='format:' --numstat | awk '
-            BEGIN {OFS=":"; sum_added=0; sum_deleted=0}
+            BEGIN {sum_added=0; sum_deleted=0; files_count=0}
             {
-                sum_added += $1;
-                sum_deleted += $2
+                if ($1 ~ /^[0-9]+$/) {
+                    sum_added += $1;
+                    sum_deleted += $2;
+                    files_count++;
+                }
             }
             END {
-                print (sum_added + sum_deleted), $1, $2 # Righe totali, aggiunte, rimosse
+                # Restituiamo added, deleted e files_count separati da :
+                print sum_added ":" sum_deleted ":" files_count
             }')
             
-        local TOTAL_LINES=$(echo $LINE_METRICS | cut -d ':' -f 1)
-        # Controlla e imposta a 0 se vuoto
-        TOTAL_LINES=${TOTAL_LINES:-0}
+        local ADDED=$(echo $LINE_METRICS | cut -d ':' -f 1)
+        local DELETED=$(echo $LINE_METRICS | cut -d ':' -f 2)
+        local FILES_COUNT=$(echo $LINE_METRICS | cut -d ':' -f 3)
+
+        # Gestione valori vuoti e calcolo righe totali per retrocompatibilità
+        ADDED=${ADDED:-0}
+        DELETED=${DELETED:-0}
+        FILES_COUNT=${FILES_COUNT:-0}
+        local TOTAL_LINES=$((ADDED + DELETED))
         
-        # Salta l'autore se non ha contributo in quel periodo (dovrebbe essere filtrato da get_all_authors ma per sicurezza)
         if [[ "$TOTAL_LINES" -eq 0 ]]; then continue; fi
 
         # b) Ottieni il numero totale di commit
         local TOTAL_COMMITS=$(git log --no-merges --since="$START_DATE" --until="$END_DATE" --author="$AUTHOR_NAME" --oneline | wc -l | tr -d ' ')
 
-        # 4. Aggiungi il blocco JSON all'output principale
+        # 4. Aggiungi il blocco JSON con i nuovi campi added e files
         local JSON_ENTRY="  {\n"
         JSON_ENTRY+="    \"project\": \"$project_name\",\n"
         JSON_ENTRY+="    \"author\": \"$AUTHOR_NAME\",\n"
+        JSON_ENTRY+="    \"added\": $ADDED,\n"
+        JSON_ENTRY+="    \"files\": $FILES_COUNT,\n"
         JSON_ENTRY+="    \"lines\": $TOTAL_LINES,\n"
         JSON_ENTRY+="    \"commits\": $TOTAL_COMMITS\n"
         JSON_ENTRY+="  }"
