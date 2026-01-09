@@ -103,7 +103,7 @@ def main():
         kind='bar', 
         stacked=True, 
         ax=ax1, 
-        colormap='tab10', 
+        colormap='tab20', 
         width=0.8
     )
     ax1.set_title('1. Impatto Sviluppo per Progetto e Autore', fontsize=14)
@@ -122,7 +122,7 @@ def main():
         startangle=90,
         wedgeprops=dict(width=0.4), # Trasforma il Pie in Donut
         pctdistance=0.75,
-        colors=plt.cm.Set3.colors
+        colors=plt.cm.tab20.colors
     )
     ax2.set_title('2. Distribuzione Lavoro per Progetto (Impact)', fontsize=14)
     ax2.axis('equal') # Assicura che la torta sia circolare
