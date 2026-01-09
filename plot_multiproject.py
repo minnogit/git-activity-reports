@@ -2,6 +2,7 @@
 
 import sys
 import json
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,6 +14,15 @@ def main():
     if not raw_input:
         print("Errore: Nessun dato ricevuto in input. Assicurati di usare la pipe (|) con git_stats_collector.sh.")
         sys.exit(1)
+
+    # Caricamento opzionale da file
+    if os.path.exists("aliases.json"):
+        with open("aliases.json", "r") as f:
+            author_mapping = json.load(f)
+        print(f"Caricati {len(author_mapping)} alias da aliases.json")
+    else:
+        author_mapping = {}
+        print("Nessun file aliases.json trovato, nessun raggruppamento autori effettuato")
 
     try:
         data = json.loads(raw_input)
@@ -30,9 +40,16 @@ def main():
         else:
             raise ValueError("Formato JSON non riconosciuto")
             
-        # CALCOLO IMPACT SCORE (RELEVANCE)
+        # CALCOLO IMPACT SCORE (RELEVANCE) E RAGGRUPPAMENTO ALIAS
         processed_data = []
         for entry in df_data:
+            # Recuperiamo il nome originale dal JSON
+            raw_author = entry.get('author_name', entry.get('author', 'Unknown'))
+            
+            # RAGGRUPPAMENTO: Se il nome è nella mappa, lo sostituiamo,
+            # altrimenti teniamo quello originale
+            author = author_mapping.get(raw_author, raw_author)
+            
             added = entry.get('added', 0)
             files = entry.get('files', 0)
             commits = entry.get('commits', 0)
@@ -44,6 +61,8 @@ def main():
                 capped_added = min(added, 1000)
                 relevance = np.log1p(capped_added) * np.log1p(files)
             
+            # Aggiorniamo l'autore con il nome mappato
+            entry['author'] = author
             entry['relevance'] = relevance
             processed_data.append(entry)
 
@@ -64,6 +83,7 @@ def main():
 
     # -----------------------------------------------------
     # Preparazione dei dati per i 3 grafici
+    # I dati contengono già gli autori con nomi mappati tramite aliases.json
     # -----------------------------------------------------
 
     # 1. Grafico a barre (Progetto vs Autore)
@@ -75,7 +95,7 @@ def main():
     # Accorpamento valori piccoli in "Altro" per migliorare leggibilità
     total_relevance = project_totals.sum()
     project_percent = project_totals / total_relevance
-    threshold = 0.05  # Soglia del 5% per considerare un progetto "piccolo"
+    threshold = 0.02  # Soglia del 2% per considerare un progetto "piccolo"
     small_projects = project_percent <= threshold
     if small_projects.any():
         altro_value = project_totals[small_projects].sum()
@@ -93,6 +113,7 @@ def main():
     # Creazione di una figura con 3 sotto-grafici
     fig = plt.figure(figsize=(18, 16))
     
+    # I grafici utilizzeranno i nomi degli autori già mappati tramite aliases.json
     # Titolo con range di date
     title = f'Analisi Impatto Sviluppo Multi-Progetto e Autore ({start_date} → {end_date})'
     plt.suptitle(title, fontsize=18, y=0.95)

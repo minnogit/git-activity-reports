@@ -7,12 +7,12 @@ Sistema completo per analizzare e visualizzare statistiche Git, disponibile in d
 ### Versione Singolo Repository
 
 - **`git_stats_collector.sh`** - Analizza un repository alla volta con dettaglio giornaliero
-- **`plot_git.py`** - Genera grafico stacked bar per singolo progetto
+- **`plot_git.py`** - Genera grafico stacked bar per singolo progetto. Supporta anche il raggruppamento degli autori tramite un file opzionale `aliases.json`.
 
 ### Versione Multi-Repository
 
 - **`git_multiproject_stats_collector.sh`** - Analizza più repository contemporaneamente
-- **`plot_multiproject.py`** - Genera 3 grafici comparativi tra progetti
+- **`plot_multiproject.py`** - Genera 3 grafici comparativi tra progetti. Supporta anche il raggruppamento degli autori tramite un file opzionale `aliases.json`.
 
 ---
 
@@ -59,6 +59,18 @@ Analizza un singolo repository Git con dettaglio **giornaliero**, ideale per:
 ```bash
 ./git_stats_collector.sh <DATA_INIZIO> <DATA_FINE> [formato] [autore]
 ```
+
+**Nota:** Lo script Python `plot_git.py` supporta il raggruppamento degli autori attraverso un file opzionale `aliases.json` nella stessa directory. Questo file permette di raggruppare diversi nomi di autori Git sotto un unico nome comune, utile quando lo stesso sviluppatore ha contribuito con nomi diversi. Esempio:
+
+```json
+{
+  "Mario Rossi": "Mario R.",
+  "Rossi M.": "Mario R.",
+  "Giulia Verdi": "Giulia V."
+}
+```
+
+Se il file `aliases.json` non esiste, lo script continuerà a funzionare normalmente senza raggruppare gli autori.
 
 ### Parametri
 
@@ -135,6 +147,7 @@ TOTALE:                       10           1498           1030            468
   }
 ]
 ```
+
 #### 5. Salvataggio dati per analisi successive
 
 ```bash
@@ -157,7 +170,6 @@ cat novembre.json | jq '.[] | {author, total_commits}'
 # Con formato testuale
 ./git_stats_collector.sh --fetch 2025-11-01 2025-11-30 text "Mario Rossi"
 ```
-
 
 ---
 
@@ -463,7 +475,22 @@ Il file specificato con `--file` deve seguire queste regole:
 /home/utente/My Projects/repo name
 ```
 
-**Nota:** I dati raccolti da questi percorsi vengono elaborati dallo script Python `plot_multiproject.py` che calcola un Impact Score basato sui campi `added` e `files` secondo la formula: `ln(min(added, 1000) + 1) * ln(files + 1)`.
+**Nota:** I dati raccolti da questi percorsi vengono elaborati dallo script Python `plot_multiproject.py` che:
+
+1) Calcola un Impact Score basato sui campi `added` e `files` secondo la formula: `ln(min(added, 1000) + 1) * ln(files + 1)`
+2) Supporta il raggruppamento degli autori attraverso un file opzionale `aliases.json` nella stessa directory
+
+Il file `aliases.json` permette di raggruppare diversi nomi di autori Git sotto un unico nome comune, utile quando lo stesso sviluppatore ha contribuito con nomi diversi. Esempio:
+
+```json
+{
+  "Mario Rossi": "Mario R.",
+  "Rossi M.": "Mario R.",
+  "Giulia Verdi": "Giulia V."
+}
+```
+
+Se il file `aliases.json` non esiste, lo script continuerà a funzionare normalmente senza raggruppare gli autori.
 
 ---
 
@@ -509,7 +536,7 @@ Lo script bash produce un array JSON con questa struttura:
 - `added`: Righe aggiunte (usato per calcolare l'Impact Score)
 - `files`: Numero di file modificati (usato per calcolare l'Impact Score)
 
-**Nota:** Lo script Python `plot_multiproject.py` calcola un campo aggiuntivo `relevance` (Impact Score) utilizzando la formula: `ln(min(added, 1000) + 1) * ln(files + 1)` quando `commits` e `files` sono maggiori di zero.
+**Nota:** Gli script Python `plot_multiproject.py` e `plot_git.py` supportano il raggruppamento degli autori attraverso un file opzionale `aliases.json` che permette di mappare diversi nomi di autori Git sotto un unico nome comune. Se presente il campo `author_name` nel JSON, verrà utilizzato come priorità rispetto al campo `author`. Inoltre, lo script `plot_multiproject.py` calcola un campo aggiuntivo `relevance` (Impact Score) utilizzando la formula: `ln(min(added, 1000) + 1) * ln(files + 1)` quando `commits` e `files` sono maggiori di zero.
 
 ---
 
@@ -586,27 +613,29 @@ mv git_multi_project_report.png q4_report.png
 - Formato richiesto: `YYYY-MM-DD`
 - Range inclusivo: include sia la data di inizio che quella di fine
 - Orari considerati: `00:00:00` (inizio) - `23:59:59` (fine)
+
 ### Performance
 
 Per repository molto grandi (>10K commits), l'analisi può richiedere alcuni minuti. Considera di:
 
 - Ridurre l'intervallo temporale
 - Analizzare i repository in batch separati
+
 ### Aggiornamento Repository
 
 Di default, i repository **non vengono aggiornati** automaticamente con git fetch. Per abilitare l'aggiornamento esplicito, usa l'opzione `--fetch`:
 
 **Multi-repository:**
+
 ```bash
 ./git_multiproject_stats_collector.sh --fetch --file repos.txt 2025-11-01 2025-11-30
 ```
 
 **Singolo repository:**
+
 ```bash
 ./git_stats_collector.sh --fetch 2025-11-01 2025-11-30 json
 ```
-
-
 
 ---
 
@@ -861,6 +890,7 @@ relevance = 0 altrimenti
 ```
 
 Dove:
+
 - `added`: righe aggiunte (da git log --numstat)
 - `files`: numero di file modificati in quel periodo
 - `commits`: numero di commit effettuati

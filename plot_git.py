@@ -37,6 +37,13 @@ def main():
         print("SUGGERIMENTO: Hai forse lanciato g.sh con l'opzione 'text' invece di 'json'?")
         print(f"Inizio dell'input ricevuto: {raw_input[:50]}...")
         sys.exit(1)
+    
+    # Caricamento opzionale da file
+    if os.path.exists("aliases.json"):
+        with open("aliases.json", "r") as f:
+            author_mapping = json.load(f)
+    else:
+        author_mapping = {}
 
     try:
         data = json.loads(raw_input)
@@ -49,7 +56,12 @@ def main():
     MAX_LINES_PER_DAY = 1000  # Tetto massimo per riga di codice al giorno per autore
 
     for entry in data:
-        author = entry.get('author', 'Unknown')
+        # Recuperiamo il nome originale dal JSON
+        raw_author = entry.get('author_name', entry.get('author', 'Unknown'))
+        
+        # RAGGRUPPAMENTO: Se il nome è nella mappa, lo sostituiamo, 
+        # altrimenti teniamo quello originale
+        author = author_mapping.get(raw_author, raw_author)
         if author == "TOTALE": continue
             
         for day in entry.get('daily_data', []):
