@@ -91,17 +91,41 @@ def main():
         aggfunc='sum'
     ).fillna(0)
 
+    # 1. Calcoliamo l'Impact Score Totale giornaliero (somma di tutti gli autori)
+    daily_total = pivot_df.sum(axis=1)
+
+    # 2. Calcoliamo la Media Mobile a 7 giorni
+    # min_periods=1 serve a mostrare la linea anche nei primi giorni del grafico
+    moving_avg = daily_total.rolling(window=7, min_periods=1).mean()
+
     # Configurazione Plot
-    fig, ax = plt.subplots(figsize=(14, 8)) # Creiamo figura e assi separatamente
+    fig, ax = plt.subplots(figsize=(14, 8))
     
-    # Stacked Bar Chart
+    # DISEGNO 1: Stacked Bar Chart (Dati reali)
     pivot_df.plot(
         kind='bar', 
         stacked=True, 
         width=0.8, 
         colormap='tab10',
-        ax=ax # Disegna sul nostro asse
+        ax=ax,
+        alpha=0.7 # Leggera trasparenza per far risaltare la linea
     )
+    
+    # DISEGNO 2: Linea della Media Mobile
+    # Usiamo 'zorder' per assicurarci che la linea sia sopra le barre
+    ax.plot(
+        range(len(moving_avg)), 
+        moving_avg.values, 
+        color='red', 
+        linewidth=3, 
+        label='Trend (Media Mobile 7gg)',
+        marker='o',
+        markersize=4,
+        zorder=5 
+    )
+
+    # Aggiorniamo la legenda per includere la Trendline
+    ax.legend(title="Autori / Trend", bbox_to_anchor=(1.05, 1), loc='upper left')
     
     # Formatta le etichette delle date per mostrare solo YYYY-MM-DD
     ax.set_xticks(range(len(pivot_df.index)))
@@ -117,7 +141,7 @@ def main():
         title = f'Progetto {project_name} - {title}'
     ax.set_ylabel('Impact Score (Log lines * Files)')
     ax.set_title('Impatto Sviluppo per Autore (Dati Filtrati)')
-    ax.legend(title='Autore', bbox_to_anchor=(1.02, 1), loc='upper left')
+    ax.legend(title="Autori / Trend", bbox_to_anchor=(1.05, 1), loc='upper left')
     ax.grid(axis='y', linestyle='--', alpha=0.5)
     plt.tight_layout()
 
