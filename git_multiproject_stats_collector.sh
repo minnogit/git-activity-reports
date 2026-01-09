@@ -251,7 +251,15 @@ analyze_project() {
     echo "Analisi di $project_name ($project_path)..." >&2
 
     # 2. Ottieni tutti gli autori unici nel periodo
-    AUTHORS=$(git log --since="$START_DATE 00:00:00" --until="$END_DATE 23:59:59" --pretty=format:'%an' | sort | uniq)
+    AUTHORS=$(git log --since="$START_DATE 00:00:00" --until="$END_DATE 23:59:59" --pretty=format:'%an' -- . \
+        ":(exclude)node_modules/*" \
+        ":(exclude)dist/*" \
+        ":(exclude)vendor/*" \
+        ":(exclude)*.lock" \
+        ":(exclude)*.min.js" \
+        ":(exclude)package-lock.json" \
+        ":(exclude)prisma/*" \
+        ":(exclude)**/generated/*" | sort | uniq)
     
     # 3. Iterazione sugli autori per ottenere le statistiche totali
     local IFS=$'\n' # Imposta separatore di campo su newline per gestire gli spazi nei nomi
@@ -262,7 +270,15 @@ analyze_project() {
         # Usiamo --no-merges per escluderli
         
         # a) Ottieni righe aggiunte/eliminate e numero di file toccati
-        local LINE_METRICS=$(git log --no-merges --since="$START_DATE" --until="$END_DATE" --author="$AUTHOR_NAME" --pretty='format:' --numstat | awk '
+        local LINE_METRICS=$(git log --no-merges --since="$START_DATE" --until="$END_DATE" --author="$AUTHOR_NAME" --pretty='format:' --numstat -- . \
+            ":(exclude)node_modules/*" \
+            ":(exclude)dist/*" \
+            ":(exclude)vendor/*" \
+            ":(exclude)*.lock" \
+            ":(exclude)*.min.js" \
+            ":(exclude)package-lock.json" \
+            ":(exclude)prisma/*" \
+            ":(exclude)**/generated/*" | awk '
             BEGIN {sum_added=0; sum_deleted=0; files_count=0}
             {
                 if ($1 ~ /^[0-9]+$/) {
@@ -289,7 +305,15 @@ analyze_project() {
         if [[ "$TOTAL_LINES" -eq 0 ]]; then continue; fi
 
         # b) Ottieni il numero totale di commit
-        local TOTAL_COMMITS=$(git log --no-merges --since="$START_DATE" --until="$END_DATE" --author="$AUTHOR_NAME" --oneline | wc -l | tr -d ' ')
+        local TOTAL_COMMITS=$(git log --no-merges --since="$START_DATE" --until="$END_DATE" --author="$AUTHOR_NAME" --oneline -- . \
+            ":(exclude)node_modules/*" \
+            ":(exclude)dist/*" \
+            ":(exclude)vendor/*" \
+            ":(exclude)*.lock" \
+            ":(exclude)*.min.js" \
+            ":(exclude)package-lock.json" \
+            ":(exclude)prisma/*" \
+            ":(exclude)**/generated/*" | wc -l | tr -d ' ')
 
         # 4. Aggiungi il blocco JSON con i nuovi campi added e files
         local JSON_ENTRY="  {\n"

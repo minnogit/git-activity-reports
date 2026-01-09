@@ -183,6 +183,11 @@ Analizza più repository contemporaneamente con statistiche **aggregate per prog
 - Report di team distribuiti su più repository
 - Analisi portfolio completo
 
+**Note importanti:**
+- I merge commits sono esclusi dalle statistiche
+- File non rilevanti come node_modules, dist, vendor, lock files e file generati sono esclusi dalle statistiche
+- Le righe totali sono calcolate come: aggiunte + eliminate
+
 ### Sintassi Completa
 
 ```bash
@@ -607,6 +612,19 @@ mv git_multi_project_report.png q4_report.png
 - **Inclusi:** Commit standard con modifiche ai file
 - **Esclusi:** Merge commits (flag `--no-merges`)
 - **Metrica:** Somma di righe aggiunte + righe eliminate
+
+### File Considerati
+
+- **Inclusi:** File di codice sorgente e altri file rilevanti per le statistiche
+- **Esclusi:**
+  - Directory `node_modules/*`
+  - Directory `dist/*`
+  - Directory `vendor/*`
+  - File `*.lock` (come package-lock.json, Gemfile.lock, ecc.)
+  - File `*.min.js`
+  - Directory `prisma/*`
+  - Directory `**/generated/*`
+- Questi file sono esclusi perché non rappresentano attività di sviluppo significativa
 
 ### Gestione Date
 
@@ -1184,6 +1202,11 @@ sudo tee /usr/local/bin/gitstats-multi > /dev/null << 'EOF'
 # REQUISITI:
 #   - git_multiproject_stats_collector.sh e plot_multiproject.py devono essere disponibili globalmente
 #   - Python3 con pandas e matplotlib installati
+#
+# NOTE:
+#   - I merge commits sono esclusi dalle statistiche
+#   - File non rilevanti come node_modules, dist, vendor, lock files e file generati sono esclusi dalle statistiche
+#   - Le righe totali sono calcolate come: aggiunte + eliminate
 #
 # AUTORE: Michele Innocenti
 # VERSIONE: 1.0
