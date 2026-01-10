@@ -7,12 +7,12 @@ Sistema completo per analizzare e visualizzare statistiche Git, disponibile in d
 ### Versione Singolo Repository
 
 - **`git_stats_collector.sh`** - Analizza un repository alla volta con dettaglio giornaliero
-- **`plot_git.py`** - Genera grafico stacked bar per singolo progetto. Supporta anche il raggruppamento degli autori tramite un file opzionale `aliases.json`.
+- **`plot_git.py`** - Genera grafico stacked bar per singolo progetto. Supporta anche il raggruppamento degli autori tramite un file opzionale `git-activity-aliases.json`.
 
 ### Versione Multi-Repository
 
 - **`git_multiproject_stats_collector.sh`** - Analizza più repository contemporaneamente
-- **`plot_multiproject.py`** - Genera 3 grafici comparativi tra progetti. Supporta anche il raggruppamento degli autori tramite un file opzionale `aliases.json`.
+- **`plot_multiproject.py`** - Genera 3 grafici comparativi tra progetti. Supporta anche il raggruppamento degli autori tramite un file opzionale `git-activity-aliases.json`.
 
 ---
 
@@ -60,7 +60,7 @@ Analizza un singolo repository Git con dettaglio **giornaliero**, ideale per:
 ./git_stats_collector.sh <DATA_INIZIO> <DATA_FINE> [formato] [autore]
 ```
 
-**Nota:** Lo script Python `plot_git.py` supporta il raggruppamento degli autori attraverso un file opzionale `aliases.json` nella stessa directory. Questo file permette di raggruppare diversi nomi di autori Git sotto un unico nome comune, utile quando lo stesso sviluppatore ha contribuito con nomi diversi. Esempio:
+**Nota:** Lo script Python `plot_git.py` supporta il raggruppamento degli autori attraverso un file opzionale `git-activity-aliases.json` nella stessa directory. Questo file permette di raggruppare diversi nomi di autori Git sotto un unico nome comune, utile quando lo stesso sviluppatore ha contribuito con nomi diversi. Esempio:
 
 ```json
 {
@@ -70,7 +70,14 @@ Analizza un singolo repository Git con dettaglio **giornaliero**, ideale per:
 }
 ```
 
-Se il file `aliases.json` non esiste, lo script continuerà a funzionare normalmente senza raggruppare gli autori.
+
+Il file di configurazione può essere posizionato in diverse posizioni e verrà cercato in questo ordine:
+1. Nella directory corrente (`./git-activity-aliases.json`)
+2. Nella directory di configurazione XDG specifica per l'applicazione (`~/.config/git-activity-reports/git-activity-aliases.json`)
+3. Nella directory di configurazione XDG generica (`~/.config/git-activity-git-activity-aliases.json`)
+4. Nella directory di sistema (`/etc/git-activity-reports/git-activity-aliases.json`)
+
+Se nessun file di configurazione esiste, lo script continuerà a funzionare normalmente senza raggruppare gli autori.
 
 ### Parametri
 
@@ -483,9 +490,9 @@ Il file specificato con `--file` deve seguire queste regole:
 **Nota:** I dati raccolti da questi percorsi vengono elaborati dallo script Python `plot_multiproject.py` che:
 
 1) Calcola un Impact Score basato sui campi `added` e `files` secondo la formula: `ln(min(added, 1000) + 1) * ln(files + 1)`
-2) Supporta il raggruppamento degli autori attraverso un file opzionale `aliases.json` nella stessa directory
+2) Supporta il raggruppamento degli autori attraverso un file opzionale `git-activity-aliases.json` nella stessa directory
 
-Il file `aliases.json` permette di raggruppare diversi nomi di autori Git sotto un unico nome comune, utile quando lo stesso sviluppatore ha contribuito con nomi diversi. Esempio:
+Il file `git-activity-aliases.json` permette di raggruppare diversi nomi di autori Git sotto un unico nome comune, utile quando lo stesso sviluppatore ha contribuito con nomi diversi. Esempio:
 
 ```json
 {
@@ -495,7 +502,14 @@ Il file `aliases.json` permette di raggruppare diversi nomi di autori Git sotto 
 }
 ```
 
-Se il file `aliases.json` non esiste, lo script continuerà a funzionare normalmente senza raggruppare gli autori.
+
+Il file di configurazione può essere posizionato in diverse posizioni e verrà cercato in questo ordine:
+1. Nella directory corrente (`./git-activity-aliases.json`)
+2. Nella directory di configurazione XDG specifica per l'applicazione (`~/.config/git-activity-reports/git-activity-aliases.json`)
+3. Nella directory di configurazione XDG generica (`~/.config/git-activity-git-activity-aliases.json`)
+4. Nella directory di sistema (`/etc/git-activity-reports/git-activity-aliases.json`)
+
+Se nessun file di configurazione esiste, lo script continuerà a funzionare normalmente senza raggruppare gli autori.
 
 ---
 
@@ -541,7 +555,7 @@ Lo script bash produce un array JSON con questa struttura:
 - `added`: Righe aggiunte (usato per calcolare l'Impact Score)
 - `files`: Numero di file modificati (usato per calcolare l'Impact Score)
 
-**Nota:** Gli script Python `plot_multiproject.py` e `plot_git.py` supportano il raggruppamento degli autori attraverso un file opzionale `aliases.json` che permette di mappare diversi nomi di autori Git sotto un unico nome comune. Se presente il campo `author_name` nel JSON, verrà utilizzato come priorità rispetto al campo `author`. Inoltre, lo script `plot_multiproject.py` calcola un campo aggiuntivo `relevance` (Impact Score) utilizzando la formula: `ln(min(added, 1000) + 1) * ln(files + 1)` quando `commits` e `files` sono maggiori di zero.
+**Nota:** Gli script Python `plot_multiproject.py` e `plot_git.py` supportano il raggruppamento degli autori attraverso un file opzionale `git-activity-aliases.json` che permette di mappare diversi nomi di autori Git sotto un unico nome comune. Se presente il campo `author_name` nel JSON, verrà utilizzato come priorità rispetto al campo `author`. Inoltre, lo script `plot_multiproject.py` calcola un campo aggiuntivo `relevance` (Impact Score) utilizzando la formula: `ln(min(added, 1000) + 1) * ln(files + 1)` quando `commits` e `files` sono maggiori di zero.
 
 ---
 
@@ -1210,6 +1224,11 @@ sudo tee /usr/local/bin/gitstats-multi > /dev/null << 'EOF'
 #   - I merge commits sono esclusi dalle statistiche
 #   - File non rilevanti come node_modules, dist, vendor, lock files e file generati sono esclusi dalle statistiche
 #   - Le righe totali sono calcolate come: aggiunte + eliminate
+#   - Il file di configurazione per gli alias può essere posizionato in diverse posizioni:
+#     1. Nella directory corrente (`./git-activity-aliases.json`)
+#     2. Nella directory di configurazione XDG specifica per l'applicazione (`~/.config/git-activity-reports/git-activity-aliases.json`)
+#     3. Nella directory di configurazione XDG generica (`~/.config/git-activity-git-activity-aliases.json`)
+#     4. Nella directory di sistema (`/etc/git-activity-reports/git-activity-aliases.json`)
 #
 # AUTORE: Michele Innocenti
 # VERSIONE: 1.0

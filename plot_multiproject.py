@@ -18,14 +18,40 @@ def main():
         print("Errore: Nessun dato ricevuto in input. Assicurati di usare la pipe (|) con git_stats_collector.sh.")
         sys.exit(1)
 
+    # Funzione per cercare il file di configurazione in diverse posizioni
+    def find_config_file():
+        # 1. Directory corrente
+        if os.path.exists("git-activity-aliases.json"):
+            return "git-activity-aliases.json"
+        
+        # 2. XDG config directory per questa applicazione
+        xdg_config_home = os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
+        app_config_path = os.path.join(xdg_config_home, 'git-activity-reports', 'git-activity-aliases.json')
+        if os.path.exists(app_config_path):
+            return app_config_path
+        
+        # 3. Vecchio formato nella directory generica di configurazione
+        old_config_path = os.path.join(xdg_config_home, 'git-activity-git-activity-aliases.json')
+        if os.path.exists(old_config_path):
+            return old_config_path
+        
+        # 4. Directory di sistema (se si ha accesso)
+        system_config_path = '/etc/git-activity-reports/git-activity-aliases.json'
+        if os.path.exists(system_config_path):
+            return system_config_path
+        
+        # Se nessun file esiste, ritorna None
+        return None
+    
     # Caricamento opzionale da file
-    if os.path.exists("aliases.json"):
-        with open("aliases.json", "r") as f:
+    config_path = find_config_file()
+    if config_path:
+        with open(config_path, "r") as f:
             author_mapping = json.load(f)
-        print(f"Caricati {len(author_mapping)} alias da aliases.json")
+        print(f"Caricati {len(author_mapping)} alias da {config_path}")
     else:
         author_mapping = {}
-        print("Nessun file aliases.json trovato, nessun raggruppamento autori effettuato")
+        print("Nessun file di configurazione per gli alias trovato, nessun raggruppamento autori effettuato")
 
     try:
         data = json.loads(raw_input)
@@ -89,7 +115,7 @@ def main():
 
     # -----------------------------------------------------
     # Preparazione dei dati per i 3 grafici
-    # I dati contengono già gli autori con nomi mappati tramite aliases.json
+    # I dati contengono già gli autori con nomi mappati tramite git-activity-aliases.json
     # -----------------------------------------------------
 
     # 1. Grafico a barre (Progetto vs Autore)
@@ -119,7 +145,7 @@ def main():
     # Creazione di una figura con 3 sotto-grafici
     fig = plt.figure(figsize=(18, 16))
     
-    # I grafici utilizzeranno i nomi degli autori già mappati tramite aliases.json
+    # I grafici utilizzeranno i nomi degli autori già mappati tramite git-activity-aliases.json
     # Titolo con range di date
     title = f'Analisi Impatto Sviluppo Multi-Progetto e Autore ({start_date} → {end_date})'
     plt.suptitle(title, fontsize=18, y=0.95)

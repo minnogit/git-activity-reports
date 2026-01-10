@@ -38,12 +38,40 @@ def main():
         print(f"Inizio dell'input ricevuto: {raw_input[:50]}...")
         sys.exit(1)
     
+    # Funzione per cercare il file di configurazione in diverse posizioni
+    def find_config_file():
+        # 1. Directory corrente
+        if os.path.exists("git-activity-aliases.json"):
+            return "git-activity-aliases.json"
+        
+        # 2. XDG config directory per questa applicazione
+        xdg_config_home = os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
+        app_config_path = os.path.join(xdg_config_home, 'git-activity-reports', 'git-activity-aliases.json')
+        if os.path.exists(app_config_path):
+            return app_config_path
+        
+        # 3. Vecchio formato nella directory generica di configurazione
+        old_config_path = os.path.join(xdg_config_home, 'git-activity-git-activity-aliases.json')
+        if os.path.exists(old_config_path):
+            return old_config_path
+        
+        # 4. Directory di sistema (se si ha accesso)
+        system_config_path = '/etc/git-activity-reports/git-activity-aliases.json'
+        if os.path.exists(system_config_path):
+            return system_config_path
+        
+        # Se nessun file esiste, ritorna None
+        return None
+    
     # Caricamento opzionale da file
-    if os.path.exists("aliases.json"):
-        with open("aliases.json", "r") as f:
+    config_path = find_config_file()
+    if config_path:
+        with open(config_path, "r") as f:
             author_mapping = json.load(f)
+        print(f"Caricati {len(author_mapping)} alias da {config_path}")
     else:
         author_mapping = {}
+        print("Nessun file di configurazione per gli alias trovato, nessun raggruppamento autori effettuato")
 
     try:
         data = json.loads(raw_input)
