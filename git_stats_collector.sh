@@ -156,8 +156,17 @@ get_lines() {
         ":(exclude)vendor/*" \
         ":(exclude)*.lock" \
         ":(exclude)*.min.js" \
+        ":(exclude)bootstrap-italia/*" \
+        ":(exclude)bootstrap/*" \
+        ":(exclude).*" \
+        ":(exclude).*/*" \
+        ":(exclude)**/old/*" \
+        ":(exclude)**/tmp/*" \
+        ":(exclude)**/temp/*" \
         ":(exclude)package-lock.json" \
-        ":(exclude)prisma/*" \
+        ":(exclude)package.json" \
+        ":(exclude)prisma/**/internal/*" \
+        ":(exclude)prisma/**/client/*" \
         ":(exclude)**/generated/*" | awk '
         BEGIN {sum_added=0; sum_deleted=0; files_count=0}
         {
