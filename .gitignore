@@ -10,3 +10,5 @@ venv/
 
 .vscode/
 project_list.txt
+node_modules/
+*.vsix
