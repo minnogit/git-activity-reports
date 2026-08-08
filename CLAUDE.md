@@ -87,11 +87,15 @@ sviluppo; se si tocca la raccolta dati, verificarle di nuovo:
    filtro esatto sul periodo è fatto in awk (git non sa filtrare per author-date).
 4. **`files` = file distinti**, non righe di `--numstat`: lo stesso file in 3 commit conta 1, non 3.
    Contare gli eventi rendeva la metrica un proxy del numero di commit.
-5. **`:(exclude,attr:linguist-generated)`** in testa a `EXCLUDE_PATHSPEC`: esclusione dichiarativa del
-   codice generato, dichiarata nel `.gitattributes` del repo analizzato invece che indovinata qui.
-   Su un repo reale (PHP + client OpenAPI) valeva il **51%** del churn, mentre la lista di default —
-   tarata su Node/Prisma — ne intercettava l'1,2%. Serve la forma **booleana** dell'attributo:
-   `linguist-generated=true` non è intercettato dal pathspec magic di git (verificato).
+5. **`:(exclude,attr:linguist-generated)` e `:(exclude,attr:linguist-vendored)`** in testa a
+   `EXCLUDE_PATHSPEC`: esclusione dichiarativa, dichiarata nel `.gitattributes` del repo analizzato
+   invece che indovinata qui. Due attributi standard GitHub Linguist distinti e non intercambiabili:
+   `linguist-generated` per codice *prodotto* da un tool (client OpenAPI, migrazioni),
+   `linguist-vendored` per codice di *terze parti* copiato nel repo (una libreria) — per git sono
+   equivalenti, per GitHub sono due segnali diversi nei diff delle PR. Su un repo reale (PHP + client
+   OpenAPI) `linguist-generated` da solo valeva il **51%** del churn, mentre la lista di default —
+   tarata su Node/Prisma — ne intercettava l'1,2%. Serve la forma **booleana** di entrambi gli
+   attributi: `linguist-generated=true` non è intercettato dal pathspec magic di git (verificato).
 
 Due trappole da conoscere prima di toccare le esclusioni:
 

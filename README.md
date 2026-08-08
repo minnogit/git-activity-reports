@@ -1135,16 +1135,30 @@ ma dichiararli **nel repository analizzato**, dove la verità è nota.
 Nel `.gitattributes` del repository da analizzare:
 
 ```gitattributes
-lib/api_clients/**    linguist-generated
-coverage-report/**    linguist-generated
+lib/api_clients/**       linguist-generated
+coverage-report/**       linguist-generated
+
+# librerie di terze parti copiate nel repo, non già nella lista di default (vedi sotto):
+lib/qualche-libreria/**  linguist-vendored
 
 # i binari che git non riconosce come tali (certi PDF) finiscono nel conteggio righe:
 *.pdf   -diff
 *.xlsx  -diff
 ```
 
-I collector escludono automaticamente ciò che è marcato, tramite il pathspec
-`:(exclude,attr:linguist-generated)`. Nei repository senza `.gitattributes` non cambia nulla.
+I collector escludono automaticamente ciò che è marcato, tramite i pathspec
+`:(exclude,attr:linguist-generated)` e `:(exclude,attr:linguist-vendored)`. Nei repository
+senza `.gitattributes` non cambia nulla.
+
+**`linguist-generated` vs `linguist-vendored`** — sono due attributi standard GitHub Linguist
+distinti, non intercambiabili solo per pigrizia: il primo è per codice *prodotto* da un tool
+(client OpenAPI, migrazioni), il secondo per codice di *terze parti* copiato nel repo (una
+libreria come Bootstrap). Per git contano allo stesso modo (entrambi esclusi), ma per GitHub
+sono due segnali diversi nei diff delle PR — usa quello semanticamente corretto.
+
+**Nota:** alcune librerie comuni (`bootstrap`, `bootstrap-italia`, `node_modules`, `vendor`)
+sono già escluse di default (vedi sotto): per quelle non serve `.gitattributes`. Usalo per le
+librerie *non* già in quella lista.
 
 Tre dettagli che non sono ovvi e che fanno la differenza:
 
