@@ -66,6 +66,7 @@ SERIES = [
 MAX_SERIES = len(SERIES)
 OTHER_LABEL = "Altro"
 DONUT_MAX_SLICES = 6      # part-to-whole resta leggibile solo con pochi settori
+MAX_PROJECT_BARS = 12     # oltre, le etichette sull'asse X dei progetti si sovrappongono
 
 SURFACE = "#fcfcfb"
 INK_PRIMARY = "#0b0b0b"
@@ -307,6 +308,17 @@ def panel_churn_by_project(ax, df, colors, author_order):
     pivot = pivot.reindex(columns=[a for a in author_order if a in pivot.columns])
     pivot = pivot.loc[pivot.sum(axis=1).sort_values(ascending=False).index]
 
+    # Tetto al numero di barre: con decine di progetti le etichette sull'asse X si
+    # sovrappongono. Stessa strategia già usata per la ciambella e per la tabella,
+    # e la coda resta visibile aggregata invece di sparire.
+    folded = 0
+    if len(pivot.index) > MAX_PROJECT_BARS:
+        folded = len(pivot.index) - MAX_PROJECT_BARS
+        head = pivot.iloc[:MAX_PROJECT_BARS]
+        tail = pivot.iloc[MAX_PROJECT_BARS:].sum()
+        tail.name = f"{OTHER_LABEL} ({folded})"
+        pivot = pd.concat([head, tail.to_frame().T])
+
     x = np.arange(len(pivot.index))
     bottom = np.zeros(len(pivot.index))
     width = bar_width(len(pivot.index))
@@ -318,8 +330,10 @@ def panel_churn_by_project(ax, df, colors, author_order):
 
     ax.set_xticks(x)
     ax.set_xticklabels(pivot.index, rotation=30, ha="right", fontsize=9)
-    ax.set_title("Churn per progetto e autore", fontsize=12, color=INK_PRIMARY,
-                 loc="left", pad=10)
+    title = "Churn per progetto e autore"
+    if folded:
+        title += f"  (primi {MAX_PROJECT_BARS} di {len(pivot.index) - 1 + folded})"
+    ax.set_title(title, fontsize=12, color=INK_PRIMARY, loc="left", pad=10)
     ax.set_ylabel("Righe (aggiunte + 0.4 × rimosse)", fontsize=9)
     ax.grid(axis="y", color=GRIDLINE, linewidth=0.8, linestyle="-")
     recessive_spines(ax)
