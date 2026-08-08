@@ -2,30 +2,44 @@
 
 Sistema completo per analizzare e visualizzare statistiche Git, disponibile in due versioni: **singolo repository** e **multi-repository**.
 
-## Componenti
+## Indice
 
-### Versione Singolo Repository
-
-- **`git_stats_collector.sh`** - Analizza un repository alla volta con dettaglio giornaliero
-- **`plot_git.py`** - Genera grafico stacked bar per singolo progetto. Supporta anche il raggruppamento degli autori tramite un file opzionale `git-activity-aliases.json`.
-
-### Versione Multi-Repository
-
-- **`git_multiproject_stats_collector.sh`** - Analizza più repository contemporaneamente
-- **`plot_multiproject.py`** - Genera 3 grafici comparativi tra progetti. Supporta anche il raggruppamento degli autori tramite un file opzionale `git-activity-aliases.json`.
+- [📦 Installazione](#-installazione) · [🚀 Guida Rapida](#-guida-rapida)
+- [Componenti](#componenti)
+- [📊 Versione Singolo Repository](#-versione-singolo-repository) · [🌐 Repository Remoti](#-repository-remoti-analizzare-un-url-git)
+- [🗂️ Versione Multi-Repository](#-versione-multi-repository) · [Esempi Pratici Multi-Repository](#esempi-pratici-multi-repository)
+- [🔄 Confronto tra le Due Versioni](#-confronto-tra-le-due-versioni)
+- [📋 Casi d'Uso Combinati](#-casi-duso-combinati) · [🎨 Interpretazione dei Grafici](#-interpretazione-dei-grafici)
+- [🚨 Troubleshooting](#-troubleshooting) · [💡 Tips & Best Practices](#-tips--best-practices)
+- [🔧 Personalizzazione](#-personalizzazione) · [📈 Metriche Calcolate](#-metriche-calcolate) · [🎯 Interpretazione dei Dati](#-interpretazione-dei-dati)
+- [❓ FAQ](#-faq) · [🚀 Comandi Semplificati (gitstats/gitstats-multi)](#-comandi-semplificati-gitstats--gitstats-multi)
 
 ---
 
-## Requisiti
+## 📦 Installazione
 
-### Script Bash
+### 1. Scarica il progetto
+
+```bash
+git clone https://github.com/minnogit/git-activity-reports.git ~/git-activity-reports
+cd ~/git-activity-reports
+chmod +x *.sh *.py
+```
+
+In alternativa, su Debian/Ubuntu puoi installare il **pacchetto `.deb`** dalla pagina Release del
+repository: mette già tutto pronto in `/usr/local/bin` (inclusi i comandi `gitstats`/`gitstats-multi`) —
+in tal caso puoi saltare il resto di questa sezione e andare direttamente alla [Guida Rapida](#-guida-rapida).
+
+### 2. Requisiti
+
+**Script Bash:**
 
 - Bash 4.0+
 - Git installato e configurato
 - Accesso ai repository da analizzare
 - `date` command con supporto `-d` (GNU coreutils)
 
-### Script Python
+**Script Python** (una delle tre opzioni):
 
 ```bash
 sudo apt update
@@ -42,6 +56,117 @@ source git-activity-env/bin/activate
 pip install pandas matplotlib
 ```
 
+### 3. Rendi gli script richiamabili da qualsiasi cartella (consigliato)
+
+Gli script vanno eseguiti **nella cartella del repository che vuoi analizzare** (es. `cd ~/progetti/backend`),
+non nella cartella dove li hai scaricati al passo 1 — per questo è comodo aggiungerli al `PATH` invece
+di scrivere ogni volta il percorso completo:
+
+```bash
+echo 'export PATH="$HOME/git-activity-reports:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Da qui in avanti, da qualsiasi cartella:
+
+```bash
+cd ~/progetti/backend
+git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py
+```
+
+**Senza questo passaggio**, dovrai invocare gli script con il loro percorso completo, es.
+`~/git-activity-reports/git_stats_collector.sh ...` (oppure `cd ~/git-activity-reports` e usare `./`,
+ma solo se stai analizzando quella stessa cartella).
+
+### 4. (Opzionale) Comandi ancora più brevi: `gitstats` / `gitstats-multi`
+
+Un ulteriore passo, descritto in [🚀 Comandi Semplificati](#-comandi-semplificati-gitstats--gitstats-multi)
+più sotto, installa `gitstats`/`gitstats-multi`: un solo comando al posto della pipe collector + plot
+(`gitstats 2025-11-01 2025-11-30` invece di `git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py`).
+Sono i comandi usati negli esempi della Guida Rapida qui sotto.
+
+---
+
+## 🚀 Guida Rapida
+
+### Quale comando uso?
+
+| Voglio... | Comando |
+| --- | --- |
+| Il dettaglio **giorno per giorno** di UN repository, su poche settimane/un mese (sono già dentro la sua cartella) | `git_stats_collector.sh` |
+| Il **totale aggregato** di uno o più repository su un periodo lungo (mesi/trimestri) | `git_multiproject_stats_collector.sh` |
+| **Confrontare più repository** tra loro (portfolio, team, microservizi) | `git_multiproject_stats_collector.sh` |
+| Analizzare un repository che **non ho ancora clonato in locale** (solo l'URL) | entrambi accettano un URL Git — vedi [Repository Remoti](#-repository-remoti-analizzare-un-url-git) |
+
+> Il grafico giornaliero di `git_stats_collector.sh` perde leggibilità su periodi lunghi (una barra per
+> giorno) — dettagli e alternative nella sezione [Versione Singolo Repository](#-versione-singolo-repository).
+
+### I comandi che userai più spesso
+
+I comandi qui sotto (`gitstats`, `gitstats-multi`) sono i wrapper installati con il passo 4 di
+[📦 Installazione](#-installazione) — se non li hai ancora installati, o hai fatto solo il passo 3
+(script nel `PATH`), usa la variante "senza wrapper" più sotto.
+
+**Con `gitstats`/`gitstats-multi` installati:**
+
+```bash
+# 1. Report giornaliero di un repository (eseguito dentro la sua cartella), con grafico
+cd ~/progetti/backend
+gitstats 2025-11-01 2025-11-30
+# -> genera git_stats.png
+
+# 2. Stesso report, filtrato per un autore
+gitstats 2025-11-01 2025-11-30 "Mario Rossi"
+
+# 3. Confronto tra più repository (locali e/o remoti), con grafico
+gitstats-multi 2025-11-01 2025-11-30 ~/progetti/repoA ~/progetti/repoB
+# -> genera git_impact_multi_project_report.png
+
+# 4. Stesso confronto, leggendo l'elenco progetti da file invece che da riga di comando
+gitstats-multi --file project_list.txt 2025-11-01 2025-11-30
+```
+
+**Senza wrapper** (solo script nel `PATH`, passo 3 di Installazione — fa la stessa cosa "a mano",
+utile anche per il formato `text` o per salvare il JSON intermedio, non esposti dai wrapper):
+
+```bash
+cd ~/progetti/backend
+git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py
+git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/progetti/repoA ~/progetti/repoB \
+  | python3 plot_multiproject.py
+```
+
+### Parametri in breve
+
+| | `git_stats_collector.sh` | `git_multiproject_stats_collector.sh` |
+| --- | --- | --- |
+| Sintassi | `[opzioni] <INIZIO> <FINE> [formato] [autore]` | `[opzioni] <INIZIO> <FINE> [percorsi...]` |
+| Dove va eseguito | Dentro la cartella del repo (oppure con `--repo`) | Da qualsiasi cartella |
+| `INIZIO` / `FINE` | `YYYY-MM-DD`, obbligatorie | `YYYY-MM-DD`, obbligatorie (anche via `--start`/`--end`) |
+| 3° argomento posizionale | `text` (default) o `json` | — (percorso/URL repository) |
+| 4° argomento posizionale | nome autore (opzionale, filtra) | — |
+| Elenco repository | non applicabile (un solo repo per esecuzione) | percorsi/URL in coda al comando, oppure `--file lista.txt` |
+| Aggiornamento da remoto | solo con `--fetch` | solo con `--fetch` |
+| Repository via URL | `--repo <url>` | passa l'URL come percorso (posizionale o riga di `--file`) |
+| Formato output | `text` o `json` su stdout | sempre `json` su stdout |
+| Grafico (in pipe) | `python3 plot_git.py` → 1 grafico | `python3 plot_multiproject.py` → 3 grafici |
+
+Dettagli completi di ogni opzione più sotto: [Versione Singolo Repository](#-versione-singolo-repository), [Versione Multi-Repository](#-versione-multi-repository).
+
+---
+
+## Componenti
+
+### Versione Singolo Repository
+
+- **`git_stats_collector.sh`** - Analizza un repository alla volta con dettaglio giornaliero
+- **`plot_git.py`** - Genera grafico stacked bar per singolo progetto. Supporta anche il raggruppamento degli autori tramite un file opzionale `git-activity-aliases.json`.
+
+### Versione Multi-Repository
+
+- **`git_multiproject_stats_collector.sh`** - Analizza più repository contemporaneamente
+- **`plot_multiproject.py`** - Genera 3 grafici comparativi tra progetti. Supporta anche il raggruppamento degli autori tramite un file opzionale `git-activity-aliases.json`.
+
 ---
 
 ## 📊 Versione Singolo Repository
@@ -53,6 +178,16 @@ Analizza un singolo repository Git con dettaglio **giornaliero**, ideale per:
 - Report personali di attività
 - Analisi sprint su un progetto specifico
 - Monitoraggio giornaliero del team su un repository
+
+**⚠️ Limite del grafico su intervalli lunghi:** `plot_git.py` disegna una barra per ogni giorno del
+periodo. Su un intervallo di poche settimane il grafico è leggibile; su diversi mesi (es. un semestre)
+le barre diventano troppo strette/numerose e il grafico perde di leggibilità. Per periodi lunghi:
+
+- restringi l'intervallo a poche settimane/un mese per volta, oppure
+- usa `git_multiproject_stats_collector.sh` (aggregato, non giornaliero — vedi sezione dedicata più sotto)
+  se ti interessa solo il totale del periodo e non il dettaglio giorno per giorno, oppure
+- dividi il periodo lungo in più chiamate (una per settimana/mese) e genera un grafico per ciascuna,
+  come nell'esempio ["Analisi Mensile Multi-Livello"](#analisi-mensile-multi-livello).
 
 ### Sintassi
 
@@ -1068,28 +1203,10 @@ Questa metrica fornisce un'indicazione dell'impatto relativo del lavoro, conside
 
 ---
 
-## 📚 Quick Reference
+## 📚 Shortcuts Utili
 
-### Comandi Più Comuni
-
-```bash
-# Report testuale veloce (ultimo mese)
-cd ~/progetto && ./git_stats_collector.sh 2025-11-01 2025-11-30
-
-# Grafico singolo repo
-cd ~/progetto && ./git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py
-
-# Grafico multi-repo
-./git_multiproject_stats_collector.sh --file repos.txt 2025-11-01 2025-11-30 | python3 plot_multiproject.py
-
-# Report autore specifico
-cd ~/progetto && ./git_stats_collector.sh 2025-11-01 2025-11-30 text "Nome Cognome"
-
-# Salva dati per dopo
-cd ~/progetto && ./git_stats_collector.sh 2025-11-01 2025-11-30 json > backup.json
-```
-
-### Shortcuts Utili
+> I comandi più comuni sono già in cima al documento nella [🚀 Guida Rapida](#-guida-rapida). Qui trovi
+> solo alias/funzioni bash opzionali per velocizzare l'uso quotidiano.
 
 ```bash
 # Alias nel .bashrc
@@ -1152,195 +1269,50 @@ No, sono **read-only**. Eseguono solo `git log`, non modificano nulla.
 
 ---
 
-## 🚀 Comandi Semplificati
+## 🚀 Comandi Semplificati (gitstats / gitstats-multi)
 
-Per semplificare ulteriormente l'uso degli strumenti, puoi installare gli script autonomi che nascondono i percorsi complessi.
+`gitstats` e `gitstats-multi` sono i comandi pensati per l'uso quotidiano — quelli suggeriti nella
+[Guida Rapida](#-guida-rapida) in cima a questo documento. Sono wrapper già pronti nel repository
+(`gitstat.sh` e `gitstat-multi.sh`) che fanno da soli la pipe collector → plot, così non devi ricordare
+la sintassi completa dei due script principali né il simbolo `|`:
+
+- `gitstats <INIZIO> <FINE> [autore]` → equivale a `git_stats_collector.sh ... json | plot_git.py`
+- `gitstats-multi <INIZIO> <FINE> [opzioni] [percorsi...]` → equivale a `git_multiproject_stats_collector.sh ... | plot_multiproject.py`
+
+Entrambi supportano `--fetch`; `gitstats` supporta anche `--repo <path|url>` e `gitstats-multi` accetta
+URL Git direttamente come percorso (stesse opzioni dei rispettivi script principali — vedi
+[Versione Singolo Repository](#-versione-singolo-repository) e [Versione Multi-Repository](#-versione-multi-repository)
+per l'elenco completo).
 
 ### Installazione
 
-Dopo aver copiato o linkato gli script principali in `/usr/local/bin`, puoi creare questi comandi semplificati:
+Se hai installato il **pacchetto Debian** (vedi la sezione Release del repository), `gitstats` e
+`gitstats-multi` sono già disponibili: salta questa sezione.
+
+Altrimenti, dalla cartella dove hai clonato questo repository:
 
 ```bash
-# Script per singolo repository
-sudo tee /usr/local/bin/gitstats > /dev/null << 'EOF'
-#!/bin/bash
+sudo ln -sf "$(pwd)/git_stats_collector.sh" /usr/local/bin/git_stats_collector.sh
+sudo ln -sf "$(pwd)/git_multiproject_stats_collector.sh" /usr/local/bin/git_multiproject_stats_collector.sh
+sudo ln -sf "$(pwd)/plot_git.py" /usr/local/bin/plot_git.py
+sudo ln -sf "$(pwd)/plot_multiproject.py" /usr/local/bin/plot_multiproject.py
+sudo ln -sf "$(pwd)/gitstat.sh" /usr/local/bin/gitstats
+sudo ln -sf "$(pwd)/gitstat-multi.sh" /usr/local/bin/gitstats-multi
 
-# ===============================================
-# GIT STATS - Singolo Repository
-# ===============================================
-#
-# DESCRIZIONE:
-#   Comando semplificato per analizzare e visualizzare statistiche Git
-#   di un singolo repository con dettaglio giornaliero.
-#
-# UTILIZZO:
-#   gitstats <DATA_INIZIO> <DATA_FINE> [autore]
-#
-# PARAMETRI:
-#   DATA_INIZIO    Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
-#   DATA_FINE      Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
-#   autore         Filtra per autore specifico (opzionale)
-#
-# ESEMPI:
-#   # Report per tutti gli autori
-#   gitstats 2025-12-01 2025-12-31
-#
-#   # Report per autore specifico
-#   gitstats 2025-12-01 2025-12-31 "Mario Rossi"
-#
-# REQUISITI:
-#   - git_stats_collector.sh e plot_git.py devono essere disponibili globalmente
-#   - Python3 con pandas e matplotlib installati
-#   - Essere in una cartella di repository Git
-#
-# AUTORE: Michele Innocenti
-# VERSIONE: 1.0
-# DATA: Gennaio 2026
-# ===============================================
-
-if [[ $# -lt 2 ]]; then
-    echo "Uso: $0 <DATA_INIZIO> <DATA_FINE> [autore]"
-    echo "Esempio: $0 2025-12-01 2025-12-31"
-    echo "Esempio con autore: $0 2025-12-01 2025-12-31 'Mario Rossi'"
-    exit 1
-fi
-
-START_DATE="$1"
-END_DATE="$2"
-AUTHOR_FILTER="${3:-}"
-
-# Verifica che siamo in un repository git
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "Errore: Non sei in un repository Git"
-    exit 1
-fi
-
-# Verifica che gli strumenti siano disponibili
-if ! command -v git_stats_collector.sh >/dev/null 2>&1; then
-    echo "Errore: git_stats_collector.sh non trovato globalmente"
-    exit 1
-fi
-
-if ! command -v plot_git.py >/dev/null 2>&1; then
-    echo "Errore: plot_git.py non trovato globalmente"
-    exit 1
-fi
-
-# Esegui il comando con o senza filtro autore
-if [[ -n "$AUTHOR_FILTER" ]]; then
-    git_stats_collector.sh "$START_DATE" "$END_DATE" json "$AUTHOR_FILTER" | python3 plot_git.py
-else
-    git_stats_collector.sh "$START_DATE" "$END_DATE" json | python3 plot_git.py
-fi
-EOF
-
-sudo chmod +x /usr/local/bin/gitstats
+chmod +x git_stats_collector.sh git_multiproject_stats_collector.sh plot_git.py plot_multiproject.py gitstat.sh gitstat-multi.sh
 ```
 
-E per il multi-repository:
-
-```bash
-# Script per multi repository
-sudo tee /usr/local/bin/gitstats-multi > /dev/null << 'EOF'
-#!/bin/bash
-
-# ===============================================
-# GIT STATS MULTI - Multi Repository
-# ===============================================
-#
-# DESCRIZIONE:
-#   Comando semplificato per analizzare e visualizzare statistiche Git
-#   di più repository contemporaneamente.
-#
-# UTILIZZO:
-#   gitstats-multi <DATA_INIZIO> <DATA_FINE> [percorso1] [percorso2] ...
-#
-# PARAMETRI:
-#   DATA_INIZIO    Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
-#   DATA_FINE      Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
-#   percorsoN      Percorsi ai repository Git (opzionali, default: corrente)
-#
-# ESEMPI:
-#   # Analizza repository corrente
-#   gitstats-multi 2025-12-01 2025-12-31
-#
-#   # Analizza repository specifici
-#   gitstats-multi 2025-12-01 2025-12-31 ~/progetti/repo1 ~/progetti/repo2
-#
-#   # Con file di configurazione
-#   gitstats-multi --file progetti.txt 2025-12-01 2025-12-31
-#
-# REQUISITI:
-#   - git_multiproject_stats_collector.sh e plot_multiproject.py devono essere disponibili globalmente
-#   - Python3 con pandas e matplotlib installati
-#
-# NOTE:
-#   - I merge commits sono esclusi dalle statistiche
-#   - File non rilevanti come node_modules, dist, vendor, lock files e file generati sono esclusi dalle statistiche
-#   - Le righe totali sono calcolate come: aggiunte + eliminate
-#   - Il file di configurazione per gli alias può essere posizionato in diverse posizioni:
-#     1. Nella directory corrente (`./git-activity-aliases.json`)
-#     2. Nella directory di configurazione XDG specifica per l'applicazione (`~/.config/git-activity-reports/git-activity-aliases.json`)
-#     3. Nella directory di configurazione XDG generica (`~/.config/git-activity-git-activity-aliases.json`)
-#     4. Nella directory di sistema (`/etc/git-activity-reports/git-activity-aliases.json`)
-#
-# AUTORE: Michele Innocenti
-# VERSIONE: 1.0
-# DATA: Gennaio 2026
-# ===============================================
-
-if [[ $# -lt 2 ]]; then
-    echo "Uso: $0 <DATA_INIZIO> <DATA_FINE> [opzioni] [percorsi...]"
-    echo "Esempio: $0 2025-12-01 2025-12-31"
-    echo "Esempio con repository specifici: $0 2025-12-01 2025-12-31 ~/repo1 ~/repo2"
-    echo "Esempio con file: $0 --file repos.txt 2025-12-01 2025-12-31"
-    exit 1
-fi
-
-# Verifica che gli strumenti siano disponibili
-if ! command -v git_multiproject_stats_collector.sh >/dev/null 2>&1; then
-    echo "Errore: git_multiproject_stats_collector.sh non trovato globalmente"
-    exit 1
-fi
-
-if ! command -v plot_multiproject.py >/dev/null 2>&1; then
-    echo "Errore: plot_multiproject.py non trovato globalmente"
-    exit 1
-fi
-
-# Esegui il comando
-git_multiproject_stats_collector.sh "$@" | python3 plot_multiproject.py
-EOF
-
-sudo chmod +x /usr/local/bin/gitstats-multi
-```
+(i link puntano ai file del repository: aggiornare il repository — `git pull` — aggiorna anche i comandi installati, senza bisogno di reinstallare nulla)
 
 ### Utilizzo
 
-Dopo l'installazione, puoi usare i comandi semplificati:
-
-#### Singolo Repository
-
 ```bash
-# Nella cartella di un repository Git
+# Singolo repository, nella sua cartella
 gitstats 2025-12-01 2025-12-31
-```
+gitstats 2025-12-01 2025-12-31 "Mario Rossi"          # filtro autore
+gitstats --repo https://github.com/org/repo.git 2025-12-01 2025-12-31  # repository remoto
 
-```bash
-# Con filtro autore
-gitstats 2025-12-01 2025-12-31 "Mario Rossi"
-```
-
-#### Multi-Repository
-
-```bash
-# Da qualsiasi posizione
+# Multi-repository, da qualsiasi posizione
 gitstats-multi 2025-12-01 2025-12-31 ~/repo1 ~/repo2
-```
-
-```bash
-# Con file di configurazione
 gitstats-multi --file repos.txt 2025-12-01 2025-12-31
 ```
-
-Questi comandi nascondono la complessità dei percorsi relativi e forniscono un'interfaccia pulita per l'uso quotidiano degli strumenti di analisi Git.
