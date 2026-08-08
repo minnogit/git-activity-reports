@@ -314,10 +314,18 @@ resolve_repo_path() {
 
 find_aliases_file() {
     local xdg="${XDG_CONFIG_HOME:-$HOME/.config}"
+    # Cartella dello script stesso (risolvendo eventuali symlink): il file alias spesso
+    # vive accanto agli script nel repo clonato, mentre "." è la cartella da cui si lancia
+    # l'analisi. Senza questo fallback un file messo accanto agli script non verrebbe
+    # mai trovato.
+    local self script_dir
+    self=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
+    script_dir=$(dirname "$self")
     local candidates=(
         "./git-activity-aliases.json"
         "$xdg/git-activity-reports/git-activity-aliases.json"
         "$xdg/git-activity-git-activity-aliases.json"
+        "$script_dir/git-activity-aliases.json"
         "/etc/git-activity-reports/git-activity-aliases.json"
     )
     local c

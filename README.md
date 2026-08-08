@@ -227,7 +227,10 @@ Il file di configurazione può essere posizionato in diverse posizioni e verrà 
 1. Nella directory corrente (`./git-activity-aliases.json`)
 2. Nella directory di configurazione XDG specifica per l'applicazione (`~/.config/git-activity-reports/git-activity-aliases.json`)
 3. Nella directory di configurazione XDG generica (`~/.config/git-activity-git-activity-aliases.json`)
-4. Nella directory di sistema (`/etc/git-activity-reports/git-activity-aliases.json`)
+4. **Accanto agli script** (`<cartella-degli-script>/git-activity-aliases.json`) — utile perché il
+   collector si esegue *dentro il repository da analizzare*, dove `.` è un'altra cartella: un file
+   messo accanto agli script vale così per tutti i repository
+5. Nella directory di sistema (`/etc/git-activity-reports/git-activity-aliases.json`)
 
 Se nessun file di configurazione esiste, lo script continuerà a funzionare normalmente senza raggruppare gli autori.
 
@@ -761,7 +764,10 @@ Il file di configurazione può essere posizionato in diverse posizioni e verrà 
 1. Nella directory corrente (`./git-activity-aliases.json`)
 2. Nella directory di configurazione XDG specifica per l'applicazione (`~/.config/git-activity-reports/git-activity-aliases.json`)
 3. Nella directory di configurazione XDG generica (`~/.config/git-activity-git-activity-aliases.json`)
-4. Nella directory di sistema (`/etc/git-activity-reports/git-activity-aliases.json`)
+4. **Accanto agli script** (`<cartella-degli-script>/git-activity-aliases.json`) — utile perché il
+   collector si esegue *dentro il repository da analizzare*, dove `.` è un'altra cartella: un file
+   messo accanto agli script vale così per tutti i repository
+5. Nella directory di sistema (`/etc/git-activity-reports/git-activity-aliases.json`)
 
 Se nessun file di configurazione esiste, lo script continuerà a funzionare normalmente senza raggruppare gli autori.
 
@@ -927,7 +933,9 @@ Il comando è andato a buon fine se stampa `Grafico generato con successo: ...`.
 era un match per sottostringa (che però causava doppi conteggi tra nomi annidati).
 
 **Soluzione:** lo script elenca da sé gli autori disponibili nel periodo — copia il nome da
-quella lista. Se usi gli alias, funziona sia il nome Git originale sia quello visualizzato.
+quella lista. Se usi gli alias funziona sia il nome Git originale sia quello visualizzato: il nome
+richiesto viene prima risolto attraverso la mappa alias (lo script te lo segnala, es.
+`Autore "Michele Innocenti" risolto in "minnogit" tramite gli alias`).
 
 #### "Non sei in un repository Git"
 

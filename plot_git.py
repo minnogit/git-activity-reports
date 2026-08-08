@@ -91,10 +91,12 @@ def find_aliases_file():
     rielaborare file JSON prodotti da versioni precedenti.
     """
     xdg = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+    script_dir = os.path.dirname(os.path.realpath(__file__))
     for path in (
         "git-activity-aliases.json",
         os.path.join(xdg, "git-activity-reports", "git-activity-aliases.json"),
         os.path.join(xdg, "git-activity-git-activity-aliases.json"),
+        os.path.join(script_dir, "git-activity-aliases.json"),
         "/etc/git-activity-reports/git-activity-aliases.json",
     ):
         if os.path.exists(path):

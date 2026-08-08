@@ -294,10 +294,18 @@ resolve_repo_path() {
 
 find_aliases_file() {
     local xdg="${XDG_CONFIG_HOME:-$HOME/.config}"
+    # Cartella dello script stesso (risolvendo eventuali symlink): il file alias spesso
+    # vive accanto agli script nel repo clonato, ma il collector si esegue DENTRO il repo
+    # da analizzare, dove "." è un'altra cartella. Senza questo fallback un file messo
+    # accanto agli script non verrebbe mai trovato.
+    local self script_dir
+    self=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
+    script_dir=$(dirname "$self")
     local candidates=(
         "./git-activity-aliases.json"
         "$xdg/git-activity-reports/git-activity-aliases.json"
         "$xdg/git-activity-git-activity-aliases.json"
+        "$script_dir/git-activity-aliases.json"
         "/etc/git-activity-reports/git-activity-aliases.json"
     )
     local c
@@ -564,9 +572,20 @@ main() {
 
     collect_daily_tsv "$alias_tsv" > "$raw_tsv"
 
-    # Filtro autore (match ESATTO, non più sottostringa)
+    # Filtro autore (match ESATTO, non più sottostringa).
+    # I dati sono già raggruppati sotto il nome-alias, quindi un filtro espresso col nome
+    # Git originale va prima risolto attraverso la mappa, altrimenti non troverebbe nulla.
     if [[ -n "$CLI_AUTHOR_FILTER" ]]; then
-        awk -F'\t' -v want="$CLI_AUTHOR_FILTER" '$1 == want' "$raw_tsv" > "$use_tsv"
+        local want="$CLI_AUTHOR_FILTER"
+        if [[ -n "$alias_tsv" ]]; then
+            local mapped
+            mapped=$(awk -F'\t' -v w="$want" '$1 == w { print $2; exit }' "$alias_tsv")
+            if [[ -n "$mapped" && "$mapped" != "$want" ]]; then
+                echo "Autore \"$want\" risolto in \"$mapped\" tramite gli alias." >&2
+                want="$mapped"
+            fi
+        fi
+        awk -F'\t' -v want="$want" '$1 == want' "$raw_tsv" > "$use_tsv"
         if [[ ! -s "$use_tsv" ]]; then
             echo "Avviso: nessun dato per l'autore \"$CLI_AUTHOR_FILTER\" (il match è esatto)." >&2
             echo "Autori disponibili nel periodo:" >&2

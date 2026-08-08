@@ -149,7 +149,10 @@ vince, nessun merge tra livelli):
 1. `./git-activity-aliases.json` (working directory corrente)
 2. `$XDG_CONFIG_HOME/git-activity-reports/git-activity-aliases.json` (default `~/.config/...`)
 3. `$XDG_CONFIG_HOME/git-activity-git-activity-aliases.json` (percorso legacy, mantenuto per compatibilità)
-4. `/etc/git-activity-reports/git-activity-aliases.json`
+4. `<dir dello script>/git-activity-aliases.json` (risolvendo i symlink) — necessario perché il
+   collector singolo si esegue **dentro il repo da analizzare**, dove `.` non è la cartella del tool:
+   senza questo fallback un file alias messo accanto agli script non veniva mai trovato
+5. `/etc/git-activity-reports/git-activity-aliases.json`
 
 **Gli alias vanno applicati nel collector, sui dati grezzi, prima di ogni aggregazione** — non nel
 plotter. Sommare metriche calcolate separatamente per ogni identità non equivale a calcolarle sui dati
