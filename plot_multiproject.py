@@ -514,10 +514,11 @@ def main():
 
     safe_start = str(start).replace(" ", "_").replace("/", "-")
     safe_end = str(end).replace(" ", "_").replace("/", "-")
-    output_filename = f"git_impact_multi_project_report_{safe_start}_{safe_end}.png"
+    output_filename = f"git_activity_multi_project_report_{safe_start}_{safe_end}.png"
     fig.savefig(output_filename, dpi=110)
-    # Messaggio invariato: l'estensione VS Code lo intercetta via regex.
-    print(f"\nReport multi-progetto (Impact Score) generato con successo: {output_filename}")
+    # La forma "Report multi-progetto ... generato con successo: <file>" va mantenuta:
+    # l'estensione VS Code la intercetta via regex (il testo fra i due estremi è libero).
+    print(f"\nReport multi-progetto (indice di attività) generato con successo: {output_filename}")
 
 
 if __name__ == "__main__":

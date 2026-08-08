@@ -134,7 +134,7 @@ gitstats 2025-11-01 2025-11-30 "Mario Rossi"
 
 # 3. Confronto tra più repository (locali e/o remoti), con grafico
 gitstats-multi 2025-11-01 2025-11-30 ~/progetti/repoA ~/progetti/repoB
-# -> genera git_impact_multi_project_report.png
+# -> genera git_activity_multi_project_report_<inizio>_<fine>.png (es. ..._2025-11-01_2025-11-30.png)
 
 # 4. Stesso confronto, leggendo l'elenco progetti da file invece che da riga di comando
 gitstats-multi --file project_list.txt 2025-11-01 2025-11-30
@@ -481,7 +481,7 @@ locale — vedi [Repository Remoti](#-repository-remoti-analizzare-un-url-git).
 ./git_multiproject_stats_collector.sh --fetch 2025-11-01 2025-11-30 ~/repo1 ~/repo2
 ```
 
-**Output:** File `git_impact_multi_project_report_<inizio>_<fine>.png` con 4 pannelli.
+**Output:** File `git_activity_multi_project_report_<inizio>_<fine>.png` con 4 pannelli.
 
 ---
 
@@ -572,12 +572,12 @@ done
 # Q3: Multi-repo
 ./git_multiproject_stats_collector.sh --file all-repos.txt 2025-07-01 2025-09-30 \
   | python3 plot_multiproject.py
-mv git_impact_multi_project_report.png q3_portfolio.png
+mv git_activity_multi_project_report_*.png q3_portfolio.png
 
 # Q4: Multi-repo
 ./git_multiproject_stats_collector.sh --file all-repos.txt 2025-10-01 2025-12-31 \
   | python3 plot_multiproject.py
-mv git_impact_multi_project_report.png q4_portfolio.png
+mv git_activity_multi_project_report_*.png q4_portfolio.png
 
 # Dettaglio Q4 su progetto strategico
 cd ~/progetti/strategic-project
@@ -804,11 +804,11 @@ python3 plot_multiproject.py < report_novembre.json
 ./git_multiproject_stats_collector.sh 2025-10-01 2025-12-31 ~/repo1 ~/repo2 > q4.json
 
 # Analizza separatamente
-python3 plot_multiproject.py < q3.json  # genera git_multi_project_report.png
-mv git_multi_project_report.png q3_report.png
+python3 plot_multiproject.py < q3.json  # genera git_activity_multi_project_report_*.png
+mv git_activity_multi_project_report_*.png q3_report.png
 
 python3 plot_multiproject.py < q4.json
-mv git_multi_project_report.png q4_report.png
+mv git_activity_multi_project_report_*.png q4_report.png
 ```
 
 ---
@@ -1085,7 +1085,7 @@ git-stats-tools/
 **Report mensile multi-repo (primo del mese):**
 
 ```cron
-0 8 1 * * /path/to/git_multiproject_stats_collector.sh --file ~/configs/all-repos.txt "$(date -d 'last month' +\%Y-\%m-01)" "$(date -d 'yesterday' +\%Y-\%m-\%d)" | python3 /path/to/plot_multiproject.py && mv git_multi_project_report.png ~/reports/month_$(date -d 'last month' +\%Y-\%m).png
+0 8 1 * * /path/to/git_multiproject_stats_collector.sh --file ~/configs/all-repos.txt "$(date -d 'last month' +\%Y-\%m-01)" "$(date -d 'yesterday' +\%Y-\%m-\%d)" | python3 /path/to/plot_multiproject.py && mv git_activity_multi_project_report_*.png ~/reports/month_$(date -d 'last month' +\%Y-\%m).png
 ```
 
 ### Analisi Avanzate con jq
