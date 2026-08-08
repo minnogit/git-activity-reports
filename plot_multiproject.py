@@ -375,8 +375,18 @@ def panel_donut(ax, df):
         _share_bar(ax, totals, colors)
         return
 
+    total = totals.sum()
+    # Percentuale scritta dentro la fetta solo se c'è spazio per leggerla: sotto questa
+    # soglia il testo di più fette minuscole finisce per sovrapporsi (visto con progetti
+    # di dimensione molto disomogenea: una fetta al 40% accanto a una allo 0,01%).
+    # Non è clipping silenzioso — il valore resta comunque nella tabella di riepilogo.
+    MIN_SHARE_FOR_LABEL = 4.0
+
+    def autopct(pct):
+        return f"{pct:.0f}%" if pct >= MIN_SHARE_FOR_LABEL else ""
+
     wedges, _texts, autotexts = ax.pie(
-        totals.to_numpy(), labels=totals.index, autopct="%1.0f%%", startangle=90,
+        totals.to_numpy(), labels=None, autopct=autopct, startangle=90,
         counterclock=False, colors=colors,
         wedgeprops=dict(width=0.42, edgecolor=SURFACE, linewidth=1.2),
         pctdistance=0.78,
@@ -387,6 +397,14 @@ def panel_donut(ax, df):
         # il colore: scegliamo bianco per restare leggibile sui blu scuri.
         t.set_color("white")
         t.set_fontsize(9)
+
+    # I nomi vanno in legenda, non accanto alla fetta: con fette di dimensione molto
+    # disomogenea l'etichettatura diretta di matplotlib le sovrapponeva. Percentuale
+    # sempre in legenda, anche per le fette troppo piccole per portarla scritta sopra.
+    legend_labels = [f"{name}  ({v/total*100:.1f}%)" for name, v in totals.items()]
+    ax.legend(wedges, legend_labels, loc="center left", bbox_to_anchor=(1.02, 0.5),
+              fontsize=9, labelcolor=INK_SECONDARY, frameon=False)
+
     ax.set_title("Distribuzione del churn per progetto", fontsize=12,
                  color=INK_PRIMARY, loc="left", pad=10)
     ax.axis("equal")
