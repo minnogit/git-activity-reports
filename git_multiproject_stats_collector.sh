@@ -6,13 +6,13 @@
 #
 # DESCRIZIONE:
 #   Analizza l'attività Git su multipli repository contemporaneamente.
-#   Genera statistiche aggregate per progetto e autore nel periodo specificato.
+#   Genera statistiche per progetto e autore, con dettaglio giornaliero.
 #
 # UTILIZZO:
 #   ./git_multiproject_stats_collector.sh [OPZIONI] <DATA_INIZIO> <DATA_FINE> [percorsi...]
 #
 # OPZIONI:
-#   --file <file>    Legge i percorsi dei repository da file (uno per riga)
+#   --file <file>    Legge i percorsi/URL dei repository da file (uno per riga)
 #   --start <data>   Data di inizio periodo (alternativa a posizionale)
 #   --end <data>     Data di fine periodo (alternativa a posizionale)
 #   --fetch          Abilita l'aggiornamento dei repository con git fetch
@@ -22,6 +22,18 @@
 #   DATA_INIZIO      Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
 #   DATA_FINE        Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
 #   percorsi...      Percorsi locali o URL Git (opzionale se si usa --file)
+#
+# METODO DI RACCOLTA:
+#   - Un SOLO `git log` per repository (non uno per autore): il raggruppamento per
+#     autore e giorno avviene in awk. Evita anche il doppio conteggio che
+#     `--author=<nome>` causava quando un nome era sottostringa di un altro
+#     (es. "Luca" catturava anche "Luca Bianchi").
+#   - I giorni sono assegnati per AUTHOR-DATE, non per committer-date: un rebase o un
+#     cherry-pick non sposta più il lavoro nel periodo sbagliato.
+#   - `files` conta i file DISTINTI toccati, non le righe di --numstat.
+#   - Gli alias autore sono applicati QUI, prima di ogni aggregazione.
+#   - L'output include `daily_data`: senza granularità giornaliera il tetto anti-outlier
+#     applicato dal plotter saturava su periodi lunghi, appiattendo tutti gli autori.
 #
 # REPOSITORY REMOTI:
 #   Ogni "percorso" (posizionale o riga del file --file) può essere un path locale oppure un URL
@@ -35,93 +47,53 @@
 #   ${XDG_CONFIG_HOME:-~/.config}/git-activity-reports/git-activity-repos-map.json, formato:
 #     { "https://github.com/org/repo.git": "nome-cartella-dedicato" }
 #
-# ESEMPI:
-#   # Analisi di repository specifici
-#   ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/repo1 ~/repo2
-#
-#   # Repository da file di configurazione
-#   ./git_multiproject_stats_collector.sh --file progetti.txt 2025-11-01 2025-11-30
-#
-#   # Con opzioni per le date
-#   ./git_multiproject_stats_collector.sh --start 2025-11-01 --end 2025-11-30 ~/repo1
-#
-#   # Pipeline completa con visualizzazione
-#   ./git_multiproject_stats_collector.sh --file repos.txt 2025-11-01 2025-11-30 \
-#     | python3 plot_multiproject.py
-#
 # FORMATO FILE PERCORSI:
 #   Il file specificato con --file deve contenere un percorso o un URL Git per riga:
 #
 #     # Commenti sono ignorati
 #     ~/progetti/backend
-#     ~/progetti/frontend
 #     /var/www/api-service
 #     https://github.com/org/repo-remoto.git
 #     git@github.com:org/altro-repo.git
 #     # Percorsi con spazi sono supportati
 #     /home/user/My Projects/mobile-app
 #
-#   Note sul file:
-#   - Un percorso (o URL) per riga
-#   - Supporta tilde (~) per home directory
-#   - Linee vuote e commenti (#) sono ignorati
-#   - Percorsi con spazi sono supportati
-#
 # OUTPUT JSON:
-#   [
-#     {
-#       "project": "backend",
-#       "author": "Mario Rossi",
-#       "lines": 3450,
-#       "commits": 24
-#     },
-#     {
-#       "project": "backend",
-#       "author": "Laura Bianchi",
-#       "lines": 2890,
-#       "commits": 18
-#     }
-#   ]
+#   {
+#     "metadata": { "start_date": "...", "end_date": "...", "date_basis": "author" },
+#     "data": [
+#       {
+#         "project": "backend",
+#         "author": "Mario Rossi",
+#         "commits": 24,
+#         "added": 3000, "deleted": 450, "lines": 3450,
+#         "files": 37,             // file DISTINTI toccati nel periodo
+#         "active_days": 12,       // giorni distinti con almeno 1 commit
+#         "daily_data": [
+#           { "date": "2025-11-04", "commits": 3, "added": 280, "deleted": 170, "files": 6 }
+#         ]
+#       }
+#     ]
+#   }
+#
+#   I campi top-level (project, author, lines, commits, added, files) sono mantenuti per
+#   retrocompatibilità; `deleted`, `active_days` e `daily_data` sono nuovi.
 #
 # NOTE:
 #   - Lo script può essere eseguito da qualsiasi directory
 #   - Ogni percorso deve puntare a un repository Git valido (.git presente), oppure essere un URL Git
-#     (clonato/riusato sotto $GIT_ACTIVITY_REPOS_DIR, default ~/repos)
 #   - Repository locali non validi vengono saltati con warning; errori di risoluzione URL (es.
 #     collisione di nome cartella) interrompono l'intera esecuzione
 #   - I merge commits sono esclusi dalle statistiche
-#   - Le righe totali sono calcolate come: aggiunte + eliminate
+#   - `lines` = aggiunte + eliminate (indicatore di volume, non di valore)
 #   - Il nome del progetto è estratto dal nome della cartella
-#   - L'output è sempre in formato JSON (per uso con plot_multiproject.py)
-#   - Di default, i repository non vengono aggiornati con git fetch (usa --fetch per abilitare)
-#   - In caso di problemi di rete, vengono analizzati solo i commit locali
-#
-# CASI D'USO:
-#   - Confronto attività tra progetti diversi
-#   - Report di team distribuiti su più repository
-#   - Analisi portfolio completo di progetti
-#   - Sprint review multi-progetto
-#   - Identificazione di sbilanciamenti nel carico di lavoro
 #
 # REQUISITI:
-#   - Bash 4.0+
-#   - Git installato e configurato
-#   - Accesso in lettura ai repository da analizzare
-#   - GNU coreutils (comando date con opzione -d)
-#
-# PERFORMANCE:
-#   - Repository grandi (>10K commits) richiedono più tempo
-#   - Consigliato: max 10-15 repository per esecuzione
-#   - Per analisi massive, considerare esecuzioni parallele
-#
-# TROUBLESHOOTING:
-#   - Se un percorso viene saltato, verifica la presenza di .git
-#   - Per percorsi con spazi, usa il formato --file
-#   - JSON malformato: verifica nomi autori con caratteri speciali
+#   - Bash 4.0+, Git, GNU coreutils (date -d), python3
 #
 # AUTORE: Michele Innocenti
-# VERSIONE: 2.0
-# DATA: Dicembre 2025
+# VERSIONE: 3.0
+# DATA: Agosto 2026
 # ===============================================
 
 # Parsing delle opzioni
@@ -158,7 +130,7 @@ UTILIZZO:
   ./git_multiproject_stats_collector.sh [OPZIONI] <DATA_INIZIO> <DATA_FINE> [percorsi...]
 
 OPZIONI:
-  --file <file>    Legge i percorsi dei repository da file (uno per riga)
+  --file <file>    Legge i percorsi/URL dei repository da file (uno per riga)
   --start <data>   Data di inizio periodo (alternativa a posizionale)
   --end <data>     Data di fine periodo (alternativa a posizionale)
   --fetch          Abilita l'aggiornamento dei repository con git fetch
@@ -167,7 +139,7 @@ OPZIONI:
 PARAMETRI POSIZIONALI:
   DATA_INIZIO      Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
   DATA_FINE        Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
-  percorsi...      Percorsi ai repository Git (opzionale se si usa --file)
+  percorsi...      Percorsi locali o URL Git (opzionale se si usa --file)
 
 ESEMPI:
   # Analisi di repository specifici
@@ -184,6 +156,11 @@ ESEMPI:
 
   # Repository remoto (clonato/aggiornato sotto ~/repos, override con GIT_ACTIVITY_REPOS_DIR)
   ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 https://github.com/org/repo.git ~/repo2
+
+NOTE:
+  - I giorni sono attribuiti per author-date (rebase-safe), non per committer-date
+  - `files` conta i file distinti toccati, non le modifiche per file
+  - Gli alias autore sono applicati prima dell'aggregazione
 EOF
             exit 0
             ;;
@@ -230,15 +207,6 @@ if ! [[ "$START_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || \
     echo "Errore: Date devono essere in formato YYYY-MM-DD" >&2
     exit 1
 fi
-
-# Inizializzazione della variabile JSON
-FULL_JSON="{\n"
-FULL_JSON+="  \"metadata\": {\n"
-FULL_JSON+="    \"start_date\": \"$START_DATE\",\n"
-FULL_JSON+="    \"end_date\": \"$END_DATE\"\n"
-FULL_JSON+="  },\n"
-FULL_JSON+="  \"data\": [\n"
-FIRST_PROJECT=true
 
 # -----------------------------------------------
 # Risoluzione Repository Remoti (URL -> path locale)
@@ -338,10 +306,77 @@ resolve_repo_path() {
 }
 
 # -----------------------------------------------
-# Funzione per analizzare un singolo progetto
+# Alias autori
 # -----------------------------------------------
+# Stessa logica di ricerca dei plotter (il primo file trovato vince, nessun merge).
+# Applicare gli alias QUI e non nel plotter è essenziale: sommare metriche calcolate
+# separatamente per ogni identità non equivale a calcolarle sui dati uniti.
+
+find_aliases_file() {
+    local xdg="${XDG_CONFIG_HOME:-$HOME/.config}"
+    local candidates=(
+        "./git-activity-aliases.json"
+        "$xdg/git-activity-reports/git-activity-aliases.json"
+        "$xdg/git-activity-git-activity-aliases.json"
+        "/etc/git-activity-reports/git-activity-aliases.json"
+    )
+    local c
+    for c in "${candidates[@]}"; do
+        [[ -f "$c" ]] && { echo "$c"; return 0; }
+    done
+    return 0
+}
+
+# Scrive su stdout righe "nome-git<TAB>nome-visualizzato" leggibili da awk
+dump_aliases_tsv() {
+    local f
+    f=$(find_aliases_file)
+    [[ -z "$f" ]] && return 0
+    python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        data = json.load(fh)
+    if isinstance(data, dict):
+        for k, v in data.items():
+            k = str(k).replace("\t", " ").replace("\n", " ")
+            v = str(v).replace("\t", " ").replace("\n", " ")
+            print(f"{k}\t{v}")
+except Exception:
+    pass
+' "$f"
+    echo "Alias autori caricati da $f" >&2
+}
+
+# -----------------------------------------------
+# Esclusioni (centralizzate: prima erano ripetute in ogni query)
+# -----------------------------------------------
+EXCLUDE_PATHSPEC=(
+    ":(exclude)node_modules/*"
+    ":(exclude)dist/*"
+    ":(exclude)vendor/*"
+    ":(exclude)*.lock"
+    ":(exclude)*.min.js"
+    ":(exclude)bootstrap-italia/*"
+    ":(exclude)bootstrap/*"
+    ":(exclude).*"
+    ":(exclude).*/*"
+    ":(exclude)**/old/*"
+    ":(exclude)**/tmp/*"
+    ":(exclude)**/temp/*"
+    ":(exclude)package-lock.json"
+    ":(exclude)package.json"
+    ":(exclude)prisma/**/internal/*"
+    ":(exclude)prisma/**/client/*"
+    ":(exclude)**/generated/*"
+)
+
+# -----------------------------------------------
+# Analisi di un singolo progetto
+# -----------------------------------------------
+# Emette TSV: progetto \t autore \t data \t commits \t added \t deleted \t files_giorno \t files_periodo
 analyze_project() {
-    local input_path="$1"
+    local input_path="$1" alias_tsv="$2"
     local project_path
     project_path=$(resolve_repo_path "$input_path")
     if [[ $? -ne 0 || -z "$project_path" ]]; then
@@ -349,23 +384,20 @@ analyze_project() {
         # saltare, richiede una correzione di configurazione, quindi interrompiamo tutta l'analisi.
         exit 1
     fi
-    local project_name=$(basename "$project_path")
+    local project_name
+    project_name=$(basename "$project_path")
 
-    # 1. Spostati nella directory
     if [ ! -d "$project_path" ] || [ ! -d "$project_path/.git" ]; then
         echo "Avviso: $input_path non è una cartella valida o un repository Git. Saltato." >&2
         return
     fi
 
-    cd "$project_path" || return
-
     if [[ "$FETCH_ENABLED" == true ]]; then
         echo "Aggiornamento remote per $project_name..." >&2
-        if git fetch --quiet 2>/dev/null; then
+        if git -C "$project_path" fetch --quiet 2>/dev/null; then
             echo "$project_name aggiornato con successo." >&2
         else
             echo "Avviso: Impossibile aggiornare $project_name (problemi di connettività o repository senza remote)." >&2
-            echo "Verranno analizzati solo i commit locali disponibili." >&2
         fi
     else
         echo "Skip aggiornamento per $project_name (usa --fetch per abilitare)." >&2
@@ -373,145 +405,134 @@ analyze_project() {
 
     echo "Analisi di $project_name ($project_path)..." >&2
 
-    # 2. Ottieni tutti gli autori unici nel periodo
-    AUTHORS=$(git log --since="$START_DATE 00:00:00" --until="$END_DATE 23:59:59" --pretty=format:'%an' -- . \
-        ":(exclude)node_modules/*" \
-        ":(exclude)dist/*" \
-        ":(exclude)vendor/*" \
-        ":(exclude)*.lock" \
-        ":(exclude)*.min.js" \
-        ":(exclude)bootstrap-italia/*" \
-        ":(exclude)bootstrap/*" \
-        ":(exclude).*" \
-        ":(exclude).*/*" \
-        ":(exclude)**/old/*" \
-        ":(exclude)**/tmp/*" \
-        ":(exclude)**/temp/*" \
-        ":(exclude)package-lock.json" \
-        ":(exclude)package.json" \
-        ":(exclude)prisma/**/internal/*" \
-        ":(exclude)prisma/**/client/*" \
-        ":(exclude)**/generated/*" | sort | uniq)
-    
-    # 3. Iterazione sugli autori per ottenere le statistiche totali
-    local IFS=$'\n' # Imposta separatore di campo su newline per gestire gli spazi nei nomi
-    for AUTHOR_NAME in $AUTHORS; do
-        if [[ -z "$AUTHOR_NAME" ]]; then continue; fi
-        
-        # Ignoriamo i commit di merge per una metrica più pulita (come discusso)
-        # Usiamo --no-merges per escluderli
-        
-        # a) Ottieni righe aggiunte/eliminate e numero di file toccati
-        local LINE_METRICS=$(git log --no-merges --since="$START_DATE" --until="$END_DATE" --author="$AUTHOR_NAME" --pretty='format:' --numstat -- . \
-            ":(exclude)node_modules/*" \
-            ":(exclude)dist/*" \
-            ":(exclude)vendor/*" \
-            ":(exclude)*.lock" \
-            ":(exclude)*.min.js" \
-            ":(exclude)bootstrap-italia/*" \
-            ":(exclude)bootstrap/*" \
-            ":(exclude).*" \
-            ":(exclude).*/*" \
-            ":(exclude)**/old/*" \
-            ":(exclude)**/tmp/*" \
-            ":(exclude)**/temp/*" \
-            ":(exclude)package-lock.json" \
-            ":(exclude)package.json" \
-            ":(exclude)prisma/**/internal/*" \
-            ":(exclude)prisma/**/client/*" \
-            ":(exclude)**/generated/*" | awk '
-            BEGIN {sum_added=0; sum_deleted=0; files_count=0}
-            {
-                if ($1 ~ /^[0-9]+$/) {
-                    sum_added += $1;
-                    sum_deleted += $2;
-                    files_count++;
+    local since_margin
+    since_margin=$(date -d "$START_DATE -31 days" +%Y-%m-%d 2>/dev/null || echo "$START_DATE")
+
+    git -C "$project_path" log --no-merges --since="$since_margin" \
+        --pretty=format:'%x01%H%x09%an%x09%ad' --date=short --numstat \
+        -- . "${EXCLUDE_PATHSPEC[@]}" 2>/dev/null \
+    | awk -v start="$START_DATE" -v end="$END_DATE" -v aliasfile="$alias_tsv" -v project="$project_name" '
+        BEGIN {
+            FS = "\t"; OFS = "\t"
+            if (aliasfile != "") {
+                while ((getline line < aliasfile) > 0) {
+                    n = split(line, p, "\t")
+                    if (n >= 2 && p[1] != "") alias[p[1]] = p[2]
                 }
+                close(aliasfile)
             }
-            END {
-                # Restituiamo added, deleted e files_count separati da :
-                print sum_added ":" sum_deleted ":" files_count
-            }')
-            
-        local ADDED=$(echo $LINE_METRICS | cut -d ':' -f 1)
-        local DELETED=$(echo $LINE_METRICS | cut -d ':' -f 2)
-        local FILES_COUNT=$(echo $LINE_METRICS | cut -d ':' -f 3)
-
-        # Gestione valori vuoti e calcolo righe totali per retrocompatibilità
-        ADDED=${ADDED:-0}
-        DELETED=${DELETED:-0}
-        FILES_COUNT=${FILES_COUNT:-0}
-        local TOTAL_LINES=$((ADDED + DELETED))
-        
-        if [[ "$TOTAL_LINES" -eq 0 ]]; then continue; fi
-
-        # b) Ottieni il numero totale di commit
-        local TOTAL_COMMITS=$(git log --no-merges --since="$START_DATE" --until="$END_DATE" --author="$AUTHOR_NAME" --oneline -- . \
-            ":(exclude)node_modules/*" \
-            ":(exclude)dist/*" \
-            ":(exclude)vendor/*" \
-            ":(exclude)*.lock" \
-            ":(exclude)*.min.js" \
-            ":(exclude)bootstrap-italia/*" \
-            ":(exclude)bootstrap/*" \
-            ":(exclude).*" \
-            ":(exclude).*/*" \
-            ":(exclude)**/old/*" \
-            ":(exclude)**/tmp/*" \
-            ":(exclude)**/temp/*" \
-            ":(exclude)package-lock.json" \
-            ":(exclude)package.json" \
-            ":(exclude)prisma/**/internal/*" \
-            ":(exclude)prisma/**/client/*" \
-            ":(exclude)**/generated/*" | wc -l | tr -d ' ')
-
-        # 4. Aggiungi il blocco JSON con i nuovi campi added e files
-        local JSON_ENTRY="  {\n"
-        JSON_ENTRY+="    \"project\": \"$project_name\",\n"
-        JSON_ENTRY+="    \"author\": \"$AUTHOR_NAME\",\n"
-        JSON_ENTRY+="    \"added\": $ADDED,\n"
-        JSON_ENTRY+="    \"files\": $FILES_COUNT,\n"
-        JSON_ENTRY+="    \"lines\": $TOTAL_LINES,\n"
-        JSON_ENTRY+="    \"commits\": $TOTAL_COMMITS\n"
-        JSON_ENTRY+="  }"
-        
-        if [[ "$FIRST_PROJECT" == true ]]; then
-            FULL_JSON+="$JSON_ENTRY"
-            FIRST_PROJECT=false
-        else
-            FULL_JSON+=",\n$JSON_ENTRY"
-        fi
-        
-    done
-    unset IFS
-    
-    # Torna alla directory originale (dove risiede lo script)
-    cd - > /dev/null
+            active = 0
+        }
+        substr($0, 1, 1) == "\001" {
+            a = $2; d = $3
+            if (d >= start && d <= end) {
+                if (a in alias) a = alias[a]
+                cur_a = a
+                cur = a SUBSEP d
+                commits[cur]++
+                active = 1
+            } else {
+                active = 0
+            }
+            next
+        }
+        !active { next }
+        NF >= 3 {
+            if ($1 ~ /^[0-9]+$/) {
+                added[cur] += $1
+                deleted[cur] += $2
+            }
+            # file distinti nel giorno
+            fkey = cur SUBSEP $3
+            if (!(fkey in seenday)) { seenday[fkey] = 1; files[cur]++ }
+            # file distinti nel periodo (per la tabella di riepilogo)
+            pkey = cur_a SUBSEP $3
+            if (!(pkey in seenperiod)) { seenperiod[pkey] = 1; pfiles[cur_a]++ }
+            next
+        }
+        END {
+            for (k in commits) {
+                split(k, kk, SUBSEP)
+                print project, kk[1], kk[2], commits[k], added[k] + 0, deleted[k] + 0, files[k] + 0, pfiles[kk[1]] + 0
+            }
+        }'
 }
 
 # -----------------------------------------------
 # Logica Principale
 # -----------------------------------------------
 main() {
-    # Validazioni iniziali
     if [ ${#PROJECT_PATHS[@]} -eq 0 ] || [ -z "$START_DATE" ] || [ -z "$END_DATE" ]; then
         echo "Errore: Specificare date e almeno un percorso progetto." >&2
         echo "Utilizzo:" >&2
         echo "  $0 <DATA_INIZIO> <DATA_FINE> <percorso_progetto1> [percorso_progetto2...]" >&2
         echo "  $0 --file <file_percorsi> <DATA_INIZIO> <DATA_FINE>" >&2
-        echo "Nota: Il file deve contenere un percorso per riga." >&2
+        echo "Nota: Il file deve contenere un percorso (o URL) per riga." >&2
         exit 1
     fi
-    
-    # Processa tutti i percorsi forniti
+
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    trap 'rm -rf "$tmpdir"' EXIT
+    local alias_tsv="$tmpdir/aliases.tsv"
+    local all_tsv="$tmpdir/all.tsv"
+
+    dump_aliases_tsv > "$alias_tsv"
+    [[ -s "$alias_tsv" ]] || alias_tsv=""
+
+    : > "$all_tsv"
+    local path
     for path in "${PROJECT_PATHS[@]}"; do
-        analyze_project "$path"
+        analyze_project "$path" "$alias_tsv" >> "$all_tsv"
     done
-    
-    # Stampa il JSON finale completo
-    FULL_JSON+="\n  ]\n"
-    FULL_JSON+="}\n"
-    echo -e "$FULL_JSON"
+
+    sort -t$'\t' -k1,1 -k2,2 -k3,3 "$all_tsv" | python3 -c '
+import sys, json
+
+start, end = sys.argv[1], sys.argv[2]
+groups = {}
+for line in sys.stdin:
+    line = line.rstrip("\n")
+    if not line:
+        continue
+    parts = line.split("\t")
+    if len(parts) < 8:
+        continue
+    project, author, date_s, commits, added, deleted, files_day, files_period = parts[:8]
+    key = (project, author)
+    g = groups.setdefault(key, {"days": [], "files_period": int(files_period)})
+    g["days"].append({
+        "date": date_s,
+        "commits": int(commits),
+        "added": int(added),
+        "deleted": int(deleted),
+        "files": int(files_day),
+    })
+
+data = []
+for (project, author) in sorted(groups):
+    g = groups[(project, author)]
+    days = sorted(g["days"], key=lambda r: r["date"])
+    added = sum(r["added"] for r in days)
+    deleted = sum(r["deleted"] for r in days)
+    data.append({
+        "project": project,
+        "author": author,
+        "commits": sum(r["commits"] for r in days),
+        "added": added,
+        "deleted": deleted,
+        "lines": added + deleted,
+        "files": g["files_period"],
+        "active_days": sum(1 for r in days if r["commits"] > 0),
+        "daily_data": days,
+    })
+
+json.dump({
+    "metadata": {"start_date": start, "end_date": end, "date_basis": "author"},
+    "data": data,
+}, sys.stdout, ensure_ascii=False, indent=2)
+sys.stdout.write("\n")
+' "$START_DATE" "$END_DATE"
 }
 
 main
