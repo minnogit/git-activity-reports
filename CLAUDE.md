@@ -87,6 +87,25 @@ sviluppo; se si tocca la raccolta dati, verificarle di nuovo:
    filtro esatto sul periodo è fatto in awk (git non sa filtrare per author-date).
 4. **`files` = file distinti**, non righe di `--numstat`: lo stesso file in 3 commit conta 1, non 3.
    Contare gli eventi rendeva la metrica un proxy del numero di commit.
+5. **`:(exclude,attr:linguist-generated)`** in testa a `EXCLUDE_PATHSPEC`: esclusione dichiarativa del
+   codice generato, dichiarata nel `.gitattributes` del repo analizzato invece che indovinata qui.
+   Su un repo reale (PHP + client OpenAPI) valeva il **51%** del churn, mentre la lista di default —
+   tarata su Node/Prisma — ne intercettava l'1,2%. Serve la forma **booleana** dell'attributo:
+   `linguist-generated=true` non è intercettato dal pathspec magic di git (verificato).
+
+Due trappole da conoscere prima di toccare le esclusioni:
+
+- **I pattern si applicano al percorso come era in OGNI commit.** Escludere solo la posizione attuale
+  di file spostati *peggiora* il risultato: la sorgente dello spostamento riemerge come cancellazione
+  integrale (misurato: 2002 righe con filtro incompleto contro 1002 senza filtro). Per enumerare le
+  posizioni storiche serve `--name-only --no-renames`, altrimenti git comprime i percorsi come
+  `{vecchio => nuovo}` e le posizioni storiche restano invisibili.
+- **Gli spostamenti puri NON gonfiano il churn** (verificato: 0 righe, il rilevamento rename di git
+  funziona anche con i pathspec di esclusione) — non cercare di "correggere" un problema che non c'è.
+
+Limite noto e non risolvibile per percorso: i commit da **squash/rebase merge** hanno un solo genitore,
+quindi `--no-merges` non li esclude e riportano il lavoro di altri sotto un solo autore (in un caso
+reale: 139.719 righe in un commit).
 - Entrambi accettano anche **URL Git al posto di un path locale** (`--repo <url>` per il singolo repo,
   come percorso posizionale/riga di `--file` per il multi-repo). La risoluzione URL→path locale (funzioni
   `is_repo_url`/`resolve_remote_repo`/`resolve_repo_path`, duplicate identiche in entrambi gli script) clona

@@ -1125,21 +1125,81 @@ git-stats-tools/
 
 ## 🔧 Personalizzazione
 
-### File e cartelle da escludere
+### Escludere il codice generato (consigliato: `.gitattributes`)
+
+Il codice auto-generato — client OpenAPI/Swagger, client Prisma, report di copertura,
+migrazioni — può dominare le statistiche: su un repository reale rappresentava il **51%**
+del churn misurato. Il modo migliore per escluderlo non è indovinare i percorsi nel tool,
+ma dichiararli **nel repository analizzato**, dove la verità è nota.
+
+Nel `.gitattributes` del repository da analizzare:
+
+```gitattributes
+lib/api_clients/**    linguist-generated
+coverage-report/**    linguist-generated
+
+# i binari che git non riconosce come tali (certi PDF) finiscono nel conteggio righe:
+*.pdf   -diff
+*.xlsx  -diff
+```
+
+I collector escludono automaticamente ciò che è marcato, tramite il pathspec
+`:(exclude,attr:linguist-generated)`. Nei repository senza `.gitattributes` non cambia nulla.
+
+Tre dettagli che non sono ovvi e che fanno la differenza:
+
+1. **Serve la forma booleana** `linguist-generated`, **non** `linguist-generated=true`:
+   la forma valorizzata non viene intercettata dal pathspec di git. La forma booleana è
+   anche quella che fa collassare i diff su GitHub, quindi una sola dichiarazione serve
+   a entrambe le cose.
+2. **Vanno dichiarati anche i percorsi STORICI.** Git confronta il pattern con il percorso
+   *come era in ogni commit*: se i file sono stati spostati, dichiarare solo la posizione
+   attuale **peggiora** il risultato, perché la sorgente dello spostamento riemerge come
+   cancellazione di tutte le sue righe. Per trovare le posizioni storiche:
+
+   ```bash
+   git log --pretty=format: --name-only --no-renames | grep -E "/lib/(Api|Model)/" | sort -u
+   ```
+
+   `--no-renames` è essenziale: senza di esso git comprime i percorsi nella forma
+   `{vecchio => nuovo}` e le posizioni storiche restano invisibili.
+3. **`-diff` sui binari** li fa contare come file toccato con 0 righe, invece di sommarne
+   il contenuto interpretato come testo.
+
+### File e cartelle da escludere (lista nel tool)
 
 In entrambi i collector la lista è centralizzata in un unico array `EXCLUDE_PATHSPEC`
 (prima era ripetuta in ogni query, con il rischio di modificarne solo una copia):
 
 ```bash
 EXCLUDE_PATHSPEC=(
+    ":(exclude,attr:linguist-generated)"   # vedi sopra
     ":(exclude)node_modules/*"
     ":(exclude)dist/*"
     # ... aggiungi qui le tue esclusioni
 )
 ```
 
+Attenzione: la lista di default è tarata su progetti Node/Prisma. Su altri stack può non
+intercettare nulla — su un repository PHP con client OpenAPI rimuoveva l'1,2% del churn.
+Verifica cosa domina davvero le tue statistiche prima di fidarti dei default:
+
+```bash
+git log --no-merges --since=2026-01-01 --pretty=format: --numstat \
+  | awk -F'\t' '$1 ~ /^[0-9]+$/ {t[$3]+=$1+$2} END{for(p in t) printf "%9d  %s\n", t[p], p}' \
+  | sort -rn | head -20
+```
+
 Per analizzare **solo** certi tipi di file, sostituisci il `.` nel pathspec del comando
 `git log` con i pattern desiderati, es. `-- "*.java" "*.kt" "${EXCLUDE_PATHSPEC[@]}"`.
+
+### Un limite che le esclusioni non risolvono
+
+I commit prodotti da **squash o rebase merge** hanno un solo genitore, quindi sono
+strutturalmente commit normali e `--no-merges` non può escluderli: riportano il lavoro di
+altri sotto il nome di chi ha fatto il merge. In un caso reale un singolo commit di questo
+tipo pesava 139.719 righe. Nessun filtro per percorso lo intercetta — va tenuto presente
+quando si legge un picco isolato.
 
 ### Pesi delle metriche
 

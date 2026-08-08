@@ -360,6 +360,16 @@ except Exception:
 # Esclusioni (centralizzate: prima erano ripetute in ogni query)
 # -----------------------------------------------
 EXCLUDE_PATHSPEC=(
+    # Esclusione dichiarativa: salta i percorsi che il repository stesso marca come
+    # generati in .gitattributes, es.  lib/api_clients/**  linguist-generated
+    # Serve la forma BOOLEANA dell'attributo: "linguist-generated=true" non viene
+    # intercettato dal pathspec magic di git (verificato). La forma booleana è anche
+    # quella che fa collassare i diff su GitHub, quindi una dichiarazione serve a entrambi.
+    # Attenzione: git confronta il pattern col percorso COME ERA in ogni commit, quindi se
+    # i file sono stati spostati vanno dichiarati anche i percorsi storici — dichiarare solo
+    # la destinazione peggiora il risultato (la sorgente riemerge come cancellazione intera).
+    # Nei repository senza .gitattributes questo pathspec non ha alcun effetto.
+    ":(exclude,attr:linguist-generated)"
     ":(exclude)node_modules/*"
     ":(exclude)dist/*"
     ":(exclude)vendor/*"
