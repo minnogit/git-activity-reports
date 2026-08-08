@@ -70,8 +70,8 @@ Analizza un singolo repository Git con dettaglio **giornaliero**, ideale per:
 }
 ```
 
-
 Il file di configurazione può essere posizionato in diverse posizioni e verrà cercato in questo ordine:
+
 1. Nella directory corrente (`./git-activity-aliases.json`)
 2. Nella directory di configurazione XDG specifica per l'applicazione (`~/.config/git-activity-reports/git-activity-aliases.json`)
 3. Nella directory di configurazione XDG generica (`~/.config/git-activity-git-activity-aliases.json`)
@@ -79,21 +79,71 @@ Il file di configurazione può essere posizionato in diverse posizioni e verrà 
 
 Se nessun file di configurazione esiste, lo script continuerà a funzionare normalmente senza raggruppare gli autori.
 
+## 🌐 Repository Remoti (analizzare un URL Git)
+
+Sia `git_stats_collector.sh` (via `--repo <url>`) sia `git_multiproject_stats_collector.sh` (come
+percorso posizionale o riga di `--file`) accettano, al posto di un path locale, un URL Git qualsiasi
+(`https://...`, `git://...`, `ssh://...` o la forma scp `git@host:org/repo.git`).
+
+**Come funziona:**
+
+1. Al primo utilizzo, il repository viene **clonato** in una cartella visibile (non nascosta) sotto
+   `$GIT_ACTIVITY_REPOS_DIR` (default: `~/repos`), usando come nome cartella l'ultimo segmento dell'URL
+   (senza `.git`).
+2. Alle esecuzioni successive, se la cartella corrisponde già a quell'URL (stesso `remote origin`), viene
+   **riusata** senza clonare di nuovo — l'aggiornamento (`git fetch`) resta opt-in con `--fetch`, come per
+   i repository locali.
+3. Poiché la cartella è visibile e normale (non un bare clone nascosto), può coincidere con un repository
+   su cui stai già lavorando: se ci clonavi già a mano quel progetto in `~/repos/nome-progetto`, lo script
+   lo riconosce e lo riusa (a patto che l'`origin` combaci con l'URL richiesto).
+
+**Esempi:**
+
+```bash
+# Singolo repository remoto
+./git_stats_collector.sh --repo https://github.com/org/repo.git 2025-11-01 2025-11-30 json | python3 plot_git.py
+
+# Multi-repository: mix di URL e path locali
+./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 \
+  https://github.com/org/backend.git ~/progetti/frontend git@github.com:org/mobile.git \
+  | python3 plot_multiproject.py
+
+# Cartella di clonazione personalizzata
+GIT_ACTIVITY_REPOS_DIR=/data/git-mirrors ./git_multiproject_stats_collector.sh --file progetti.txt 2025-11-01 2025-11-30
+```
+
+**Collisioni di nome cartella:** se due URL diversi produrrebbero lo stesso nome di cartella (es. due
+repository chiamati entrambi `backend` su host diversi), lo script si **ferma con un errore** invece di
+sovrascrivere/confondere i due repository. Per risolvere, assegna un nome di cartella dedicato a uno dei
+due URL tramite un file di mapping opzionale (obbligatorio solo in caso di collisione):
+
+`~/.config/git-activity-reports/git-activity-repos-map.json`
+
+```json
+{
+  "https://github.com/org-a/backend.git": "backend-org-a",
+  "https://gitlab.com/org-b/backend.git": "backend-org-b"
+}
+```
+
+Le chiavi devono combaciare esattamente con l'URL passato sulla riga di comando/nel file `--file`.
+
 ### Parametri
 
-| Posizione | Parametro | Obbligatorio | Descrizione | Default |
-|-----------|-----------|--------------|-------------|---------|
-| 1 | `DATA_INIZIO` | ✓ | Data inizio (YYYY-MM-DD) | - |
-| 2 | `DATA_FINE` | ✓ | Data fine (YYYY-MM-DD) | - |
-| 3 | `formato` | ✗ | Formato output: `text` o `json` | `text` |
-| 4 | `autore` | ✗ | Filtra per autore specifico | tutti |
+| Posizione | Parametro     | Obbligatorio | Descrizione                     | Default |
+| --------- | ------------- | ------------ | ------------------------------- | ------- |
+| 1         | `DATA_INIZIO` | ✓            | Data inizio (YYYY-MM-DD)        | -       |
+| 2         | `DATA_FINE`   | ✓            | Data fine (YYYY-MM-DD)          | -       |
+| 3         | `formato`     | ✗            | Formato output: `text` o `json` | `text`  |
+| 4         | `autore`      | ✗            | Filtra per autore specifico     | tutti   |
 
 ### Opzioni Disponibili
 
-| Opzione | Argomento | Descrizione |
-|---------|-----------|-------------|
-| `--fetch` | - | Abilita l'aggiornamento del repository con git fetch |
-| `-h, --help` | - | Mostra l'help |
+| Opzione      | Argomento     | Descrizione                                                                                                                     |
+| ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `--fetch`    | -             | Abilita l'aggiornamento del repository con git fetch                                                                            |
+| `--repo`     | `<path\|url>` | Analizza questo repository invece della cartella corrente (vedi [Repository Remoti](#-repository-remoti-analizzare-un-url-git)) |
+| `-h, --help` | -             | Mostra l'help                                                                                                                   |
 
 ### Esempi - Singolo Repository
 
@@ -191,6 +241,7 @@ Analizza più repository contemporaneamente con statistiche **aggregate per prog
 - Analisi portfolio completo
 
 **Note importanti:**
+
 - I merge commits sono esclusi dalle statistiche
 - File non rilevanti come node_modules, dist, vendor, lock files e file generati sono esclusi dalle statistiche
 - Le righe totali sono calcolate come: aggiunte + eliminate
@@ -203,13 +254,16 @@ Analizza più repository contemporaneamente con statistiche **aggregate per prog
 
 ### Opzioni Disponibili
 
-| Opzione | Argomento | Descrizione |
-|---------|-----------|-------------|
-| `--file` | `<file>` | Legge i percorsi dei repository da file (uno per riga) |
-| `--start` | `<data>` | Data di inizio periodo (formato: YYYY-MM-DD) |
-| `--end` | `<data>` | Data di fine periodo (formato: YYYY-MM-DD) |
-| `--fetch` | - | Abilita l'aggiornamento dei repository con git fetch |
-| `-h, --help` | - | Mostra l'help |
+| Opzione      | Argomento | Descrizione                                            |
+| ------------ | --------- | ------------------------------------------------------ |
+| `--file`     | `<file>`  | Legge i percorsi dei repository da file (uno per riga) |
+| `--start`    | `<data>`  | Data di inizio periodo (formato: YYYY-MM-DD)           |
+| `--end`      | `<data>`  | Data di fine periodo (formato: YYYY-MM-DD)             |
+| `--fetch`    | -         | Abilita l'aggiornamento dei repository con git fetch   |
+| `-h, --help` | -         | Mostra l'help                                          |
+
+**Nota:** ogni percorso (posizionale o riga di `--file`) può essere anche un URL Git, non solo un path
+locale — vedi [Repository Remoti](#-repository-remoti-analizzare-un-url-git).
 
 ---
 
@@ -292,15 +346,15 @@ cat dati_novembre.json | python3 plot_multiproject.py
 
 ## 🔄 Confronto tra le Due Versioni
 
-| Caratteristica | Singolo Repository | Multi-Repository |
-|----------------|-------------------|------------------|
-| **Granularità** | Giornaliera | Aggregata per progetto |
-| **Scope** | Un repository alla volta | Multipli contemporaneamente |
-| **Formato output** | text/json | json (solo) |
-| **Filtro autore** | Sì, via parametro | No (mostra tutti) |
-| **Grafici generati** | 1 (stacked bar) | 3 (bar, donut, ranking) |
-| **Uso tipico** | Sprint review, analisi personale | Portfolio review, confronto progetti |
-| **Esecuzione** | Nella cartella del repo | Da qualsiasi posizione |
+| Caratteristica       | Singolo Repository               | Multi-Repository                     |
+| -------------------- | -------------------------------- | ------------------------------------ |
+| **Granularità**      | Giornaliera                      | Aggregata per progetto               |
+| **Scope**            | Un repository alla volta         | Multipli contemporaneamente          |
+| **Formato output**   | text/json                        | json (solo)                          |
+| **Filtro autore**    | Sì, via parametro                | No (mostra tutti)                    |
+| **Grafici generati** | 1 (stacked bar)                  | 3 (bar, donut, ranking)              |
+| **Uso tipico**       | Sprint review, analisi personale | Portfolio review, confronto progetti |
+| **Esecuzione**       | Nella cartella del repo          | Da qualsiasi posizione               |
 
 ### Quando Usare Quale Versione?
 
@@ -502,8 +556,8 @@ Il file `git-activity-aliases.json` permette di raggruppare diversi nomi di auto
 }
 ```
 
-
 Il file di configurazione può essere posizionato in diverse posizioni e verrà cercato in questo ordine:
+
 1. Nella directory corrente (`./git-activity-aliases.json`)
 2. Nella directory di configurazione XDG specifica per l'applicazione (`~/.config/git-activity-reports/git-activity-aliases.json`)
 3. Nella directory di configurazione XDG generica (`~/.config/git-activity-git-activity-aliases.json`)

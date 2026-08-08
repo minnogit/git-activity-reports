@@ -21,7 +21,19 @@
 # PARAMETRI POSIZIONALI:
 #   DATA_INIZIO      Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
 #   DATA_FINE        Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
-#   percorsi...      Percorsi ai repository Git (opzionale se si usa --file)
+#   percorsi...      Percorsi locali o URL Git (opzionale se si usa --file)
+#
+# REPOSITORY REMOTI:
+#   Ogni "percorso" (posizionale o riga del file --file) può essere un path locale oppure un URL
+#   Git (es. https://github.com/org/repo.git o git@github.com:org/repo.git). Gli URL vengono clonati
+#   (la prima volta) o aggiornati (con --fetch) in una cartella locale visibile sotto
+#   $GIT_ACTIVITY_REPOS_DIR (default: ~/repos), poi analizzati come un repository locale qualsiasi.
+#   Se quella cartella corrisponde già a un checkout locale su cui stai lavorando (stesso remote
+#   "origin" dell'URL richiesto), viene riusata senza clonare di nuovo.
+#   In caso di collisione di nome tra URL diversi, lo script si ferma con un errore: assegna un nome
+#   di cartella dedicato all'URL nel file di mapping opzionale
+#   ${XDG_CONFIG_HOME:-~/.config}/git-activity-reports/git-activity-repos-map.json, formato:
+#     { "https://github.com/org/repo.git": "nome-cartella-dedicato" }
 #
 # ESEMPI:
 #   # Analisi di repository specifici
@@ -38,17 +50,19 @@
 #     | python3 plot_multiproject.py
 #
 # FORMATO FILE PERCORSI:
-#   Il file specificato con --file deve contenere un percorso per riga:
+#   Il file specificato con --file deve contenere un percorso o un URL Git per riga:
 #
 #     # Commenti sono ignorati
 #     ~/progetti/backend
 #     ~/progetti/frontend
 #     /var/www/api-service
+#     https://github.com/org/repo-remoto.git
+#     git@github.com:org/altro-repo.git
 #     # Percorsi con spazi sono supportati
 #     /home/user/My Projects/mobile-app
 #
 #   Note sul file:
-#   - Un percorso per riga
+#   - Un percorso (o URL) per riga
 #   - Supporta tilde (~) per home directory
 #   - Linee vuote e commenti (#) sono ignorati
 #   - Percorsi con spazi sono supportati
@@ -71,8 +85,10 @@
 #
 # NOTE:
 #   - Lo script può essere eseguito da qualsiasi directory
-#   - Ogni percorso deve puntare a un repository Git valido (.git presente)
-#   - Repository non validi vengono saltati con warning
+#   - Ogni percorso deve puntare a un repository Git valido (.git presente), oppure essere un URL Git
+#     (clonato/riusato sotto $GIT_ACTIVITY_REPOS_DIR, default ~/repos)
+#   - Repository locali non validi vengono saltati con warning; errori di risoluzione URL (es.
+#     collisione di nome cartella) interrompono l'intera esecuzione
 #   - I merge commits sono esclusi dalle statistiche
 #   - Le righe totali sono calcolate come: aggiunte + eliminate
 #   - Il nome del progetto è estratto dal nome della cartella
@@ -165,6 +181,9 @@ ESEMPI:
 
   # Con aggiornamento esplicito dei repository
   ./git_multiproject_stats_collector.sh --fetch --file repos.txt 2025-11-01 2025-11-30
+
+  # Repository remoto (clonato/aggiornato sotto ~/repos, override con GIT_ACTIVITY_REPOS_DIR)
+  ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 https://github.com/org/repo.git ~/repo2
 EOF
             exit 0
             ;;
@@ -222,18 +241,122 @@ FULL_JSON+="  \"data\": [\n"
 FIRST_PROJECT=true
 
 # -----------------------------------------------
+# Risoluzione Repository Remoti (URL -> path locale)
+# -----------------------------------------------
+# GIT_ACTIVITY_REPOS_DIR: cartella (visibile, non nascosta) dove vengono clonati i repository
+#   richiesti via URL. Default: ~/repos. Può coincidere con una cartella già usata per sviluppo:
+#   se il repository è già presente e il suo remote "origin" corrisponde all'URL richiesto, viene
+#   riusato (senza clonare di nuovo).
+# GIT_ACTIVITY_REPOS_MAP_FILE (fissato, non configurabile via env): file JSON opzionale
+#   {"<url>": "<nome-cartella>"} usato per assegnare un nome di cartella dedicato a un URL, necessario
+#   solo per risolvere collisioni di nome (es. due repository diversi che si chiamano entrambi "backend").
+
+REPOS_DIR="${GIT_ACTIVITY_REPOS_DIR:-$HOME/repos}"
+REPOS_MAP_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/git-activity-reports/git-activity-repos-map.json"
+
+# Riconosce URL Git: qualsiasi schema URI (http/https/git/ssh/file/...) oppure forma scp (git@host:percorso)
+is_repo_url() {
+    [[ "$1" =~ ^[A-Za-z][A-Za-z0-9+.-]*:// ]] || [[ "$1" =~ ^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+: ]]
+}
+
+# Normalizza un URL per il confronto (rimuove .git e / finali)
+normalize_repo_url() {
+    local u="${1%.git}"
+    echo "${u%/}"
+}
+
+# Cerca nel file di mapping (opzionale) un nome di cartella dedicato per l'URL
+lookup_repo_mapping() {
+    local url="$1"
+    [[ -f "$REPOS_MAP_FILE" ]] || return 0
+    python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        data = json.load(f)
+    print(data.get(sys.argv[2], ""))
+except Exception:
+    print("")
+' "$REPOS_MAP_FILE" "$url"
+}
+
+# Clona/aggiorna un repository remoto sotto $REPOS_DIR e stampa su stdout il path locale risultante.
+# In caso di errore/collisione non stampa nulla e ritorna 1.
+resolve_remote_repo() {
+    local url="$1"
+    local mapped_name default_name target_name target
+    mapped_name=$(lookup_repo_mapping "$url")
+    default_name=$(basename "$url")
+    default_name="${default_name%.git}"
+    target_name="${mapped_name:-$default_name}"
+    target="$REPOS_DIR/$target_name"
+
+    mkdir -p "$REPOS_DIR" 2>/dev/null
+
+    if [[ ! -d "$target" ]]; then
+        echo "Clonazione di $url in $target..." >&2
+        if ! git clone --quiet "$url" "$target"; then
+            echo "Errore: clonazione di $url fallita." >&2
+            return 1
+        fi
+    else
+        if [[ ! -d "$target/.git" ]]; then
+            echo "Errore: $target esiste già ma non è un repository Git (richiesto per $url)." >&2
+            echo "Configura un nome di cartella dedicato per questo URL nel file di mapping: $REPOS_MAP_FILE" >&2
+            echo "Esempio: { \"$url\": \"nome-cartella-alternativo\" }" >&2
+            return 1
+        fi
+
+        local existing_origin
+        existing_origin=$(git -C "$target" remote get-url origin 2>/dev/null)
+
+        if [[ -z "$existing_origin" ]] || [[ "$(normalize_repo_url "$existing_origin")" != "$(normalize_repo_url "$url")" ]]; then
+            echo "Errore: $target esiste già ma corrisponde a un repository diverso da $url" >&2
+            echo "  (origin attuale: ${existing_origin:-nessuno})" >&2
+            echo "Configura un nome di cartella dedicato per questo URL nel file di mapping: $REPOS_MAP_FILE" >&2
+            echo "Esempio: { \"$url\": \"nome-cartella-alternativo\" }" >&2
+            return 1
+        fi
+
+        if [[ "$FETCH_ENABLED" == true ]]; then
+            echo "Aggiornamento repository remoto in $target..." >&2
+            git -C "$target" fetch --quiet 2>/dev/null || echo "Avviso: fetch fallito per $target." >&2
+        fi
+    fi
+
+    echo "$target"
+}
+
+# Risolve un argomento "path locale o URL" nel path locale da usare per l'analisi.
+resolve_repo_path() {
+    local input="$1"
+    if is_repo_url "$input"; then
+        resolve_remote_repo "$input"
+    else
+        echo "$input"
+    fi
+}
+
+# -----------------------------------------------
 # Funzione per analizzare un singolo progetto
 # -----------------------------------------------
 analyze_project() {
-    local project_path="$1"
+    local input_path="$1"
+    local project_path
+    project_path=$(resolve_repo_path "$input_path")
+    if [[ $? -ne 0 || -z "$project_path" ]]; then
+        # Errore di risoluzione (es. collisione di nome): non è un caso "repo non valido" da
+        # saltare, richiede una correzione di configurazione, quindi interrompiamo tutta l'analisi.
+        exit 1
+    fi
     local project_name=$(basename "$project_path")
-    
+
     # 1. Spostati nella directory
     if [ ! -d "$project_path" ] || [ ! -d "$project_path/.git" ]; then
-        echo "Avviso: $project_path non è una cartella valida o un repository Git. Saltato." >&2
+        echo "Avviso: $input_path non è una cartella valida o un repository Git. Saltato." >&2
         return
     fi
-    
+
     cd "$project_path" || return
 
     if [[ "$FETCH_ENABLED" == true ]]; then
