@@ -1196,16 +1196,40 @@ EXCLUDE_PATHSPEC=(
 
 Attenzione: la lista di default è tarata su progetti Node/Prisma. Su altri stack può non
 intercettare nulla — su un repository PHP con client OpenAPI rimuoveva l'1,2% del churn.
-Verifica cosa domina davvero le tue statistiche prima di fidarti dei default:
+Verifica cosa domina davvero le tue statistiche prima di fidarti dei default.
+
+### Trovare i candidati: `find_generated_candidates.sh`
 
 ```bash
-git log --no-merges --since=2026-01-01 --pretty=format: --numstat \
-  | awk -F'\t' '$1 ~ /^[0-9]+$/ {t[$3]+=$1+$2} END{for(p in t) printf "%9d  %s\n", t[p], p}' \
-  | sort -rn | head -20
+./find_generated_candidates.sh [--since <data>] [--threshold <pct>] [--depth <n>] [percorso-repo]
 ```
 
-Per analizzare **solo** certi tipi di file, sostituisci il `.` nel pathspec del comando
-`git log` con i pattern desiderati, es. `-- "*.java" "*.kt" "${EXCLUDE_PATHSPEC[@]}"`.
+Automatizza la ricerca manuale (churn per percorso, verifica del generatore, posizioni
+storiche) e stampa un report — **non scrive `.gitattributes`, non modifica nulla**: la
+classificazione generato/vendorizzato/scritto-a-mano richiede giudizio umano, come
+dimostra il fatto che in sviluppo una cartella di codice archiviato (`old/`) è stata
+etichettata come "generata" per errore prima di essere corretta a mano.
+
+Per ogni percorso sopra soglia riporta un livello di evidenza:
+
+- **FORTE**: output verificato di un generatore Prisma (legge il campo `output` di
+  `schema.prisma`, poi espande alle sue posizioni storiche — nomi di file identici
+  sotto prefissi diversi nella storia), oppure un marcatore esplicito nel contenuto
+  (`@generated`, `DO NOT EDIT`)
+- **MEDIA**: nome tipico di libreria vendorizzata (`vendor`, `third_party`...), da
+  confermare — non riconosce nomi di librerie specifiche (es. non capisce da solo che
+  una cartella chiamata `TCPDF` è una libreria vendorizzata)
+- **DEBOLE**: solo churn alto, nessuna evidenza automatica — verifica cosa produce
+  quei numeri prima di etichettare qualcosa. Molti percorsi DEBOLE sono codice
+  applicativo vero, non da escludere: è il tag corretto per "guarda qui", non "escludi qui"
+
+Per gli altri generatori (OpenAPI, protobuf...) individua ancora i percorsi ad alto
+churn, ma senza la verifica automatica sul file di configurazione — resta comunque
+utile come punto di partenza, con evidenza DEBOLE.
+
+Per analizzare **solo** certi tipi di file nei collector, sostituisci il `.` nel
+pathspec del comando `git log` con i pattern desiderati, es.
+`-- "*.java" "*.kt" "${EXCLUDE_PATHSPEC[@]}"`.
 
 ### Un limite che le esclusioni non risolvono
 

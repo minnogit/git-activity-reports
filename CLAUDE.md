@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Toolkit Bash + Python per estrarre statistiche di attività Git (commit, righe modificate, autori) e
 generare grafici. Esiste in due varianti indipendenti che condividono lo stesso formato di dati e lo
-stesso meccanismo di alias autori, più un'estensione VS Code che le richiama entrambe.
+stesso meccanismo di alias autori, più un'estensione VS Code che le richiama entrambe. Un terzo script,
+`find_generated_candidates.sh`, non fa parte della pipeline dati: è uno strumento diagnostico standalone
+che assiste la scrittura del `.gitattributes` di un repository da analizzare (vedi sezione dedicata).
 
 ## Comandi comuni
 
@@ -96,6 +98,34 @@ sviluppo; se si tocca la raccolta dati, verificarle di nuovo:
    OpenAPI) `linguist-generated` da solo valeva il **51%** del churn, mentre la lista di default —
    tarata su Node/Prisma — ne intercettava l'1,2%. Serve la forma **booleana** di entrambi gli
    attributi: `linguist-generated=true` non è intercettato dal pathspec magic di git (verificato).
+
+### `find_generated_candidates.sh` — trovare i candidati, non applicarli
+
+Script diagnostico standalone (non chiamato da collector/plotter, non condivide codice con essi):
+analizza un repository e propone percorsi candidati a `linguist-generated`/`linguist-vendored`, con un
+livello di evidenza (FORTE/MEDIA/DEBOLE). **Non scrive `.gitattributes`, non modifica nulla** — questo è
+un vincolo di design deliberato, non una limitazione da rimuovere: durante lo sviluppo di questo stesso
+meccanismo una cartella di codice archiviato scritto a mano (`old/`) è stata classificata come "generata"
+per errore. Uno script che scrive automaticamente `.gitattributes` avrebbe committato quell'errore.
+
+Logica in due fasi (non una sola: leggere solo la configurazione ATTUALE di un generatore non basta se
+l'output si è spostato nel tempo — la posizione attuale può avere churn quasi nullo mentre la storia vera
+sta in una posizione precedente che nessun file di configurazione attuale menziona):
+
+1. Legge il campo `output` di ogni `schema.prisma` nel repo, poi espande ogni output alle sue posizioni
+   storiche cercando file con lo stesso nome sotto prefissi diversi nella storia.
+2. Classifica i percorsi ad alto churn: dentro una posizione nota dalla fase 1 → FORTE; marcatore
+   `@generated`/`DO NOT EDIT` nel contenuto → FORTE; nome tipico di libreria vendorizzata → MEDIA
+   (da confermare, non riconosce nomi di librerie specifiche come "TCPDF"); altrimenti DEBOLE.
+
+Bug corretto in sviluppo, da non reintrodurre: la ricerca delle posizioni storiche per nome-file può
+incrociare due generatori diversi che condividono nomi di output generici (Prisma genera sempre
+`browser.ts`, `client.ts`, `enums.ts` a prescindere dal datasource). La funzione di attribuzione
+(`lookup_generated_source`) raccoglie l'UNIONE di tutte le fonti che matchano un candidato — mai la
+"più specifica" per lunghezza di percorso: un candidato può cadere sotto più voci registrate a
+profondità diverse (radice del generatore E una sua sottocartella come `.../models`, aggiunte
+entrambe dalla ricerca storica, che registra il genitore immediato di ogni file trovato). Scartare le
+voci "meno specifiche" perdeva ambiguità reali tra le due radici invece di segnalarle.
 
 Due trappole da conoscere prima di toccare le esclusioni:
 
