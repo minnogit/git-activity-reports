@@ -169,7 +169,7 @@ senza `metadata`) per poter rielaborare file vecchi.
 #### Metriche (duplicate identiche nei due plotter — modificarle in entrambi)
 
 ```python
-DELETED_WEIGHT = 0.4 ; DAILY_CHURN_CAP = 1000 ; W_CHURN = 1.0 ; W_FILES = 0.5
+DELETED_WEIGHT = 0.4 ; DAILY_CHURN_CAP = 15000 ; W_CHURN = 1.0 ; W_FILES = 0.5
 churn  = added + DELETED_WEIGHT * deleted
 indice = Σ giorni [ W_CHURN*ln(1+min(churn_giorno, DAILY_CHURN_CAP)) + W_FILES*ln(1+file_distinti) ]
 ```
@@ -181,8 +181,17 @@ relegato alla sola tabella. Tre proprietà da non regredire:
   era 0 (una giornata di sole cancellazioni valeva 0) e premiava lo spread: un find/replace su 100 file
   valeva ~6.7x un fix profondo in 1 file. Ora quel rapporto è ~1.4x.
 - **Il cap è PER GIORNO.** Applicato a un aggregato di periodo (come faceva `plot_multiproject.py`)
-  saturava: `ln(1+1000)` diventava costante per tutti e l'indice misurava solo i file toccati.
+  saturava: `ln(1+1000)` diventava costante per tutti e l'indice misurava solo i file toccati (esempio
+  storico con il valore dell'epoca; il valore attuale del cap è 15000, vedi sotto).
 - **Le cancellazioni pesano.** `deleted` entra nel churn; prima era ignorato.
+
+**`DAILY_CHURN_CAP` non è una costante fissa per sempre.** Fissato a 1000 il 9 gennaio 2026, misurato
+di nuovo ad agosto 2026 (repository reali con uso di agenti di coding AI) risultava al **90° percentile**
+della distribuzione — troncava il 72% del churn di giornate normali (gen-mag: 44%), non solo di outlier.
+Un commit reale da 336 file/22.180 churn ("CRUD per tutte le tabelle") ha confermato che non era rumore
+da attenuare. Alzato a 15000 (p99 osservato). Se il modello di sviluppo cambia ancora, ricontrollare la
+distribuzione (vedi README.md, sezione "Pesi delle metriche") prima di assumere che il valore attuale
+resti corretto — non è una scelta estetica, è calibrata sui dati e va rifatta quando i dati cambiano.
 
 #### Grafica
 

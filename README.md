@@ -1245,7 +1245,7 @@ In testa a `plot_git.py` e `plot_multiproject.py` (i due valori vanno tenuti all
 
 ```python
 DELETED_WEIGHT = 0.4      # quanto pesa una riga rimossa rispetto a una aggiunta
-DAILY_CHURN_CAP = 1000    # tetto anti-outlier, PER GIORNO per autore
+DAILY_CHURN_CAP = 15000   # tetto anti-outlier, PER GIORNO per autore
 W_CHURN = 1.0             # peso del volume nell'indice composito
 W_FILES = 0.5             # peso della dispersione su file
 ```
@@ -1253,6 +1253,35 @@ W_FILES = 0.5             # peso della dispersione su file
 Alzare `W_FILES` premia chi tocca molti file (attenzione: è ciò che rendeva la vecchia
 formula favorevole ai find/replace). Abbassare `DAILY_CHURN_CAP` appiattisce le giornate
 di alto volume.
+
+**`DAILY_CHURN_CAP` non è un valore arbitrario: è calibrato sulla distribuzione osservata,
+e va ricalibrato se il modello di sviluppo cambia.** Fissato originariamente a 1000 il
+9 gennaio 2026, misurando la distribuzione reale su più repository ad agosto 2026 quel
+valore era sceso al **90° percentile** (giornate normali, non anomale) invece del
+p95-p99 previsto: il 72% del churn dei due mesi precedenti veniva scartato dal tetto,
+contro il 44% del periodo gennaio-maggio. Causa plausibile: uso di agenti di coding AI,
+che rendono comuni giornate di scaffolding ampio (es. un commit reale da 336 file/22.180
+churn per generare CRUD su decine di tabelle in una sessione) — non outlier da attenuare,
+ma il nuovo ordine di grandezza del lavoro normale. Il nuovo valore (15000) corrisponde al
+p99 osservato: attenua ancora gli outlier estremi, non le giornate ora comuni. Se il tuo
+flusso di lavoro cambia ancora, ricontrolla la distribuzione invece di supporre che il
+valore attuale resti valido:
+
+```bash
+git_stats_collector.sh 2026-01-01 "$(date +%F)" json | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+vals = []
+for a in d['data']:
+    if a['author'].endswith('[bot]'): continue
+    for day in a['daily_data']:
+        vals.append(day['added'] + 0.4*day['deleted'])
+vals.sort()
+n = len(vals)
+pct = lambda p: vals[min(int(n*p/100), n-1)]
+print(f'n={n}  p90={pct(90):.0f}  p95={pct(95):.0f}  p99={pct(99):.0f}  max={pct(100):.0f}')
+"
+```
 
 ### Granularità temporale del report singolo
 
@@ -1306,7 +1335,7 @@ e cattura la continuità del contributo meglio del volume.
 ### Indice composito (metrica secondaria)
 
 ```txt
-indice = Σ giorni [ 1.0 × ln(1 + min(churn_giorno, 1000)) + 0.5 × ln(1 + file_distinti_giorno) ]
+indice = Σ giorni [ 1.0 × ln(1 + min(churn_giorno, 15000)) + 0.5 × ln(1 + file_distinti_giorno) ]
 ```
 
 Tre proprietà sono deliberate e non vanno cambiate senza capirne l'effetto:
@@ -1316,10 +1345,15 @@ Tre proprietà sono deliberate e non vanno cambiate senza capirne l'effetto:
    find/replace su 100 file valeva ~6.7x un fix algoritmico profondo in un solo file.
    Con la forma additiva quel rapporto scende a ~1.4x, e i pesi (`1.0` / `0.5`) rendono
    esplicito quanto conta la dispersione su file.
-2. **Il tetto di 1000 righe è PER GIORNO.** Applicato a un aggregato di periodo (come
-   faceva la versione precedente nel report multiprogetto) si saturava: su qualsiasi
-   intervallo più lungo di pochi giorni `ln(1+1000)` diventava una costante per tutti,
-   e l'indice finiva per misurare solo il numero di file toccati.
+2. **Il tetto (15000 righe) è PER GIORNO, e va ricalibrato nel tempo.** Applicato a un
+   aggregato di periodo (come faceva la versione precedente nel report multiprogetto) si
+   saturava: su qualsiasi intervallo più lungo di pochi giorni diventava una costante per
+   tutti, e l'indice finiva per misurare solo il numero di file toccati. Il valore stesso
+   non è fisso per sempre: era 1000 da gennaio 2026, ma misurato ad agosto 2026 su
+   repository che usano assistenti di coding AI, quel valore troncava il 72% del churn di
+   giornate normali (90° percentile, non un outlier) — sintomo di un cambio nel modello di
+   sviluppo, non di un bug. Vedi [Pesi delle metriche](#pesi-delle-metriche) per come
+   ricontrollare la distribuzione.
 3. **`file_distinti` sono file, non modifiche.** Lo stesso file modificato in 3 commit
    conta 1, non 3. Prima si contavano le righe di `--numstat`, cioè gli eventi di
    modifica, il che rendeva la metrica in buona parte un proxy del numero di commit.
