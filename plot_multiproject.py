@@ -16,14 +16,15 @@ questo report mostra TRE metriche affiancate invece di un punteggio unico:
 
 L'indice composito resta disponibile come metrica SECONDARIA (solo in tabella):
 
-  indice = somma sui giorni di [ 1.0 * ln(1 + min(churn_giorno, 1000))
+  indice = somma sui giorni di [ 1.0 * ln(1 + min(churn_giorno, 15000))
                                + 0.5 * ln(1 + file_distinti_giorno) ]
 
-È ADDITIVO e non moltiplicativo di proposito, e il tetto di 1000 righe è applicato
-PER GIORNO. Nella versione precedente il tetto veniva applicato all'aggregato di
-periodo: su qualsiasi intervallo più lungo di pochi giorni si saturava, e l'indice
-finiva per dipendere solo dal numero di file toccati (tutti gli autori attivi
-ottenevano lo stesso valore di volume).
+È ADDITIVO e non moltiplicativo di proposito, e il tetto (15000 righe, p99 osservato
+su repository reali con AI coding assistant — la cifra originale di 1000 risaliva a
+un modello di sviluppo antecedente) è applicato PER GIORNO. Nella versione precedente
+il tetto veniva applicato all'aggregato di periodo: su qualsiasi intervallo più lungo
+di pochi giorni si saturava, e l'indice finiva per dipendere solo dal numero di file
+toccati (tutti gli autori attivi ottenevano lo stesso valore di volume).
 
 ATTENZIONE: sono indicatori di attività, non misure di produttività o di qualità.
 Code review, design, mentoring e debugging difficile sono strutturalmente invisibili.
@@ -45,7 +46,7 @@ import pandas as pd
 # Parametri delle metriche (mantenere allineati con plot_git.py)
 # -----------------------------------------------------------------------------
 DELETED_WEIGHT = 0.4      # quanto pesa una riga rimossa rispetto a una aggiunta
-DAILY_CHURN_CAP = 1000    # tetto anti-outlier, PER GIORNO per autore
+DAILY_CHURN_CAP = 15000   # tetto anti-outlier, PER GIORNO per autore
 W_CHURN = 1.0             # peso del termine di volume nell'indice composito
 W_FILES = 0.5             # peso del termine di dispersione su file
 

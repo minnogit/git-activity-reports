@@ -17,13 +17,13 @@ questo report mostra TRE metriche affiancate invece di un punteggio unico:
 
 L'indice composito resta disponibile come metrica SECONDARIA (solo in tabella):
 
-  indice = somma sui giorni di [ 1.0 * ln(1 + min(churn_giorno, 1000))
+  indice = somma sui giorni di [ 1.0 * ln(1 + min(churn_giorno, 15000))
                                + 0.5 * ln(1 + file_distinti_giorno) ]
 
 È ADDITIVO e non moltiplicativo di proposito: nella forma a prodotto un fattore a
 zero azzerava tutto (una giornata di sole cancellazioni valeva 0) e i due termini si
 amplificavano a vicenda, tanto che un find/replace su 100 file superava di ~6x un fix
-profondo in un solo file. Il tetto di 1000 righe è applicato PER GIORNO: applicarlo a
+profondo in un solo file. Il tetto (15000 righe, p99 osservato su repository reali con AI coding assistant) è applicato PER GIORNO: applicarlo a
 un aggregato di periodo lo saturava, appiattendo tutti gli autori sullo stesso valore.
 
 ATTENZIONE: sono indicatori di attività, non misure di produttività o di qualità.
@@ -48,7 +48,7 @@ import pandas as pd
 # Parametri delle metriche (mantenere allineati con plot_multiproject.py)
 # -----------------------------------------------------------------------------
 DELETED_WEIGHT = 0.4      # quanto pesa una riga rimossa rispetto a una aggiunta
-DAILY_CHURN_CAP = 1000    # tetto anti-outlier, PER GIORNO per autore
+DAILY_CHURN_CAP = 15000   # tetto anti-outlier, PER GIORNO per autore
 W_CHURN = 1.0             # peso del termine di volume nell'indice composito
 W_FILES = 0.5             # peso del termine di dispersione su file
 
