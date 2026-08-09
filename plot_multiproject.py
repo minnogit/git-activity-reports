@@ -550,7 +550,7 @@ def main():
     safe_start = str(start).replace(" ", "_").replace("/", "-")
     safe_end = str(end).replace(" ", "_").replace("/", "-")
     output_filename = f"git_activity_multi_project_report_{safe_start}_{safe_end}.png"
-    fig.savefig(output_filename, dpi=110)
+    fig.savefig(output_filename, dpi=200)
     # La forma "Report multi-progetto ... generato con successo: <file>" va mantenuta:
     # l'estensione VS Code la intercetta via regex (il testo fra i due estremi è libero).
     print(f"\nReport multi-progetto (indice di attività) generato con successo: {output_filename}")

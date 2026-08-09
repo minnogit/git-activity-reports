@@ -512,7 +512,7 @@ def main():
                bbox_to_anchor=(0.5, 0.005))
 
     fig.tight_layout(rect=[0, 0.05, 1, 0.955])
-    fig.savefig(OUTPUT_FILENAME, dpi=110)
+    fig.savefig(OUTPUT_FILENAME, dpi=200)
     # Messaggio invariato: l'estensione VS Code lo intercetta via regex.
     print(f"Grafico generato con successo: {OUTPUT_FILENAME}")
 
