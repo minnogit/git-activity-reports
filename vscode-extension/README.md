@@ -13,54 +13,66 @@ Questa estensione per Visual Studio Code genera report visivi sull'attività Git
 
 ## Installazione
 
-### Prerequisiti
+L'estensione non contiene la logica di analisi: al momento di eseguire un comando invoca
+gli script bash/Python del repository come processo figlio. Non basta installare
+l'estensione da sola — serve anche che questi script siano raggiungibili, in uno dei due
+modi descritti sotto. Il codice li cerca in quest'ordine (`resolveRunner` in
+`src/extension.ts`): prima accanto alla cartella dell'estensione (modalità sviluppo),
+poi `gitstats`/`gitstats-multi` nel `PATH` (modalità installata via pacchetto).
+
+### Prerequisiti (in entrambi i casi)
 
 - [Visual Studio Code](https://code.visualstudio.com/) versione 1.80.0 o superiore.
-- [Node.js](https://nodejs.org/) per la compilazione (se stai sviluppando).
-- Strumenti Git installati sul sistema.
-- Script bash (`gitstat.sh` e `gitstat-multi.sh`) posizionati nella directory genitore dell'estensione (vedi sezione Sviluppo).
+- Git installato sul sistema.
+- **Python 3 con `pandas` e `matplotlib`** — i comandi `gitstat(-multi).sh`/
+  `gitstats(-multi)` sono una pipe verso `plot_git.py`/`plot_multiproject.py`: senza
+  queste dipendenze la generazione del grafico fallisce anche se il resto funziona.
+- [Node.js](https://nodejs.org/) solo se compili l'estensione da sorgente.
 
-### Installazione dall'Estensione Compilata
+### Opzione A — Pacchetto CLI installato sul sistema + estensione da VSIX
 
-1. **Compila l'Estensione** (se non l'hai già fatto):
-   - Nella root del progetto, esegui:
+Questa è l'opzione per un utilizzo "normale" (non da sviluppatore dell'estensione):
 
-     ```bash
-     npm install
-     npm run compile
-     ```
-
-2. **Impacchetta l'Estensione**:
-   - Installa `vsce` se non l'hai già:
-
-     ```bash
-     npm install -g vsce
-     ```
-
-   - Crea il pacchetto `.vsix`:
-
-     ```bash
-     vsce package
-     ```
-
-     Questo genera un file come `git-activity-reports-0.1.0.vsix`.
-
-3. **Installa in VSCode**:
-   - Apri VSCode.
-   - Vai su Extensions (Ctrl+Shift+X).
-   - Clicca sull'icona ingranaggio > "Install from VSIX...".
-   - Seleziona il file `.vsix` creato.
-   - Riavvia VSCode.
-
-   Alternativa da terminale:
+1. Installa gli script sul sistema con il pacchetto `.deb` del repository principale
+   (workflow `.github/workflows/build-deb.yml`, si attiva sui tag `v*`), oppure copiando
+   a mano `git_stats_collector.sh`, `git_multiproject_stats_collector.sh`, `plot_git.py`,
+   `plot_multiproject.py` in una cartella nel `PATH` e rinominando `gitstat.sh`/
+   `gitstat-multi.sh` in `gitstats`/`gitstats-multi` nella stessa cartella.
+2. Verifica che siano raggiungibili: `command -v gitstats && command -v gitstats-multi`.
+3. Impacchetta e installa l'estensione:
 
    ```bash
-   code --install-extension percorso/del/file.vsix
+   cd vscode-extension
+   npm install -g vsce   # se non l'hai già
+   npm install
+   npm run compile
+   vsce package          # genera git-activity-reports-<versione>.vsix
+   code --install-extension git-activity-reports-<versione>.vsix
    ```
 
-### Installazione dal Marketplace (se pubblicata)
+   In alternativa, da VS Code: Extensions (Ctrl+Shift+X) → icona ingranaggio →
+   "Install from VSIX..." → seleziona il file generato.
 
-Se l'estensione è pubblicata su VSCode Marketplace, cercala come "Git Activity Reports" e installala direttamente dalle Extensions.
+**Nota importante:** il file `.vsix` contiene SOLO i file dell'estensione stessa — `vsce
+package` non può includere script che vivono nella cartella genitrice del repository, e
+un'estensione installata da VSIX finisce in `~/.vscode/extensions/...`, scollegata dal
+checkout. Per questo il passo 1 (script raggiungibili dal `PATH`) è necessario, non
+opzionale: senza di esso l'estensione mostra l'errore "Script non trovato" al primo
+utilizzo.
+
+### Opzione B — Modalità sviluppo (esecuzione da dentro il checkout del repo)
+
+Utile se stai modificando l'estensione o non vuoi installare nulla stabilmente:
+
+1. Clona il repository (l'estensione deve restare nella sua posizione, `vscode-extension/`,
+   accanto a `gitstat.sh`/`gitstat-multi.sh`).
+2. `cd vscode-extension && npm install && npm run compile`.
+3. Premi `F5` in VS Code: si apre una finestra "Extension Development Host" con
+   l'estensione già attiva, che userà gli script del checkout senza bisogno del `PATH`.
+
+### Marketplace
+
+L'estensione non è pubblicata su VS Code Marketplace.
 
 ## Uso
 
@@ -89,7 +101,9 @@ Puoi personalizzare le date di analisi nelle impostazioni di VSCode:
 - `src/extension.ts`: Codice principale dell'estensione in TypeScript.
 - `package.json`: Metadati e configurazione dell'estensione.
 - `out/`: File JavaScript compilati (generati da TypeScript).
-- Script bash: `gitstat.sh` e `gitstat-multi.sh` (devono essere nella directory genitore dell'estensione per il funzionamento).
+- Script bash: `gitstat.sh` e `gitstat-multi.sh`, nella directory genitore dell'estensione
+  — usati in modalità sviluppo (vedi Opzione B sopra); in produzione si usa invece il
+  fallback su `gitstats`/`gitstats-multi` nel `PATH` (`resolveRunner` in `extension.ts`).
 
 ### Come Contribuire
 

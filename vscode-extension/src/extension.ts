@@ -102,6 +102,41 @@ function findAllGitRepos(basePath: string, maxDepth: number = 3, currentDepth: n
     return repos;
 }
 
+// Verifica se un comando è risolvibile dal PATH (es. `gitstats`/`gitstats-multi`
+// installati dal pacchetto .deb in /usr/local/bin) senza invocare una shell.
+function commandExistsOnPath(cmd: string): boolean {
+    try {
+        cp.execFileSync('which', [cmd], { stdio: 'ignore' });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// Risolve come lanciare l'analisi in due modi, in ordine di preferenza:
+//   1. Modalità sviluppo: gitstat(-multi).sh accanto alla cartella dell'estensione
+//      (l'estensione eseguita da dentro il checkout del repo, o accanto agli script).
+//   2. Modalità installata: gitstats/gitstats-multi risolti dal PATH, come installati
+//      dal pacchetto .deb (.github/workflows/build-deb.yml) — necessario perché
+//      un'estensione installata da .vsix NON ha gli script bash del repo accanto a sé
+//      (context.extensionPath punta a ~/.vscode/extensions/..., non al checkout): senza
+//      questo fallback l'installazione da .vsix/Marketplace non può funzionare.
+function resolveRunner(context: vscode.ExtensionContext, isMulti: boolean):
+    { cmd: string; baseArgs: string[] } | null {
+    const devScriptName = isMulti ? 'gitstat-multi.sh' : 'gitstat.sh';
+    const devScriptPath = path.join(context.extensionPath, '..', devScriptName);
+    if (fs.existsSync(devScriptPath)) {
+        return { cmd: 'bash', baseArgs: [devScriptPath] };
+    }
+
+    const pathCommand = isMulti ? 'gitstats-multi' : 'gitstats';
+    if (commandExistsOnPath(pathCommand)) {
+        return { cmd: pathCommand, baseArgs: [] };
+    }
+
+    return null;
+}
+
 async function runAnalysis(context: vscode.ExtensionContext, paths: string[]) {
     const config = vscode.workspace.getConfiguration('git-activity');
     const startDate = config.get<string>('startDate') || '30 days ago';
@@ -114,18 +149,22 @@ async function runAnalysis(context: vscode.ExtensionContext, paths: string[]) {
     }, async (progress) => {
         return new Promise<void>((resolve, reject) => {
             const isMulti = paths.length > 1;
-            const scriptName = isMulti ? 'gitstat-multi.sh' : 'gitstat.sh';
-            const scriptPath = path.join(context.extensionPath, '..', scriptName);
+            const runner = resolveRunner(context, isMulti);
 
-            if (!fs.existsSync(scriptPath)) {
-                vscode.window.showErrorMessage(`Script non trovato: ${scriptPath}`);
+            if (!runner) {
+                const devScriptName = isMulti ? 'gitstat-multi.sh' : 'gitstat.sh';
+                const pathCommand = isMulti ? 'gitstats-multi' : 'gitstats';
+                vscode.window.showErrorMessage(
+                    `Script non trovato: né ${devScriptName} accanto all'estensione (modalità sviluppo), ` +
+                    `né "${pathCommand}" nel PATH (installazione da pacchetto .deb). Vedi i Prerequisiti nel README.`
+                );
                 resolve();
                 return;
             }
 
             const args = isMulti ? [startDate, endDate, ...paths] : [startDate, endDate];
-            
-            cp.execFile('bash', [scriptPath, ...args], { cwd: paths[0] }, (error, stdout, stderr) => {
+
+            cp.execFile(runner.cmd, [...runner.baseArgs, ...args], { cwd: paths[0] }, (error, stdout, stderr) => {
                 if (error) {
                     vscode.window.showErrorMessage(`Errore nell'esecuzione: ${stderr || error.message}`);
                     resolve();
