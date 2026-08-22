@@ -298,6 +298,7 @@ Le chiavi devono combaciare esattamente con l'URL passato sulla riga di comando/
 | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `--fetch`    | -             | Abilita l'aggiornamento del repository con git fetch                                                                            |
 | `--repo`     | `<path\|url>` | Analizza questo repository invece della cartella corrente (vedi [Repository Remoti](#-repository-remoti-analizzare-un-url-git)) |
+| `--no-ownership` | -         | Salta il calcolo dell'ownership (git blame per file, solo formato `json`) — vedi [Interpretazione dei Grafici](#-interpretazione-dei-grafici) |
 | `-h, --help` | -             | Mostra l'help                                                                                                                   |
 
 ### Esempi - Singolo Repository
@@ -635,6 +636,20 @@ stimarle; per questo non è una quarta metrica nell'ordine di attendibilità sop
 un'informazione di natura diversa. L'ora è quella locale registrata nel commit (il fuso
 dell'autore, nessuna conversione a un fuso comune).
 
+**6. Righe possedute per autore (ownership)** — pannello aggiuntivo, presente solo se il
+JSON ha la chiave `ownership` (assente nei JSON prodotti con `--no-ownership` o da
+versioni precedenti del collector: il pannello viene saltato, non lasciato vuoto). A
+differenza di tutti gli altri pannelli, che sono serie temporali sull'attività nel
+periodo richiesto, questo è una **fotografia**: quante righe del repository, secondo
+`git blame`, sono state scritte per ultimo da ciascun autore all'ULTIMO COMMIT ≤ data
+fine (non l'HEAD corrente, per riproducibilità). Può quindi mostrare autori mai attivi
+nel periodo del report, se hanno ancora codice presente che nessuno ha più toccato.
+Nessuna esclusione di file generati/vendorizzati (stessa scelta fatta per il churn — vedi
+[Metriche Calcolate](#-metriche-calcolate)): coerente con il comportamento di default di
+git-fame, che lascia l'esclusione come opzione manuale (`--excl`) e non la applica in
+automatico. Il calcolo richiede un `git blame` per file (un'operazione per file è
+inevitabile) e può essere costoso su repository molto grandi — `--no-ownership` lo salta.
+
 ### Report Multi-Repository
 
 Stesso principio: giorni attivi per primo, churn (per progetto e nella ciambella) non
@@ -693,7 +708,15 @@ il formato precedente, per poter rielaborare file JSON salvati in passato.
         { "weekday": 0, "hour": 10, "commits": 2 }
       ]
     }
-  ]
+  ],
+  "ownership": {
+    "ref_commit": "abcdef0123...",
+    "ref_date": "2025-11-30",
+    "total_lines": 48213,
+    "by_author": [
+      { "author": "Mario Rossi", "lines": 30112, "pct": 62.45 }
+    ]
+  }
 }
 ```
 
@@ -705,6 +728,13 @@ dal range in `metadata`, quindi il tempo non viene compresso nel grafico.
 registrata nel commit — nessuna conversione a un fuso comune), aggregata su tutto il
 periodo richiesto. Assente nei JSON prodotti da versioni precedenti del collector; in
 quel caso il pannello corrispondente nel grafico viene saltato, non lasciato vuoto.
+
+`ownership` (assente con `--no-ownership`, o se non esiste alcun commit ≤ data fine):
+righe possedute per autore secondo `git blame` all'ULTIMO COMMIT ≤ data fine — una
+fotografia, non un'aggregazione sul periodo, quindi può includere autori mai attivi nel
+periodo richiesto. `ref_commit`/`ref_date` identificano il commit di riferimento;
+`total_lines` è il totale righe dell'albero a quel commit; `by_author` è ordinato per
+`lines` decrescente. Nessuna esclusione di file generati/vendorizzati.
 
 ### JSON Multi-Repository
 
@@ -885,6 +915,22 @@ per il perché (in breve: qualunque esclusione per directory può rompere il
 rilevamento dei rename di git). Se un repository specifico ha questo tipo di rumore,
 tienilo presente leggendo il churn — è la ragione per cui è la meno indicativa delle
 tre metriche del report.
+
+### Ownership del Codice (git blame)
+
+Solo per il formato `json` di `git_stats_collector.sh`, disattivabile con
+`--no-ownership`. Risponde a una domanda diversa dal resto del report: non "chi ha
+lavorato nel periodo" (serie temporale) ma "di chi è il codice presente nell'albero",
+secondo `git blame`, all'**ultimo commit ≤ data fine** (non l'HEAD corrente — rende il
+risultato riproducibile rieseguendo lo stesso report in futuro). Nessuna esclusione
+automatica di file generati/vendorizzati, stessa scelta fatta per il churn e coerente
+con il comportamento di default di git-fame.
+
+Un `git blame` per file è inevitabile (git non offre un comando equivalente per l'intero
+albero in una sola invocazione): il collector parallelizza le chiamate con `xargs -P`
+(fino a `nproc` processi), misurato ~6x più rapido di un'esecuzione sequenziale su un
+repository reale da oltre 3000 file. Su repository molto grandi il costo può restare
+significativo: usa `--no-ownership` per saltarlo.
 
 ### Gestione Date
 

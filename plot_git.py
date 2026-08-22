@@ -37,7 +37,7 @@ un aggregato di periodo lo saturava, appiattendo tutti gli autori sullo stesso v
 ATTENZIONE: sono indicatori di attività, non misure di produttività o di qualità.
 Code review, design, mentoring e debugging difficile sono strutturalmente invisibili.
 
-PUNCH CARD (quinto pannello, opzionale)
+PUNCH CARD (pannello opzionale)
 ----------------------------------------
 Un riquadro aggiuntivo mostra QUANDO avvengono i commit (giorno della settimana × ora
 locale del commit), aggregato su tutti gli autori del report. Non è una quarta metrica
@@ -47,6 +47,18 @@ quindi il pannello non tenta di stimarle. Presente solo se il JSON in input cont
 campo `punch_card` per almeno un autore (i JSON prodotti da versioni precedenti di
 git_stats_collector.sh non lo hanno; in quel caso il pannello viene saltato, non
 lasciato vuoto).
+
+OWNERSHIP (pannello opzionale)
+----------------------------------------
+Un riquadro aggiuntivo mostra, per autore, quante righe del repository sono "possedute"
+secondo `git blame` all'ULTIMO COMMIT ≤ end_date (fotografia, non serie temporale: a
+differenza di tutto il resto del report non risponde a "chi ha lavorato nel periodo" ma
+a "di chi è il codice presente nell'albero in quel momento"). Può includere autori mai
+attivi nel periodo richiesto, se hanno ancora codice presente e non toccato da nessuno.
+Nessuna esclusione di file generati/vendorizzati (stessa scelta fatta per il churn — vedi
+git_stats_collector.sh). Presente solo se il JSON in input contiene la chiave
+`ownership` (assente nei JSON prodotti con --no-ownership o da versioni precedenti dello
+script; in quel caso il pannello viene saltato, non lasciato vuoto).
 """
 
 import json
@@ -514,6 +526,61 @@ def punch_card_caption(punch):
             f"({int(punch[wd, hr])} commit) · Weekend: {weekend/total*100:.0f}% del totale")
 
 
+def panel_ownership(ax, ownership, colors):
+    """Righe possedute per autore (git blame), FOTOGRAFIA a fine periodo, non serie
+    temporale come gli altri pannelli: risponde a "di chi è il codice oggi", non "chi ha
+    lavorato quando". Può includere autori mai attivi nel periodo del report (hanno
+    scritto codice ancora presente, nessuno lo ha più toccato) — stesso trattamento
+    cromatico di ogni pannello: chi non è tra i primi 8 per attività nel periodo si
+    accorpa in "Altro", mai una tinta nuova generata solo per l'ownership.
+    """
+    folded = {}
+    for entry in ownership.get("by_author", []):
+        name = entry["author"] if entry["author"] in colors else OTHER_LABEL
+        folded[name] = folded.get(name, 0) + entry.get("lines", 0)
+
+    names = sorted(folded, key=lambda n: folded[n])   # ascendente: barh mette il max in alto
+    values = [folded[n] for n in names]
+    total = sum(values) or 1
+
+    y = np.arange(len(names))
+    ax.barh(
+        y, values, height=0.6, color=[colors[n] for n in names],
+        edgecolor=SURFACE, linewidth=0.6,
+    )
+    ax.set_yticks(y)
+    ax.set_yticklabels(names, fontsize=9, color=INK_SECONDARY)
+    ax.set_title("Righe possedute per autore (fotografia a fine periodo)", fontsize=12,
+                 color=INK_PRIMARY, loc="left", pad=10)
+    ax.set_xlabel("Righe (git blame)", fontsize=9)
+    ax.set_axisbelow(True)
+    ax.grid(axis="x", color=GRIDLINE, linewidth=0.8, linestyle="-")
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color(BASELINE)
+    ax.spines["bottom"].set_linewidth(0.8)
+    ax.tick_params(length=0, labelsize=9)
+    thousands(ax, axis="x")
+    for yi, v in zip(y, values):
+        pct = v / total * 100
+        label = f" {int(v):,}".replace(",", ".") + f" ({pct:.0f}%)"
+        ax.text(v, yi, label, va="center", ha="left", fontsize=9, color=INK_SECONDARY)
+
+
+def ownership_caption(ownership):
+    """Ripiego testuale: chiarisce che questo pannello è un'istantanea (git blame a un
+    commit preciso), non un'aggregazione sul periodo come tutti gli altri — altrimenti
+    la lettura più naturale (percentuali che sommano sempre esattamente al periodo) è
+    quella sbagliata."""
+    ref = (ownership.get("ref_commit") or "")[:8]
+    ref_date = ownership.get("ref_date") or "?"
+    total = int(ownership.get("total_lines", 0))
+    total_s = f"{total:,}".replace(",", ".")
+    return (f"Istantanea al commit {ref} del {ref_date} · {total_s} righe totali "
+            f"(git blame, nessuna esclusione) · non è una somma sul periodo: può "
+            f"includere autori non attivi in questo report")
+
+
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
@@ -561,14 +628,27 @@ def main():
         "indice": df.groupby("author")["index"].sum(),
     }).fillna(0).sort_values("churn", ascending=False)
 
+    ownership = payload.get("ownership") if isinstance(payload, dict) else None
+    has_ownership = bool(ownership and ownership.get("total_lines"))
+
     apply_style()
-    # Il punch card e' una striscia larga e bassa (24 ore x 7 giorni), non un quadrante
-    # quadrato: una riga in piu' sotto la griglia 2x2 esistente, non un rimpiazzo di un
-    # pannello. Assente nei JSON legacy (senza punch_card): niente riga vuota in quel caso.
+    # Il punch card e l'ownership sono pannelli AGGIUNTIVI (righe extra sotto la griglia
+    # 2x2 esistente, non un rimpiazzo di un pannello): entrambi assenti nei JSON che non
+    # li hanno (legacy, o prodotti con --no-ownership) — niente riga vuota in quel caso.
+    # Ogni riga extra e' larga quanto tutta la figura (gs[row, :]): il punch card lo
+    # richiede per la sua forma (24 colonne orarie), l'ownership no ma resta coerente.
     has_punch = punch.sum() > 0
+    extra_rows = []
     if has_punch:
-        fig = plt.figure(figsize=(17, 14))
-        gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 0.7], hspace=0.65, wspace=0.22)
+        extra_rows.append(("punch", 0.7))
+    if has_ownership:
+        extra_rows.append(("ownership", 0.6))
+
+    n_extra = len(extra_rows)
+    if n_extra:
+        fig = plt.figure(figsize=(17, 11 + 3 * n_extra))
+        ratios = [1, 1] + [r for _, r in extra_rows]
+        gs = fig.add_gridspec(2 + n_extra, 2, height_ratios=ratios, hspace=0.65, wspace=0.22)
     else:
         fig = plt.figure(figsize=(17, 11))
         gs = fig.add_gridspec(2, 2, hspace=0.45, wspace=0.22)
@@ -601,13 +681,22 @@ def main():
     ax4 = fig.add_subplot(gs[1, 1])
     panel_table(ax4, summary)
 
+    row = 2
     if has_punch:
-        ax5 = fig.add_subplot(gs[2, :])
+        ax5 = fig.add_subplot(gs[row, :])
         panel_punch_card(ax5, punch)
         caption = punch_card_caption(punch)
         if caption:
             ax5.text(0, -0.34, caption, transform=ax5.transAxes, fontsize=8,
                      color=INK_MUTED, va="top")
+        row += 1
+
+    if has_ownership:
+        ax6 = fig.add_subplot(gs[row, :])
+        panel_ownership(ax6, ownership, colors)
+        ax6.text(0, -0.28, ownership_caption(ownership), transform=ax6.transAxes,
+                 fontsize=8, color=INK_MUTED, va="top")
+        row += 1
 
     # Una sola legenda per tutta la figura: l'identità autore è la stessa in ogni pannello.
     # Gli autori vengono prima, il trend per ultimo (non è una serie di dati). Le handle si
@@ -616,7 +705,7 @@ def main():
     paired = sorted(zip(labs, handles), key=lambda p: p[0].startswith("Trend"))
     labs = [p[0] for p in paired]
     handles = [p[1] for p in paired]
-    legend_y = 0.02 if has_punch else 0.005
+    legend_y = 0.02 if n_extra else 0.005
     fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
                fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
                bbox_to_anchor=(0.5, legend_y))
@@ -624,7 +713,12 @@ def main():
     if has_punch:
         # tight_layout non gestisce bene gli assi aggiuntivi della colorbar (avvisa "Axes
         # that are not compatible") e lascia un vuoto ingiustificato prima dell'heatmap:
-        # margini espliciti invece di combatterlo.
+        # margini espliciti invece di combatterlo. Vale anche con l'ownership aggiunta:
+        # è la colorbar del punch card a essere incompatibile, non il numero di righe.
+        fig.subplots_adjust(left=0.045, right=0.97, top=0.94, bottom=0.09, hspace=0.5, wspace=0.22)
+    elif has_ownership:
+        # Nessuna colorbar in questo caso (solo barh), ma i margini di tight_layout
+        # calcolati per 2 righe non si adattano bene a una terza: stessi margini espliciti.
         fig.subplots_adjust(left=0.045, right=0.97, top=0.94, bottom=0.09, hspace=0.5, wspace=0.22)
     else:
         fig.tight_layout(rect=[0, 0.05, 1, 0.955])
