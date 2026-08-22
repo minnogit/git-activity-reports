@@ -229,7 +229,14 @@ function showImageInWebview(context: vscode.ExtensionContext, imagePath: string)
         }
     );
 
-    const imageUri = panel.webview.asWebviewUri(vscode.Uri.file(imagePath));
+    // Cache-busting: il collector/plotter scrive sempre lo stesso nome file (es.
+    // git_stats.png) — è un contratto usato anche da riga di comando, non va cambiato
+    // solo per questa estensione. Ma un URI identico a run precedenti rischia di essere
+    // servito dalla cache della webview (Chromium) anche se il contenuto del file è
+    // cambiato: una query string con il timestamp di generazione rende ogni run un URI
+    // diverso, senza toccare il file né il suo nome.
+    const imageUri = panel.webview.asWebviewUri(vscode.Uri.file(imagePath))
+        .with({ query: `t=${Date.now()}` });
 
     panel.webview.html = `
         <!DOCTYPE html>

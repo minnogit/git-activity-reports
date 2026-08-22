@@ -301,6 +301,13 @@ il PNG risultante in una webview. Punti chiave:
   fabbrica falliva SEMPRE al primo utilizzo (era così fino a che non è stato corretto: verificare
   di nuovo se si tocca `resolveDate`/`runAnalysis`). Se `date -d` non riconosce il valore
   configurato, messaggio d'errore esplicito invece di passarlo comunque al collector.
+- `showImageInWebview()`: il PNG generato ha sempre lo stesso nome (`git_stats.png` ecc. — un
+  contratto usato anche da riga di comando, non cambiato per questa estensione, vedi
+  "Nessun pathspec di esclusione"/metriche sopra per lo stesso principio applicato altrove).
+  Un URI identico a run precedenti rischia però di essere servito dalla cache della webview
+  anche se il contenuto del file è cambiato: l'URI passato a `<img src>` porta quindi una query
+  string col timestamp di generazione (`imageUri.with({ query: 't=' + Date.now() })`), che rende
+  ogni run un URI diverso senza toccare il file né il suo nome.
 
 ## Note per modifiche
 
