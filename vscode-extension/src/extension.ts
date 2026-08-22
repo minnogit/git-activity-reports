@@ -81,7 +81,9 @@ function findClosestGitRepo(startPath: string): string | null {
 
 function findAllGitRepos(basePath: string, maxDepth: number = 3, currentDepth: number = 0): string[] {
     const repos: string[] = [];
-    if (currentDepth > maxDepth) return repos;
+    if (currentDepth > maxDepth) {
+        return repos;
+    }
 
     try {
         if (fs.existsSync(path.join(basePath, '.git'))) {

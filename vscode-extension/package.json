@@ -1,0 +1,67 @@
+{
+  "name": "git-activity-reports",
+  "displayName": "Git Activity Reports",
+  "description": "Visualizza statistiche e grafici di attività Git per i tuoi progetti.",
+  "version": "0.1.0",
+  "publisher": "minnoit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/minnogit/git-activity-reports.git"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "git-activity.analyzeProject",
+        "title": "Git Activity: Analizza Progetto Corrente",
+        "category": "Git Activity"
+      },
+      {
+        "command": "git-activity.analyzeWorkspace",
+        "title": "Git Activity: Analizza Tutto il Workspace (Multi-Repo)",
+        "category": "Git Activity"
+      }
+    ],
+    "configuration": {
+      "title": "Git Activity Reports",
+      "properties": {
+        "git-activity.startDate": {
+          "type": "string",
+          "default": "30 days ago",
+          "description": "Data di inizio per l'analisi (es. YYYY-MM-DD o '30 days ago')"
+        },
+        "git-activity.endDate": {
+          "type": "string",
+          "default": "now",
+          "description": "Data di fine per l'analisi (es. YYYY-MM-DD o 'now')"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "16.x",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^5.59.8",
+    "@typescript-eslint/parser": "^5.59.8",
+    "@vscode/test-electron": "^3.1.0",
+    "eslint": "^8.41.0",
+    "mocha": "^10.8.2",
+    "typescript": "^5.1.3"
+  }
+}

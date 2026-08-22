@@ -1,14 +1,20 @@
 *.png
 
-# Eventuali file JSON di dati grezzi salvati manualmente (es. con "> file.json")
-# Se salvi il JSON intermedio in un file
-*.json 
+# Eventuali file JSON di dati grezzi salvati manualmente nella root del repo (es. con
+# "> file.json") o il file di alias personale (git-activity-aliases.json). Ancorato alla
+# root (/*.json, non *.json): un pattern non ancorato esclude *.json a QUALUNQUE profondità,
+# e ha nascosto per errore package.json/package-lock.json/tsconfig.json di vscode-extension/
+# dalla version control fin dall'inizio (mai stati committati, verificato con
+# "git log --all -- vscode-extension/package.json": nessun risultato) — chiunque clonasse
+# il repo da zero non avrebbe potuto fare `npm install` nell'estensione.
+/*.json
 
 # Ambiente virtuale (virtual environment)
 venv/
 .venv/
 
 .vscode/
+.vscode-test/
 project_list.txt
 node_modules/
 *.vsix

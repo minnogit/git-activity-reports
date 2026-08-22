@@ -44,6 +44,17 @@ npm run lint          # eslint src --ext ts
 npm test              # compile + lint + node ./out/test/runTest.js
 ```
 
+`npm run lint` richiede `.eslintrc.json` (ESLint 8.x, formato classico non flat-config — la
+versione installata non supporta `eslint.config.js`). `npm test` scarica un VS Code reale via
+`@vscode/test-electron` (~330 MB, la prima volta) per lanciarci dentro l'estensione e i test
+Mocha in `src/test/suite/`; in un ambiente con banda limitata o rete non raggiungibile può
+fallire per timeout sul download, non per un problema nel codice — verificare la banda prima di
+sospettare una regressione nei test stessi. Struttura minima: `src/test/runTest.ts` (avvia
+`@vscode/test-electron`), `src/test/suite/index.ts` (raccoglie ed esegue con Mocha i file
+`*.test.js` compilati, senza il pacchetto `glob` — una ricerca ricorsiva manuale basta per pochi
+file e evita di legare il progetto a un'API cambiata più volte tra le sue major), `src/test/
+suite/extension.test.ts` (fumo: l'estensione si attiva e registra i comandi previsti).
+
 ### Package Debian
 
 Il workflow `.github/workflows/build-deb.yml` si attiva sui tag `v*` e pacchettizza
