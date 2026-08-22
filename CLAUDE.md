@@ -292,11 +292,15 @@ il PNG risultante in una webview. Punti chiave:
 - Trova il PNG generato facendo match via regex sull'output testuale dei collector
   (`"Grafico generato con successo: ..."` / `"Report multi-progetto ... generato con successo: ..."`):
   se si cambia il messaggio di successo negli script bash, aggiornare anche queste regex.
-- I default di configurazione `git-activity.startDate`/`endDate` ("30 days ago"/"now") NON sono
-  risolti da nessuna parte in date reali prima di essere passati agli script, che validano con
-  un regex rigido `YYYY-MM-DD`: con la configurazione di fabbrica il primo utilizzo fallisce
-  sempre (verificato). Bug noto, non ancora corretto — non risolvere date relative assumendo che
-  funzioni già.
+- I default di configurazione `git-activity.startDate`/`endDate` sono date RELATIVE ("30 days
+  ago"/"now"), mentre gli script a valle validano con un regex rigido `YYYY-MM-DD` (git non sa
+  interpretare date relative): `resolveDate()` le risolve con `date -d <valore> +%Y-%m-%d`
+  PRIMA di invocare lo script, per ogni valore configurato (non solo i default) — usa `date -d`
+  e non un parser scritto a mano in TS, per restare sulla stessa semantica di GNU date già
+  richiesta da tutto il resto del progetto. Senza questa risoluzione, la configurazione di
+  fabbrica falliva SEMPRE al primo utilizzo (era così fino a che non è stato corretto: verificare
+  di nuovo se si tocca `resolveDate`/`runAnalysis`). Se `date -d` non riconosce il valore
+  configurato, messaggio d'errore esplicito invece di passarlo comunque al collector.
 
 ## Note per modifiche
 

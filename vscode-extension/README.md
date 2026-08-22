@@ -94,6 +94,13 @@ Puoi personalizzare le date di analisi nelle impostazioni di VSCode:
   - `Start Date`: Data di inizio (es. "2023-01-01" o "30 days ago").
   - `End Date`: Data di fine (es. "now" o "2023-12-31").
 
+Il valore può essere sia una data assoluta (`YYYY-MM-DD`) sia un'espressione relativa —
+qualunque cosa capisca `date -d` (GNU date): "yesterday", "2 weeks ago", "last monday",
+ecc. L'estensione la risolve in una data assoluta prima di ogni analisi, quindi rimane
+sempre riferita al giorno in cui lanci il comando (i default "30 days ago"/"now" indicano
+sempre l'ultimo mese, non una coppia di date fissa). Se il valore non è riconosciuto,
+l'estensione mostra un errore invece di passarlo comunque agli script sottostanti.
+
 ## Sviluppo
 
 ### Struttura del Progetto
