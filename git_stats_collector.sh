@@ -69,14 +69,21 @@
 #             "deleted": 170,
 #             "files": 6
 #           }
+#         ],
+#         "punch_card": [
+#           { "weekday": 1, "hour": 10, "commits": 2 }
 #         ]
 #       }
 #     ]
 #   }
 #
-#   Sono elencati solo i giorni con attività: il plotter ricostruisce i giorni vuoti
+#   Sono elencati solo i giorni/celle con attività: il plotter ricostruisce i giorni vuoti
 #   dal range in metadata. Per retrocompatibilità `plot_git.py` accetta ancora anche
-#   il vecchio formato (array JSON senza metadata).
+#   il vecchio formato (array JSON senza metadata, senza punch_card).
+#
+#   `punch_card`: distribuzione dei commit per giorno della settimana (0=lunedì..6=domenica,
+#   convenzione Python `date.weekday()`) e ora (0-23, ora locale registrata nel commit —
+#   nessuna conversione a un fuso comune), aggregata su tutto il periodo richiesto.
 #
 # REPOSITORY REMOTI (--repo):
 #   Senza --repo, lo script analizza il repository nella cartella corrente (comportamento storico).
@@ -371,7 +378,11 @@ except Exception:
 # -----------------------------------------------
 # Raccolta dati: UN SOLO git log, aggregazione in awk
 # -----------------------------------------------
-# Emette TSV: autore \t data \t commits \t added \t deleted \t files_distinti
+# Emette TSV: autore \t data \t ora \t commits \t added \t deleted \t files_distinti
+# "ora" (0-23) è l'ora locale registrata nel commit (fuso dell'autore, quello che git log
+# mostra di default) — nessuna conversione a un fuso comune, per restare semplice e
+# coerente con l'author-date già usata ovunque. Serve per il punch card giorno×ora nel
+# report; il giorno della settimana si deriva da "data" più a valle (python), non qui.
 collect_daily_tsv() {
     local alias_tsv="$1"
     # --since esteso indietro: filtriamo per author-date in awk, e la committer-date
@@ -381,7 +392,7 @@ collect_daily_tsv() {
     since_margin=$(date -d "$START_DATE -31 days" +%Y-%m-%d 2>/dev/null || echo "$START_DATE")
 
     git log --no-merges --since="$since_margin" \
-        --pretty=format:'%x01%H%x09%an%x09%ad' --date=short --numstat 2>/dev/null \
+        --pretty=format:'%x01%H%x09%an%x09%ad' --date=format:'%Y-%m-%d %H' --numstat 2>/dev/null \
     | awk -v start="$START_DATE" -v end="$END_DATE" -v aliasfile="$alias_tsv" '
         BEGIN {
             FS = "\t"; OFS = "\t"
@@ -394,13 +405,15 @@ collect_daily_tsv() {
             }
             active = 0
         }
-        # Riga di intestazione commit: \x01<hash>\t<autore>\t<author-date>
+        # Riga di intestazione commit: \x01<hash>\t<autore>\t<author-date> <ora>
         substr($0, 1, 1) == "\001" {
-            a = $2; d = $3
+            a = $2
+            split($3, dt, " ")
+            d = dt[1]; hour = dt[2] + 0
             # Filtro esatto sul periodo per AUTHOR-DATE (confronto lessicografico su YYYY-MM-DD)
             if (d >= start && d <= end) {
                 if (a in alias) a = alias[a]
-                cur = a SUBSEP d
+                cur = a SUBSEP d SUBSEP hour
                 commits[cur]++
                 authors[a] = 1
                 active = 1
@@ -424,10 +437,10 @@ collect_daily_tsv() {
         END {
             for (k in commits) {
                 split(k, kk, SUBSEP)
-                print kk[1], kk[2], commits[k], added[k] + 0, deleted[k] + 0, files[k] + 0
+                print kk[1], kk[2], kk[3], commits[k], added[k] + 0, deleted[k] + 0, files[k] + 0
             }
         }' \
-    | sort -t$'\t' -k1,1 -k2,2
+    | sort -t$'\t' -k1,1 -k2,2 -k3,3n
 }
 
 # -----------------------------------------------
@@ -439,35 +452,57 @@ emit_json() {
     # corretta anche con nomi autore contenenti virgolette, backslash o accenti.
     python3 -c '
 import sys, json, datetime
+from collections import defaultdict
 
 start, end, project = sys.argv[1], sys.argv[2], sys.argv[3]
-by_author = {}
+# by_author_day: righe per (autore, data), una per ogni ora con attività quel giorno —
+# vanno risommate per ricostruire il totale del giorno (daily_data non conosce le ore).
+by_author_day = defaultdict(list)
+# punch: conteggio commit per (autore, weekday 0=lunedì..6=domenica, ora 0-23), aggregato
+# su tutto il periodo — è il "quando" del punch card, non un dettaglio per giorno.
+punch = defaultdict(int)
+
 for line in sys.stdin:
     line = line.rstrip("\n")
     if not line:
         continue
     parts = line.split("\t")
-    if len(parts) < 6:
+    if len(parts) < 7:
         continue
-    author, date_s, commits, added, deleted, files = parts[:6]
-    entry = by_author.setdefault(author, [])
-    entry.append({
+    author, date_s, hour_s, commits, added, deleted, files = parts[:7]
+    commits = int(commits)
+    by_author_day[(author, date_s)].append({
+        "commits": commits, "added": int(added), "deleted": int(deleted), "files": int(files),
+    })
+    weekday = datetime.date.fromisoformat(date_s).weekday()
+    punch[(author, weekday, int(hour_s))] += commits
+
+daily_by_author = defaultdict(list)
+for (author, date_s), rows in by_author_day.items():
+    daily_by_author[author].append({
         "day": datetime.date.fromisoformat(date_s).strftime("%A"),
         "date": date_s,
-        "commits": int(commits),
-        "lines": int(added) + int(deleted),
-        "added": int(added),
-        "deleted": int(deleted),
-        "files": int(files),
+        "commits": sum(r["commits"] for r in rows),
+        "lines": sum(r["added"] + r["deleted"] for r in rows),
+        "added": sum(r["added"] for r in rows),
+        "deleted": sum(r["deleted"] for r in rows),
+        "files": sum(r["files"] for r in rows),
     })
 
+punch_by_author = defaultdict(list)
+for (author, weekday, hour), commits in punch.items():
+    if commits > 0:
+        punch_by_author[author].append({"weekday": weekday, "hour": hour, "commits": commits})
+
 data = []
-for author in sorted(by_author):
-    days = sorted(by_author[author], key=lambda r: r["date"])
+for author in sorted(daily_by_author):
+    days = sorted(daily_by_author[author], key=lambda r: r["date"])
+    punch_cells = sorted(punch_by_author.get(author, []), key=lambda c: (c["weekday"], c["hour"]))
     data.append({
         "author": author,
         "total_commits": sum(r["commits"] for r in days),
         "daily_data": days,
+        "punch_card": punch_cells,
     })
 
 json.dump({
@@ -495,11 +530,13 @@ emit_text() {
 
     awk -F'\t' '
         {
+            # Campo 3 e` la ora del giorno: qui non serve, la somma per data la assorbe
+            # (piu` righe per lo stesso giorno, una per ora con attivita, si aggregano su d).
             d = $2
-            commits[d] += $3; added[d] += $4; deleted[d] += $5; files[d] += $6
+            commits[d] += $4; added[d] += $5; deleted[d] += $6; files[d] += $7
             if (!(d in seen)) { seen[d] = 1; order[++n] = d }
-            tc += $3; ta += $4; td += $5; tf += $6
-            if ($3 > 0) activedays[d] = 1
+            tc += $4; ta += $5; td += $6; tf += $7
+            if ($4 > 0) activedays[d] = 1
         }
         END {
             # ordina le date (stringhe YYYY-MM-DD)

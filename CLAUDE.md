@@ -63,7 +63,10 @@ rieseguire il plot separatamente (`cat dati.json | python3 plot_git.py`).
 - **`git_stats_collector.sh`** → singolo repo, granularità **giornaliera**. Formato output `text` o `json`
   (flag posizionale), filtro opzionale per autore (match **esatto**), `--repo <path|url>` per analizzare
   un repo diverso dalla cwd. Output JSON: `{metadata: {start_date, end_date, project, date_basis},
-  data: [{author, total_commits, daily_data: [{day, date, commits, lines, added, deleted, files}]}]}`.
+  data: [{author, total_commits, daily_data: [{day, date, commits, lines, added, deleted, files}],
+  punch_card: [{weekday, hour, commits}]}]}`. `punch_card` (0=lunedì..6=domenica, ora locale del
+  commit) alimenta il quinto pannello "quando" di `plot_git.py`; assente nei JSON di versioni precedenti,
+  nel qual caso il pannello viene saltato (non lasciato vuoto).
 - **`git_multiproject_stats_collector.sh`** → più repo, per progetto+autore **con dettaglio giornaliero**.
   Sorgente repo: argomenti posizionali, oppure `--file <path>` (uno per riga, `#` = commento, supporta `~`
   e spazi). Output: `{metadata, data: [{project, author, commits, added, deleted, lines, files,
@@ -173,7 +176,14 @@ senza `metadata`) per poter rielaborare file vecchi.
   commit nel tempo per autore, churn nel tempo per autore (+ trend), giorni attivi per autore, tabella
   riepilogo. Churn non è più il primo pannello (vedi "Vincoli di raccolta", punto 5). **Granularità
   adattiva**: ≤45 giorni → giornaliera, ≤250 → settimanale, oltre → mensile (`choose_bucket()`); serve
-  perché una barra al giorno è illeggibile su periodi lunghi.
+  perché una barra al giorno è illeggibile su periodi lunghi. **Quinto pannello opzionale** (striscia
+  larga sotto la griglia 2×2, `panel_punch_card()`): heatmap giorno×ora di quando avvengono i commit,
+  sequenziale a una tinta (rampa blu di `palette.md`), presente solo se il JSON ha `punch_card`.
+  Deliberatamente descrittivo ("quando"), non valutativo ("quanto si è lavorato") — i timestamp dei
+  commit non sono un proxy affidabile delle ore lavorate, quindi non è una quarta metrica nell'ordine
+  di attendibilità sopra. `fig.tight_layout()` non gestisce bene gli assi della colorbar (avvisa
+  "Axes that are not compatible" e lascia un vuoto ingiustificato sopra il pannello): quando il quinto
+  pannello è presente si usa `fig.subplots_adjust()` con margini espliciti invece di `tight_layout()`.
 - **`plot_multiproject.py`** → `git_activity_multi_project_report_<start>_<end>.png`, 4 pannelli: giorni
   attivi per autore (primo), churn per progetto e autore, distribuzione del churn, tabella riepilogo per
   progetto.
