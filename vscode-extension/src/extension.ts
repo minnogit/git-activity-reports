@@ -204,7 +204,22 @@ async function runAnalysis(context: vscode.ExtensionContext, paths: string[]) {
                     return;
                 }
 
-                const outputMatch = stdout.match(/Grafico generato con successo: (.*\.png)/) || 
+                // Anche in caso di successo, stderr può contenere avvisi utili (es. "nessun
+                // commit trovato prima di...", ownership non calcolata, autore non trovato).
+                // stderr non è mai vuoto su una run normale (skip fetch, alias caricati, i
+                // warning di libreria di Python) — mostrare tutto ad ogni run sarebbe rumore
+                // che nasconde l'avviso vero: i collector prefissano SEMPRE con "Avviso:" ciò
+                // che è pensato per l'utente (vedi git_stats_collector.sh e
+                // git_multiproject_stats_collector.sh), quindi si filtra su quel prefisso.
+                const avvisi = stderr
+                    .split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.startsWith('Avviso:'));
+                if (avvisi.length > 0) {
+                    vscode.window.showWarningMessage(avvisi.join(' '));
+                }
+
+                const outputMatch = stdout.match(/Grafico generato con successo: (.*\.png)/) ||
                                    stdout.match(/Report multi-progetto .* generato con successo: (.*\.png)/);
                 
                 if (outputMatch && outputMatch[1]) {
@@ -226,7 +241,8 @@ function showImageInWebview(context: vscode.ExtensionContext, imagePath: string)
         'Git Activity Report',
         vscode.ViewColumn.One,
         {
-            enableScripts: true,
+            // Nessuno script nell'HTML sotto: enableScripts non serve, quindi non lo si
+            // concede (permesso non necessario è comunque un permesso da giustificare).
             localResourceRoots: [vscode.Uri.file(path.dirname(imagePath))]
         }
     );
@@ -240,11 +256,18 @@ function showImageInWebview(context: vscode.ExtensionContext, imagePath: string)
     const imageUri = panel.webview.asWebviewUri(vscode.Uri.file(imagePath))
         .with({ query: `t=${Date.now()}` });
 
+    // CSP raccomandata da VS Code per ogni webview: default-src 'none' nega tutto per
+    // default, poi si riapre solo ciò che serve — qui solo l'immagine (dal resource root
+    // sopra) e lo <style> inline già presente nell'HTML. Nessun script-src: non ce n'è
+    // bisogno, enableScripts non è stato concesso.
+    const csp = `default-src 'none'; img-src ${panel.webview.cspSource}; style-src 'unsafe-inline';`;
+
     panel.webview.html = `
         <!DOCTYPE html>
         <html lang="it">
         <head>
             <meta charset="UTF-8">
+            <meta http-equiv="Content-Security-Policy" content="${csp}">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Git Activity Report</title>
             <style>

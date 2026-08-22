@@ -318,7 +318,16 @@ il PNG risultante in una webview. Punti chiave:
   Un URI identico a run precedenti rischia però di essere servito dalla cache della webview
   anche se il contenuto del file è cambiato: l'URI passato a `<img src>` porta quindi una query
   string col timestamp di generazione (`imageUri.with({ query: 't=' + Date.now() })`), che rende
-  ogni run un URI diverso senza toccare il file né il suo nome.
+  ogni run un URI diverso senza toccare il file né il suo nome. Nessun `enableScripts` (l'HTML
+  non ne ha bisogno) e CSP esplicita (`default-src 'none'; img-src <cspSource>; style-src
+  'unsafe-inline'`) — nessun permesso concesso senza che serva.
+- `runAnalysis()`: stderr non è mai vuoto su una run riuscita (skip fetch, alias caricati,
+  warning di libreria Python) — mostrarlo integralmente ad ogni run sarebbe rumore che nasconde
+  un avviso vero. I collector prefissano SEMPRE con `"Avviso:"` ciò che è pensato per l'utente
+  (vedi `git_stats_collector.sh`/`git_multiproject_stats_collector.sh`): l'estensione filtra
+  stderr su quel prefisso e mostra solo quelle righe con `showWarningMessage`, anche quando il
+  processo termina con successo. Se si aggiunge un nuovo avviso in un collector pensato per
+  l'utente finale, usare lo stesso prefisso o non verrà mai mostrato nella webview.
 
 ## Note per modifiche
 
