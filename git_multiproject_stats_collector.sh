@@ -357,40 +357,36 @@ except Exception:
 }
 
 # -----------------------------------------------
-# Esclusioni (centralizzate: prima erano ripetute in ogni query)
+# Nessun pathspec di esclusione: DELIBERATO, non un'omissione.
 # -----------------------------------------------
-EXCLUDE_PATHSPEC=(
-    # Esclusione dichiarativa: salta i percorsi che il repository stesso marca in
-    # .gitattributes. Due attributi distinti, entrambi standard GitHub Linguist:
-    #   linguist-generated  -> codice PRODOTTO da un tool (client OpenAPI, migrazioni)
-    #   linguist-vendored   -> codice di TERZE PARTI copiato nel repo (una libreria)
-    # Usare l'etichetta giusta conta: sono la stessa cosa per git, ma per GitHub sono due
-    # segnali diversi nei diff delle PR. Serve la forma BOOLEANA di entrambi gli attributi:
-    # "linguist-generated=true" non viene intercettato dal pathspec magic di git (verificato).
-    # Attenzione: git confronta il pattern col percorso COME ERA in ogni commit, quindi se
-    # i file sono stati spostati vanno dichiarati anche i percorsi storici — dichiarare solo
-    # la destinazione peggiora il risultato (la sorgente riemerge come cancellazione intera).
-    # Nei repository senza .gitattributes questo pathspec non ha alcun effetto.
-    ":(exclude,attr:linguist-generated)"
-    ":(exclude,attr:linguist-vendored)"
-    ":(exclude)node_modules/*"
-    ":(exclude)dist/*"
-    ":(exclude)vendor/*"
-    ":(exclude)*.lock"
-    ":(exclude)*.min.js"
-    ":(exclude)bootstrap-italia/*"
-    ":(exclude)bootstrap/*"
-    ":(exclude).*"
-    ":(exclude).*/*"
-    ":(exclude)**/old/*"
-    ":(exclude)**/tmp/*"
-    ":(exclude)**/temp/*"
-    ":(exclude)package-lock.json"
-    ":(exclude)package.json"
-    ":(exclude)prisma/**/internal/*"
-    ":(exclude)prisma/**/client/*"
-    ":(exclude)**/generated/*"
-)
+# Fino alla v2.x, un pathspec (":(exclude)**/old/*", gli attributi .gitattributes
+# linguist-generated/-vendored, node_modules/dist/vendor/lock ecc.) veniva passato
+# direttamente a questo `git log`. Rimosso dopo aver misurato che qualunque pathspec di
+# DIRECTORY applicato a `git log --numstat` rompe il rilevamento rename quando il lato
+# SORGENTE di un file rinominato-con-modifiche cade sotto il pathspec e la destinazione
+# no: git non trova più il file "prima" nel diff filtrato e conta l'intera destinazione
+# come aggiunta pura. Misurato su un caso reale: un file da 431 righe di diff reale
+# veniva riportato come 6001 (14x), e un'intera giornata di lavoro passava da 2.066 a
+# 19.973 di churn (9.7x) — il trigger era `**/old/*`, un'esclusione di default, non
+# quelle "sofisticate" per Prisma/TCPDF che pure ne soffrivano.
+#
+# Nessun tool esaminato (statistiche di GitHub stesso, git-fame, GitStats) risolve questo
+# in modo robusto: GitHub non esclude affatto codice generato/vendorizzato dai suoi grafici
+# di additions/deletions; git-fame lascia un `--excl` manuale opzionale senza tentare il
+# rilevamento automatico; un maintainer di GitStats, alla stessa richiesta di funzionalità,
+# ha risposto che l'esclusione automatica "non è banale da implementare" — coerente con
+# quanto misurato qui. La scelta è quindi CONTARE TUTTO, senza pathspec: elimina il bug per
+# costruzione (nessuna directory è più esclusa, quindi nessun rename può romperla), al
+# prezzo di includere anche codice generato/vendorizzato nel churn. Per questo `churn` è
+# trattato come la meno indicativa delle tre metriche (vedi plot_multiproject.py) e non più
+# la prima in evidenza: repository con lock file o client generati molto voluminosi lo
+# mostreranno, ed è la ragione per non affidarsi al solo churn per leggere l'attività di un
+# repository. find_generated_candidates.sh resta nel progetto come strumento diagnostico
+# indipendente (utile per etichettare `.gitattributes` a beneficio di GitHub — collassare i
+# diff nelle PR — non più per pilotare le statistiche di questo tool).
+#
+# DAILY_CHURN_CAP nei plotter resta quindi l'UNICA protezione contro un outlier estremo
+# (es. un node_modules committato per errore): più importante di prima, non meno.
 
 # -----------------------------------------------
 # Analisi di un singolo progetto
@@ -430,8 +426,7 @@ analyze_project() {
     since_margin=$(date -d "$START_DATE -31 days" +%Y-%m-%d 2>/dev/null || echo "$START_DATE")
 
     git -C "$project_path" log --no-merges --since="$since_margin" \
-        --pretty=format:'%x01%H%x09%an%x09%ad' --date=short --numstat \
-        -- . "${EXCLUDE_PATHSPEC[@]}" 2>/dev/null \
+        --pretty=format:'%x01%H%x09%an%x09%ad' --date=short --numstat 2>/dev/null \
     | awk -v start="$START_DATE" -v end="$END_DATE" -v aliasfile="$alias_tsv" -v project="$project_name" '
         BEGIN {
             FS = "\t"; OFS = "\t"

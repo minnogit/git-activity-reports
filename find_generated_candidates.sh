@@ -105,9 +105,15 @@ cd "$REPO_PATH"
 # e in bash trattiamo tutto come stringa (%s), mai come numero (%f).
 fmt1() { awk -v n="$1" 'BEGIN{printf "%.1f", n}'; }
 
-# Stessa lista di esclusioni di default dei collector (duplicata di proposito, come il
-# resto del progetto: vedi CLAUDE.md). Qui NON includiamo gli :(exclude,attr:...) — è
-# proprio quello che stiamo cercando di scoprire.
+# Lista SOLO di questo script, non più condivisa con i collector: dalla v3.x
+# git_stats_collector.sh e git_multiproject_stats_collector.sh non applicano più alcun
+# pathspec di esclusione (vedi CLAUDE.md, "Vincoli di raccolta", punto 5 — qualunque
+# pathspec di directory può rompere il rilevamento rename di git). Qui l'esclusione
+# resta perché lo scopo di QUESTO script è diverso: guardare oltre il rumore già noto
+# per trovare cosa proporre come nuovo candidato. Per lo stesso motivo, però, i numeri
+# di churn che segue possono soffrire della stessa distorsione (un rename con un lato
+# sotto una di queste directory può gonfiare il percorso sopravvissuto) — trattali come
+# un aiuto per individuare candidati, non come cifre precise da citare altrove.
 EXCLUDE_PATHSPEC=(
     ":(exclude)node_modules/*"
     ":(exclude)dist/*"

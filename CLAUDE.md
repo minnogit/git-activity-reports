@@ -89,24 +89,30 @@ sviluppo; se si tocca la raccolta dati, verificarle di nuovo:
    filtro esatto sul periodo è fatto in awk (git non sa filtrare per author-date).
 4. **`files` = file distinti**, non righe di `--numstat`: lo stesso file in 3 commit conta 1, non 3.
    Contare gli eventi rendeva la metrica un proxy del numero di commit.
-5. **`:(exclude,attr:linguist-generated)` e `:(exclude,attr:linguist-vendored)`** in testa a
-   `EXCLUDE_PATHSPEC`: esclusione dichiarativa, dichiarata nel `.gitattributes` del repo analizzato
-   invece che indovinata qui. Due attributi standard GitHub Linguist distinti e non intercambiabili:
-   `linguist-generated` per codice *prodotto* da un tool (client OpenAPI, migrazioni),
-   `linguist-vendored` per codice di *terze parti* copiato nel repo (una libreria) — per git sono
-   equivalenti, per GitHub sono due segnali diversi nei diff delle PR. Su un repo reale (PHP + client
-   OpenAPI) `linguist-generated` da solo valeva il **51%** del churn, mentre la lista di default —
-   tarata su Node/Prisma — ne intercettava l'1,2%. Serve la forma **booleana** di entrambi gli
-   attributi: `linguist-generated=true` non è intercettato dal pathspec magic di git (verificato).
+5. **Nessun pathspec di esclusione passato a `git log`** — scelta deliberata, non un'omissione. Fino
+   alla v2.x veniva passato un `EXCLUDE_PATHSPEC` (`.gitattributes` `linguist-generated`/`-vendored`,
+   `node_modules/`, `dist/`, `vendor/`, `old/`, lock file...). **Rimosso** dopo aver misurato che
+   qualunque pathspec di DIRECTORY applicato a `git log --numstat` rompe il rilevamento rename quando
+   il lato SORGENTE di un file rinominato-con-modifiche cade sotto il pathspec e la destinazione no:
+   git non trova più il "prima" nel diff filtrato e conta l'intera destinazione come aggiunta pura.
+   Misurato: un file con 431 righe di diff reale riportato come 6.001 (14×), una giornata di lavoro da
+   2.066 a 19.973 di churn (9,7×) — il trigger era `**/old/*`, un'esclusione di default presente da
+   sempre, non solo quelle costruite su misura per Prisma/OpenAPI. Nessuno strumento comparabile
+   esaminato (i grafici di GitHub, git-fame, GitStats) risolve questo in modo robusto — coerentemente,
+   la scelta è contare tutto: elimina il bug per costruzione, e sposta `churn` a metrica meno
+   indicativa delle tre (non più il primo pannello dei report — vedi "Plotter Python" sotto).
+   `DAILY_CHURN_CAP` (vedi sotto) resta quindi l'unica protezione contro un outlier estremo.
 
-### `find_generated_candidates.sh` — trovare i candidati, non applicarli
+### `find_generated_candidates.sh` — diagnostico, indipendente dalle statistiche del tool
 
-Script diagnostico standalone (non chiamato da collector/plotter, non condivide codice con essi):
-analizza un repository e propone percorsi candidati a `linguist-generated`/`linguist-vendored`, con un
-livello di evidenza (FORTE/MEDIA/DEBOLE). **Non scrive `.gitattributes`, non modifica nulla** — questo è
-un vincolo di design deliberato, non una limitazione da rimuovere: durante lo sviluppo di questo stesso
-meccanismo una cartella di codice archiviato scritto a mano (`old/`) è stata classificata come "generata"
-per errore. Uno script che scrive automaticamente `.gitattributes` avrebbe committato quell'errore.
+Script standalone (non chiamato da collector/plotter, non condivide codice con essi): analizza un
+repository e propone percorsi candidati a `linguist-generated`/`linguist-vendored`, con un livello di
+evidenza (FORTE/MEDIA/DEBOLE). **Non pilota più le statistiche di questo tool** (vedi punto 5 sopra) —
+resta utile solo per chi vuole popolare `.gitattributes` a beneficio di GitHub stesso (collassa i diff
+nelle PR, percentuali di linguaggio del repo). **Non scrive `.gitattributes`, non modifica nulla** —
+vincolo di design deliberato: durante lo sviluppo di questo stesso meccanismo una cartella di codice
+archiviato scritto a mano (`old/`) è stata classificata come "generata" per errore, lo stesso genere di
+errore che, applicato automaticamente, avrebbe anche innescato il bug dei rename del punto 5.
 
 Logica in due fasi (non una sola: leggere solo la configurazione ATTUALE di un generatore non basta se
 l'output si è spostato nel tempo — la posizione attuale può avere churn quasi nullo mentre la storia vera
@@ -127,15 +133,19 @@ profondità diverse (radice del generatore E una sua sottocartella come `.../mod
 entrambe dalla ricerca storica, che registra il genitore immediato di ogni file trovato). Scartare le
 voci "meno specifiche" perdeva ambiguità reali tra le due radici invece di segnalarle.
 
-Due trappole da conoscere prima di toccare le esclusioni:
+Due trappole da conoscere se in futuro si passa di nuovo un pathspec a `git log` (es. per un uso mirato,
+non per le statistiche di default — vedi punto 5 sopra):
 
 - **I pattern si applicano al percorso come era in OGNI commit.** Escludere solo la posizione attuale
   di file spostati *peggiora* il risultato: la sorgente dello spostamento riemerge come cancellazione
   integrale (misurato: 2002 righe con filtro incompleto contro 1002 senza filtro). Per enumerare le
   posizioni storiche serve `--name-only --no-renames`, altrimenti git comprime i percorsi come
   `{vecchio => nuovo}` e le posizioni storiche restano invisibili.
-- **Gli spostamenti puri NON gonfiano il churn** (verificato: 0 righe, il rilevamento rename di git
-  funziona anche con i pathspec di esclusione) — non cercare di "correggere" un problema che non c'è.
+- **Gli spostamenti puri NON gonfiano il churn quando NESSUN pathspec è applicato** (verificato: 0
+  righe) — ma **qualunque pathspec di directory può romperlo** (punto 5 sopra): non basta escludere
+  "anche i percorsi storici", perché una directory esclusa può essere l'origine di una promozione
+  (un file che ne esce modificandosi) verso una destinazione non esclusa, in un punto della storia
+  imprevedibile in anticipo.
 
 Limite noto e non risolvibile per percorso: i commit da **squash/rebase merge** hanno un solo genitore,
 quindi `--no-merges` non li esclude e riportano il lavoro di altri sotto un solo autore (in un caso
@@ -159,12 +169,14 @@ Entrambi leggono JSON da stdin, quindi vanno sempre invocati in pipe da uno dei 
 JSON salvato precedentemente), non da soli. Entrambi accettano anche il formato JSON precedente (array
 senza `metadata`) per poter rielaborare file vecchi.
 
-- **`plot_git.py`** → `git_stats.png`, 4 pannelli: churn nel tempo per autore (+ trend), commit nel tempo
-  per autore, giorni attivi per autore, tabella riepilogo. **Granularità adattiva**: ≤45 giorni →
-  giornaliera, ≤250 → settimanale, oltre → mensile (`choose_bucket()`); serve perché una barra al giorno
-  è illeggibile su periodi lunghi.
-- **`plot_multiproject.py`** → `git_impact_multi_project_report_<start>_<end>.png`, 4 pannelli: churn per
-  progetto e autore, distribuzione del churn, giorni attivi per autore, tabella riepilogo per progetto.
+- **`plot_git.py`** → `git_stats.png`, 4 pannelli **in ordine di attendibilità, non di prima impressione**:
+  commit nel tempo per autore, churn nel tempo per autore (+ trend), giorni attivi per autore, tabella
+  riepilogo. Churn non è più il primo pannello (vedi "Vincoli di raccolta", punto 5). **Granularità
+  adattiva**: ≤45 giorni → giornaliera, ≤250 → settimanale, oltre → mensile (`choose_bucket()`); serve
+  perché una barra al giorno è illeggibile su periodi lunghi.
+- **`plot_multiproject.py`** → `git_activity_multi_project_report_<start>_<end>.png`, 4 pannelli: giorni
+  attivi per autore (primo), churn per progetto e autore, distribuzione del churn, tabella riepilogo per
+  progetto.
 
 #### Metriche (duplicate identiche nei due plotter — modificarle in entrambi)
 
@@ -174,8 +186,8 @@ churn  = added + DELETED_WEIGHT * deleted
 indice = Σ giorni [ W_CHURN*ln(1+min(churn_giorno, DAILY_CHURN_CAP)) + W_FILES*ln(1+file_distinti) ]
 ```
 
-Il report mostra **churn, commit e giorni attivi affiancati**; l'indice composito è deliberatamente
-relegato alla sola tabella. Tre proprietà da non regredire:
+Il report mostra **giorni attivi, commit e churn affiancati, in quest'ordine di attendibilità**;
+l'indice composito è deliberatamente relegato alla sola tabella. Tre proprietà da non regredire:
 
 - **Additivo, non moltiplicativo.** La vecchia forma `ln(added)*ln(files)` azzerava tutto se un fattore
   era 0 (una giornata di sole cancellazioni valeva 0) e premiava lo spread: un find/replace su 100 file
