@@ -710,16 +710,20 @@ def main():
                fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
                bbox_to_anchor=(0.5, legend_y))
 
-    if has_punch:
-        # tight_layout non gestisce bene gli assi aggiuntivi della colorbar (avvisa "Axes
-        # that are not compatible") e lascia un vuoto ingiustificato prima dell'heatmap:
-        # margini espliciti invece di combatterlo. Vale anche con l'ownership aggiunta:
-        # è la colorbar del punch card a essere incompatibile, non il numero di righe.
-        fig.subplots_adjust(left=0.045, right=0.97, top=0.94, bottom=0.09, hspace=0.5, wspace=0.22)
-    elif has_ownership:
-        # Nessuna colorbar in questo caso (solo barh), ma i margini di tight_layout
-        # calcolati per 2 righe non si adattano bene a una terza: stessi margini espliciti.
-        fig.subplots_adjust(left=0.045, right=0.97, top=0.94, bottom=0.09, hspace=0.5, wspace=0.22)
+    if n_extra:
+        # tight_layout calcola i margini dal testo EFFETTIVAMENTE renderizzato (incluse le
+        # etichette y lunghe come i nomi autore in "Giorni attivi"/"Righe possedute") — un
+        # margine sinistro fisso non si adatta e le tronca: misurato, "Gabriele Stringano"
+        # e "Massimo Raffaele" tagliati a "e Stringano"/"mo Raffaele" con left=0.045 fisso.
+        fig.tight_layout(rect=[0, 0.03, 1, 0.955])
+        # tight_layout lascia comunque un vuoto verticale ingiustificato sopra la prima riga
+        # extra con QUALUNQUE gridspec a >2 righe con altezze disomogenee (misurato: capita
+        # anche senza punch card/colorbar, quindi non è solo l'avviso "Axes that are not
+        # compatible" del punch card) — margine superiore fisso, riusando left/right/bottom
+        # già calcolati sopra (mai un valore fisso per quelli, per il motivo appena detto).
+        left, right, bottom = fig.subplotpars.left, fig.subplotpars.right, fig.subplotpars.bottom
+        fig.subplots_adjust(left=left, right=right, bottom=bottom, top=0.94,
+                             hspace=0.5, wspace=0.22)
     else:
         fig.tight_layout(rect=[0, 0.05, 1, 0.955])
     fig.savefig(OUTPUT_FILENAME, dpi=200)

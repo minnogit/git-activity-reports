@@ -190,10 +190,14 @@ senza `metadata`) per poter rielaborare file vecchi.
   sequenziale a una tinta (rampa blu di `palette.md`), presente solo se il JSON ha `punch_card`.
   Deliberatamente descrittivo ("quando"), non valutativo ("quanto si è lavorato") — i timestamp dei
   commit non sono un proxy affidabile delle ore lavorate, quindi non è una quarta metrica nell'ordine
-  di attendibilità sopra. `fig.tight_layout()` non gestisce bene gli assi della colorbar (avvisa
-  "Axes that are not compatible" e lascia un vuoto ingiustificato sopra il pannello): quando almeno
-  un pannello opzionale è presente si usa `fig.subplots_adjust()` con margini espliciti invece di
-  `tight_layout()`. **Sesto pannello opzionale** (`panel_ownership()`, striscia larga sotto gli altri):
+  di attendibilità sopra. Margini: quando almeno un pannello opzionale è presente si chiama PRIMA
+  `fig.tight_layout()` (calcola i margini dal testo effettivamente renderizzato — necessario perché
+  un margine sinistro fisso tronca le etichette y lunghe, es. nomi autore come "Gabriele Stringano":
+  misurato) e POI si corregge solo il margine superiore con `fig.subplots_adjust()`, riusando
+  `fig.subplotpars.left/right/bottom` già calcolati da tight_layout: qualunque gridspec a >2 righe
+  con altezze disomogenee lascia altrimenti un vuoto verticale ingiustificato sopra la prima riga
+  extra (misurato anche SENZA colorbar, quindi non è solo l'avviso "Axes that are not compatible"
+  del punch card). **Sesto pannello opzionale** (`panel_ownership()`, striscia larga sotto gli altri):
   barre orizzontali con le righe possedute per autore secondo `ownership` nel JSON — FOTOGRAFIA a
   fine periodo (git blame all'ultimo commit ≤ end_date), non una serie temporale come tutto il resto:
   può includere autori mai attivi nel periodo. Stessa palette/assegnazione colori degli altri
