@@ -625,6 +625,16 @@ molti commit con poco churn indica iterazione a piccoli passi, il contrario indi
 cambiamenti grossi e rari (o, dato che il churn non esclude nulla, anche solo un file
 generato/vendorizzato molto voluminoso — controlla sempre cosa c'è dietro un picco).
 
+**5. Quando avvengono i commit (giorno × ora)** — pannello aggiuntivo, presente solo se
+il JSON ha il campo `punch_card` (assente nei JSON prodotti da versioni precedenti del
+collector: il pannello viene saltato, non lasciato vuoto). È una griglia giorno della
+settimana × ora del giorno, colorata per numero di commit — **descrittivo, non
+valutativo**: dice *quando* succede l'attività, non *quanto* si è lavorato. I timestamp
+dei commit non sono un proxy affidabile delle ore lavorate, quindi non proviamo a
+stimarle; per questo non è una quarta metrica nell'ordine di attendibilità sopra, è
+un'informazione di natura diversa. L'ora è quella locale registrata nel commit (il fuso
+dell'autore, nessuna conversione a un fuso comune).
+
 ### Report Multi-Repository
 
 Stesso principio: giorni attivi per primo, churn (per progetto e nella ciambella) non
@@ -678,14 +688,23 @@ il formato precedente, per poter rielaborare file JSON salvati in passato.
           "deleted": 170,
           "files": 6
         }
+      ],
+      "punch_card": [
+        { "weekday": 0, "hour": 10, "commits": 2 }
       ]
     }
   ]
 }
 ```
 
-Sono elencati **solo i giorni con attività**: il plotter ricostruisce i giorni vuoti dal
-range in `metadata`, quindi il tempo non viene compresso nel grafico.
+Sono elencati **solo i giorni/celle con attività**: il plotter ricostruisce i giorni vuoti
+dal range in `metadata`, quindi il tempo non viene compresso nel grafico.
+
+`punch_card`: distribuzione dei commit per giorno della settimana (`weekday`, 0=lunedì..
+6=domenica, convenzione Python `date.weekday()`) e ora (`hour`, 0-23, ora locale
+registrata nel commit — nessuna conversione a un fuso comune), aggregata su tutto il
+periodo richiesto. Assente nei JSON prodotti da versioni precedenti del collector; in
+quel caso il pannello corrispondente nel grafico viene saltato, non lasciato vuoto.
 
 ### JSON Multi-Repository
 

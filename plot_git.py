@@ -36,6 +36,17 @@ un aggregato di periodo lo saturava, appiattendo tutti gli autori sullo stesso v
 
 ATTENZIONE: sono indicatori di attività, non misure di produttività o di qualità.
 Code review, design, mentoring e debugging difficile sono strutturalmente invisibili.
+
+PUNCH CARD (quinto pannello, opzionale)
+----------------------------------------
+Un riquadro aggiuntivo mostra QUANDO avvengono i commit (giorno della settimana × ora
+locale del commit), aggregato su tutti gli autori del report. Non è una quarta metrica
+in competizione con le tre sopra — è descrittivo ("quando"), non valutativo ("quanto" o
+"quanto bene"): i timestamp dei commit non sono un proxy affidabile delle ore lavorate,
+quindi il pannello non tenta di stimarle. Presente solo se il JSON in input contiene il
+campo `punch_card` per almeno un autore (i JSON prodotti da versioni precedenti di
+git_stats_collector.sh non lo hanno; in quel caso il pannello viene saltato, non
+lasciato vuoto).
 """
 
 import json
@@ -47,6 +58,7 @@ from datetime import date, timedelta
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.colors
 import matplotlib.ticker
 import matplotlib.pyplot as plt
 import numpy as np
@@ -187,12 +199,21 @@ def flatten(payload, aliases):
         sys.exit(1)
 
     rows = []
+    # Punch card (giorno della settimana × ora): aggregata su TUTTI gli autori del report,
+    # non serve per-autore, quindi si accumula qui indipendentemente da fold_tail/alias.
+    # Assente nel formato legacy (JSON senza metadata) e in JSON prodotti da versioni
+    # precedenti: resta a zero, il pannello viene saltato più a valle (vedi main()).
+    punch = np.zeros((7, 24), dtype=int)
     for entry in entries:
         author = entry.get("author_name") or entry.get("author") or "Sconosciuto"
         if aliases_needed:
             author = aliases.get(author, author)
         if author == "TOTALE":       # riga aggregata del formato testuale storico
             continue
+        for cell in entry.get("punch_card", []) or []:
+            wd, hr, c = cell.get("weekday"), cell.get("hour"), cell.get("commits", 0)
+            if wd is not None and hr is not None and 0 <= wd < 7 and 0 <= hr < 24:
+                punch[wd, hr] += int(c or 0)
         for day in entry.get("daily_data", []) or []:
             added = int(day.get("added", 0) or 0)
             deleted = int(day.get("deleted", 0) or 0)
@@ -220,7 +241,7 @@ def flatten(payload, aliases):
         meta["start_date"] = df["date"].min().strftime("%Y-%m-%d")
     if not meta.get("end_date"):
         meta["end_date"] = df["date"].max().strftime("%Y-%m-%d")
-    return df, meta
+    return df, meta, punch
 
 
 # -----------------------------------------------------------------------------
@@ -435,6 +456,64 @@ def panel_table(ax, summary):
             color=INK_MUTED, va="top", wrap=True)
 
 
+# Rampa sequenziale blu (passi 100→700 di palette.md, la stessa usata per la ciambella
+# multiprogetto): una tinta, chiaro→scuro, mai un arcobaleno.
+PUNCH_RAMP = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
+WEEKDAY_LABELS_IT = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
+
+
+def panel_punch_card(ax, punch):
+    """Punch card: quando avvengono i commit (giorno della settimana × ora locale del
+    commit, nessuna conversione a un fuso comune). Sequenziale a una tinta — la magnitudine
+    è quello che conta, non l'identità di una categoria. Nessuna etichetta per cella (la
+    regola è mai un numero su ogni punto): solo la cella di massimo, selettivamente. Essendo
+    un PNG statico senza hover, il ripiego di accessibilità per la scala di colore continua
+    è la riga di testo con i fatti salienti, aggiunta da chi chiama questa funzione.
+    """
+    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("punch_blue", PUNCH_RAMP)
+    im = ax.imshow(punch, aspect="auto", cmap=cmap, interpolation="nearest")
+
+    ax.set_yticks(range(7))
+    ax.set_yticklabels(WEEKDAY_LABELS_IT, fontsize=9, color=INK_SECONDARY)
+    ax.set_xticks(range(0, 24, 3))
+    ax.set_xticklabels([f"{h:02d}" for h in range(0, 24, 3)], fontsize=9, color=INK_MUTED)
+    ax.set_xlabel("Ora (locale del commit)", fontsize=9)
+    ax.set_title("Quando avvengono i commit (giorno × ora)", fontsize=12,
+                 color=INK_PRIMARY, loc="left", pad=10)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.tick_params(length=0)
+
+    # Gap fra le celle nel colore della superficie: stesso trattamento delle barre
+    # impilate, mai un bordo scuro attorno alla cella.
+    ax.set_xticks(np.arange(-0.5, 24, 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, 7, 1), minor=True)
+    ax.grid(which="minor", color=SURFACE, linewidth=1.5)
+    ax.tick_params(which="minor", length=0)
+
+    if punch.max() > 0:
+        wd, hr = np.unravel_index(np.argmax(punch), punch.shape)
+        ax.text(hr, wd, f"{int(punch[wd, hr])}", ha="center", va="center",
+                fontsize=9, color="white")
+
+    cbar = plt.colorbar(im, ax=ax, fraction=0.025, pad=0.012)
+    cbar.outline.set_visible(False)
+    cbar.ax.tick_params(length=0, labelsize=8, colors=INK_MUTED)
+    cbar.set_label("Commit", fontsize=8, color=INK_MUTED)
+
+
+def punch_card_caption(punch):
+    """Ripiego di accessibilità in testo: la scala di colore continua non è raggiungibile
+    da chi non distingue le tinte, e questo è un PNG statico senza hover/tooltip."""
+    total = int(punch.sum())
+    if total == 0:
+        return ""
+    wd, hr = np.unravel_index(np.argmax(punch), punch.shape)
+    weekend = int(punch[5:7, :].sum())  # Sab (5) + Dom (6)
+    return (f"Picco: {WEEKDAY_LABELS_IT[wd]} alle {hr:02d}-{(hr+1)%24:02d} "
+            f"({int(punch[wd, hr])} commit) · Weekend: {weekend/total*100:.0f}% del totale")
+
+
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
@@ -443,7 +522,7 @@ def main():
     aliases = load_aliases()
     if aliases and isinstance(payload, list):
         print(f"Caricati {len(aliases)} alias autore (JSON in formato legacy).")
-    df, meta = flatten(payload, aliases)
+    df, meta, punch = flatten(payload, aliases)
 
     start, end = meta["start_date"], meta["end_date"]
     project = meta.get("project") or git_project_name()
@@ -483,7 +562,17 @@ def main():
     }).fillna(0).sort_values("churn", ascending=False)
 
     apply_style()
-    fig = plt.figure(figsize=(17, 11))
+    # Il punch card e' una striscia larga e bassa (24 ore x 7 giorni), non un quadrante
+    # quadrato: una riga in piu' sotto la griglia 2x2 esistente, non un rimpiazzo di un
+    # pannello. Assente nei JSON legacy (senza punch_card): niente riga vuota in quel caso.
+    has_punch = punch.sum() > 0
+    if has_punch:
+        fig = plt.figure(figsize=(17, 14))
+        gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 0.7], hspace=0.65, wspace=0.22)
+    else:
+        fig = plt.figure(figsize=(17, 11))
+        gs = fig.add_gridspec(2, 2, hspace=0.45, wspace=0.22)
+
     title = "Attività di sviluppo"
     if project:
         title = f"{project} — {title}"
@@ -493,24 +582,32 @@ def main():
     # Commit per primo, churn per secondo: churn è la meno indicativa delle tre metriche
     # (include codice generato/vendorizzato/lock file — nessuna esclusione, vedi
     # git_stats_collector.sh) e non è più la prima cosa che si legge del report.
-    ax1 = fig.add_subplot(2, 2, 1)
+    ax1 = fig.add_subplot(gs[0, 0])
     panel_stacked_over_time(
         ax1, commits_pivot, colors, labels,
         f"Commit per {bucket_name}, per autore", "Commit",
     )
 
-    ax2 = fig.add_subplot(2, 2, 2)
+    ax2 = fig.add_subplot(gs[0, 1])
     panel_stacked_over_time(
         ax2, churn_pivot, colors, labels,
         f"Churn per {bucket_name}, per autore",
         "Righe (aggiunte + 0.4 × rimosse)", trend_window,
     )
 
-    ax3 = fig.add_subplot(2, 2, 3)
+    ax3 = fig.add_subplot(gs[1, 0])
     panel_active_days(ax3, summary, colors)
 
-    ax4 = fig.add_subplot(2, 2, 4)
+    ax4 = fig.add_subplot(gs[1, 1])
     panel_table(ax4, summary)
+
+    if has_punch:
+        ax5 = fig.add_subplot(gs[2, :])
+        panel_punch_card(ax5, punch)
+        caption = punch_card_caption(punch)
+        if caption:
+            ax5.text(0, -0.34, caption, transform=ax5.transAxes, fontsize=8,
+                     color=INK_MUTED, va="top")
 
     # Una sola legenda per tutta la figura: l'identità autore è la stessa in ogni pannello.
     # Gli autori vengono prima, il trend per ultimo (non è una serie di dati). Le handle si
@@ -519,11 +616,18 @@ def main():
     paired = sorted(zip(labs, handles), key=lambda p: p[0].startswith("Trend"))
     labs = [p[0] for p in paired]
     handles = [p[1] for p in paired]
+    legend_y = 0.02 if has_punch else 0.005
     fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
                fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
-               bbox_to_anchor=(0.5, 0.005))
+               bbox_to_anchor=(0.5, legend_y))
 
-    fig.tight_layout(rect=[0, 0.05, 1, 0.955])
+    if has_punch:
+        # tight_layout non gestisce bene gli assi aggiuntivi della colorbar (avvisa "Axes
+        # that are not compatible") e lascia un vuoto ingiustificato prima dell'heatmap:
+        # margini espliciti invece di combatterlo.
+        fig.subplots_adjust(left=0.045, right=0.97, top=0.94, bottom=0.09, hspace=0.5, wspace=0.22)
+    else:
+        fig.tight_layout(rect=[0, 0.05, 1, 0.955])
     fig.savefig(OUTPUT_FILENAME, dpi=200)
     # Messaggio invariato: l'estensione VS Code lo intercetta via regex.
     print(f"Grafico generato con successo: {OUTPUT_FILENAME}")
