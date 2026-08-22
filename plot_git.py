@@ -6,14 +6,22 @@ Legge da stdin il JSON prodotto da git_stats_collector.sh e genera git_stats.png
 METRICHE
 --------
 Non esiste un singolo numero che misuri il "valore" del lavoro di sviluppo, quindi
-questo report mostra TRE metriche affiancate invece di un punteggio unico:
+questo report mostra TRE metriche affiancate invece di un punteggio unico, in ordine
+di quanto sono attendibili — non di quanto sono impressionanti:
 
+  commit         Numero di commit (esclusi i merge). Primo pannello.
   churn          = aggiunte + 0.4 * rimozioni
                    Le rimozioni contano: cancellare codice morto è lavoro reale.
                    Il peso < 1 riflette che rimuovere costa in genere meno che scrivere.
-  commit         Numero di commit (esclusi i merge).
+                   È la meno indicativa delle tre: git_stats_collector.sh NON esclude
+                   codice generato, vendorizzato o lock file (vedi il commento in testa
+                   a quello script per il perché — in breve, qualunque esclusione basata
+                   su directory può rompere il rilevamento dei rename di git, misurato
+                   fino a 9.7x di inflazione su una singola giornata). Per questo non è
+                   più il primo pannello del report.
   giorni attivi  Giorni distinti con almeno un commit. È la metrica più robusta:
-                 non è gonfiabile né da un singolo commit enorme né da tanti micro-commit.
+                 non è gonfiabile né da un singolo commit enorme né da tanti micro-commit,
+                 e non risente in alcun modo di codice generato o file voluminosi.
 
 L'indice composito resta disponibile come metrica SECONDARIA (solo in tabella):
 
@@ -482,17 +490,20 @@ def main():
     fig.suptitle(f"{title}  ({start} → {end}, per {bucket_name})",
                  fontsize=16, color=INK_PRIMARY, x=0.02, ha="left", y=0.975)
 
+    # Commit per primo, churn per secondo: churn è la meno indicativa delle tre metriche
+    # (include codice generato/vendorizzato/lock file — nessuna esclusione, vedi
+    # git_stats_collector.sh) e non è più la prima cosa che si legge del report.
     ax1 = fig.add_subplot(2, 2, 1)
     panel_stacked_over_time(
-        ax1, churn_pivot, colors, labels,
-        f"Churn per {bucket_name}, per autore",
-        "Righe (aggiunte + 0.4 × rimosse)", trend_window,
+        ax1, commits_pivot, colors, labels,
+        f"Commit per {bucket_name}, per autore", "Commit",
     )
 
     ax2 = fig.add_subplot(2, 2, 2)
     panel_stacked_over_time(
-        ax2, commits_pivot, colors, labels,
-        f"Commit per {bucket_name}, per autore", "Commit",
+        ax2, churn_pivot, colors, labels,
+        f"Churn per {bucket_name}, per autore",
+        "Righe (aggiunte + 0.4 × rimosse)", trend_window,
     )
 
     ax3 = fig.add_subplot(2, 2, 3)
@@ -502,8 +513,9 @@ def main():
     panel_table(ax4, summary)
 
     # Una sola legenda per tutta la figura: l'identità autore è la stessa in ogni pannello.
-    # Gli autori vengono prima, il trend per ultimo (non è una serie di dati).
-    handles, labs = ax1.get_legend_handles_labels()
+    # Gli autori vengono prima, il trend per ultimo (non è una serie di dati). Le handle si
+    # prendono da ax2 (churn), l'unico pannello con la linea di trend disegnata sopra.
+    handles, labs = ax2.get_legend_handles_labels()
     paired = sorted(zip(labs, handles), key=lambda p: p[0].startswith("Trend"))
     labs = [p[0] for p in paired]
     handles = [p[1] for p in paired]

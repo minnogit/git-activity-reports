@@ -399,7 +399,8 @@ giornaliero), ideale per:
 **Note importanti:**
 
 - I merge commits sono esclusi dalle statistiche
-- File non rilevanti come node_modules, dist, vendor, lock files e file generati sono esclusi dalle statistiche
+- **Nessun file è escluso dal churn** (node_modules, lock file, codice generato compresi) — vedi
+  [Perché non escludiamo codice generato/vendorizzato](#perché-non-escludiamo-codice-generatovendorizzato-e-prima-lo-facevamo)
 - Le righe totali sono calcolate come: aggiunte + eliminate
 
 ### Sintassi Completa
@@ -598,10 +599,14 @@ tabella con i valori esatti. Non c'è un punteggio unico in primo piano, di prop
 
 ### Report Singolo Repository (`git_stats.png`)
 
+I pannelli sono ordinati per quanto sono attendibili, non per quanto sono
+impressionanti — churn è per ultimo, non per primo (vedi
+[Metriche Calcolate](#-metriche-calcolate) sul perché):
+
 | Pannello | Cosa mostra |
 |---|---|
-| 1. Churn nel tempo, per autore | Barre impilate + linea di trend (media mobile). Volume di cambiamento |
-| 2. Commit nel tempo, per autore | Barre impilate. Frequenza di consegna, indipendente dalla dimensione |
+| 1. Commit nel tempo, per autore | Barre impilate. Frequenza di consegna, indipendente dalla dimensione |
+| 2. Churn nel tempo, per autore | Barre impilate + linea di trend (media mobile). Volume di cambiamento, **senza esclusioni** |
 | 3. Giorni attivi per autore | La metrica più robusta: continuità del contributo |
 | 4. Riepilogo per autore | Tabella con churn, commit, giorni attivi, file, indice |
 
@@ -616,21 +621,25 @@ una barra al giorno diventa illeggibile su intervalli lunghi:
 
 **Insights tipici:** picchi prima dei rilasci, periodi di inattività, distribuzione del
 carico. Confrontare i pannelli 1 e 2 è spesso più informativo di ciascuno preso da solo:
-molto churn con pochi commit indica cambiamenti grossi e rari, il contrario indica
-iterazione a piccoli passi.
+molti commit con poco churn indica iterazione a piccoli passi, il contrario indica
+cambiamenti grossi e rari (o, dato che il churn non esclude nulla, anche solo un file
+generato/vendorizzato molto voluminoso — controlla sempre cosa c'è dietro un picco).
 
 ### Report Multi-Repository
 
+Stesso principio: giorni attivi per primo, churn (per progetto e nella ciambella) non
+più in prima posizione:
+
 | Pannello | Cosa mostra |
 |---|---|
-| 1. Churn per progetto e autore | Barre impilate. Dove si concentra il volume, e chi lavora su cosa |
-| 2. Distribuzione del churn | Quota per progetto (ciambella; barra 100% se i progetti sono < 3) |
-| 3. Giorni attivi per autore | Continuità del contributo, sommata sui progetti |
+| 1. Giorni attivi per autore | Continuità del contributo, sommata sui progetti |
+| 2. Churn per progetto e autore | Barre impilate. Dove si concentra il volume, **senza esclusioni** |
+| 3. Distribuzione del churn | Quota per progetto (ciambella; barra 100% se i progetti sono < 3) |
 | 4. Riepilogo per progetto | Tabella con churn, commit, giorni attivi, file, autori, indice |
 
-Un progetto può avere churn alto e indice basso (pochi commit molto grossi) o il
-contrario (attività distribuita su molti giorni): è la differenza che il vecchio
-punteggio unico nascondeva.
+Un progetto può avere churn alto e indice basso (pochi commit molto grossi, o un client
+generato molto voluminoso) o il contrario (attività distribuita su molti giorni): è la
+differenza che un punteggio unico nasconderebbe.
 
 **Colori:** ogni autore ha un colore fisso, coerente tra tutti i pannelli e assegnato in
 ordine di palette, non per rango. Oltre 8 autori la coda viene accorpata in "Altro"
@@ -850,16 +859,13 @@ contati **anche** per "Luca". Conseguenze pratiche:
 
 ### File Considerati
 
-- **Inclusi:** File di codice sorgente e altri file rilevanti per le statistiche
-- **Esclusi:**
-  - Directory `node_modules/*`
-  - Directory `dist/*`
-  - Directory `vendor/*`
-  - File `*.lock` (come package-lock.json, Gemfile.lock, ecc.)
-  - File `*.min.js`
-  - Directory `prisma/*`
-  - Directory `**/generated/*`
-- Questi file sono esclusi perché non rappresentano attività di sviluppo significativa
+**Tutti i file, senza esclusioni** — `node_modules`, lock file, client generati e
+librerie vendorizzate contano come qualsiasi altro file nel churn. Non è una svista:
+vedi [Perché non escludiamo codice generato/vendorizzato](#perché-non-escludiamo-codice-generatovendorizzato-e-prima-lo-facevamo)
+per il perché (in breve: qualunque esclusione per directory può rompere il
+rilevamento dei rename di git). Se un repository specifico ha questo tipo di rumore,
+tienilo presente leggendo il churn — è la ragione per cui è la meno indicativa delle
+tre metriche del report.
 
 ### Gestione Date
 
@@ -1125,113 +1131,81 @@ git-stats-tools/
 
 ## 🔧 Personalizzazione
 
-### Escludere il codice generato (consigliato: `.gitattributes`)
+### Perché non escludiamo codice generato/vendorizzato (e prima lo facevamo)
 
-Il codice auto-generato — client OpenAPI/Swagger, client Prisma, report di copertura,
-migrazioni — può dominare le statistiche: su un repository reale rappresentava il **51%**
-del churn misurato. Il modo migliore per escluderlo non è indovinare i percorsi nel tool,
-ma dichiararli **nel repository analizzato**, dove la verità è nota.
+Fino alla v2.x i collector escludevano codice generato/vendorizzato via `.gitattributes`
+(`linguist-generated`/`linguist-vendored`) più una lista di default (`node_modules/`,
+`dist/`, `vendor/`, `old/`, lock file...). **Rimosso**, dopo aver misurato un difetto
+strutturale, non un bug di una singola regola: **qualunque pathspec di esclusione basato
+su directory, applicato a `git log --numstat`, rompe il rilevamento dei rename di git**
+quando il lato *sorgente* di un file rinominato-con-modifiche cade sotto il pathspec e la
+destinazione no. Git non trova più il "prima" nel diff filtrato e conta l'intera
+destinazione come aggiunta pura, invece del solo diff reale.
 
-Nel `.gitattributes` del repository da analizzare:
+Misurato su un caso concreto: un file con 431 righe di modifica reale veniva riportato
+come 6.001 (14×), e un'intera giornata di lavoro passava da 2.066 a 19.973 di churn
+(9,7×). Il trigger era `**/old/*`, un'esclusione di default presente da sempre — non solo
+le esclusioni "su misura" per Prisma/OpenAPI/TCPDF costruite in questo stesso progetto,
+che pure ne soffrivano.
 
-```gitattributes
-lib/api_clients/**       linguist-generated
-coverage-report/**       linguist-generated
+Prima di decidere come correggerlo, abbiamo verificato cosa fanno altri strumenti dello
+stesso tipo:
 
-# librerie di terze parti copiate nel repo, non già nella lista di default (vedi sotto):
-lib/qualche-libreria/**  linguist-vendored
+- **I grafici "Code frequency"/"Contributors" di GitHub** non escludono affatto codice
+  generato o vendorizzato dalle additions/deletions, e non li presentano come metrica
+  principale — sono una pagina di insight secondaria.
+- **[git-fame](https://github.com/casperdcl/git-fame)** non fa rilevamento automatico:
+  offre solo un `--excl` manuale opzionale, e il suo stesso README avverte che le
+  metriche insertions/deletions vanno usate con cautela perché contano anche codice
+  storico non più esistente.
+- **GitStats** (lo strumento storico) ha ricevuto la stessa richiesta di funzionalità che
+  ci siamo posti noi; la risposta del maintainer è stata che l'esclusione automatica
+  "non è banale da implementare" e ha un costo in performance.
+- **[GitClear](https://www.gitclear.com/count_lines_of_code_but_dont_be_naive)** (un'azienda
+  che vende analytics su questo) stima che circa il 95% delle righe di codice contate da
+  un diff sia "rumore" di vario tipo — di cui codice non applicativo (generato, test,
+  vendor) è solo una delle categorie, insieme a whitespace/convenzioni (54%) e codice
+  spostato (30%). La loro conclusione non è "escludi il generato e sei a posto": è che il
+  problema è troppo ampio per un filtro di esclusioni.
 
-# i binari che git non riconosce come tali (certi PDF) finiscono nel conteggio righe:
-*.pdf   -diff
-*.xlsx  -diff
-```
+Nessuno risolve il caso specifico che abbiamo trovato (pathspec che rompe i rename), e
+tutti trattano il churn/LOC come segnale rumoroso e secondario, non come dato da
+ripulire chirurgicamente. Coerentemente, la scelta qui è **contare tutto, senza
+pathspec**: elimina il bug per costruzione (nessuna directory esclusa, quindi nessun
+rename può romperla), al prezzo di includere anche codice generato/vendorizzato/lock file
+nel churn. Per questo:
 
-I collector escludono automaticamente ciò che è marcato, tramite i pathspec
-`:(exclude,attr:linguist-generated)` e `:(exclude,attr:linguist-vendored)`. Nei repository
-senza `.gitattributes` non cambia nulla.
+- **`churn` è trattato come la meno indicativa delle tre metriche** (vedi
+  [Metriche Calcolate](#-metriche-calcolate)) e non è più il primo pannello dei report.
+- **`DAILY_CHURN_CAP`** (vedi [Pesi delle metriche](#pesi-delle-metriche)) resta l'unica
+  protezione contro un outlier estremo, es. un `node_modules` committato per errore — più
+  importante di prima, non meno.
+- Se un repository specifico ha bisogno di escludere qualcosa (un `node_modules`
+  committato per errore, un dump SQL enorme), fallo con `git filter-repo`/BFG **sulla
+  storia analizzata** o accetta il rumore su quel repository — non nel tool.
 
-**`linguist-generated` vs `linguist-vendored`** — sono due attributi standard GitHub Linguist
-distinti, non intercambiabili solo per pigrizia: il primo è per codice *prodotto* da un tool
-(client OpenAPI, migrazioni), il secondo per codice di *terze parti* copiato nel repo (una
-libreria come Bootstrap). Per git contano allo stesso modo (entrambi esclusi), ma per GitHub
-sono due segnali diversi nei diff delle PR — usa quello semanticamente corretto.
+### `find_generated_candidates.sh` resta, per un altro scopo
 
-**Nota:** alcune librerie comuni (`bootstrap`, `bootstrap-italia`, `node_modules`, `vendor`)
-sono già escluse di default (vedi sotto): per quelle non serve `.gitattributes`. Usalo per le
-librerie *non* già in quella lista.
-
-Tre dettagli che non sono ovvi e che fanno la differenza:
-
-1. **Serve la forma booleana** `linguist-generated`, **non** `linguist-generated=true`:
-   la forma valorizzata non viene intercettata dal pathspec di git. La forma booleana è
-   anche quella che fa collassare i diff su GitHub, quindi una sola dichiarazione serve
-   a entrambe le cose.
-2. **Vanno dichiarati anche i percorsi STORICI.** Git confronta il pattern con il percorso
-   *come era in ogni commit*: se i file sono stati spostati, dichiarare solo la posizione
-   attuale **peggiora** il risultato, perché la sorgente dello spostamento riemerge come
-   cancellazione di tutte le sue righe. Per trovare le posizioni storiche:
-
-   ```bash
-   git log --pretty=format: --name-only --no-renames | grep -E "/lib/(Api|Model)/" | sort -u
-   ```
-
-   `--no-renames` è essenziale: senza di esso git comprime i percorsi nella forma
-   `{vecchio => nuovo}` e le posizioni storiche restano invisibili.
-3. **`-diff` sui binari** li fa contare come file toccato con 0 righe, invece di sommarne
-   il contenuto interpretato come testo.
-
-### File e cartelle da escludere (lista nel tool)
-
-In entrambi i collector la lista è centralizzata in un unico array `EXCLUDE_PATHSPEC`
-(prima era ripetuta in ogni query, con il rischio di modificarne solo una copia):
-
-```bash
-EXCLUDE_PATHSPEC=(
-    ":(exclude,attr:linguist-generated)"   # vedi sopra
-    ":(exclude)node_modules/*"
-    ":(exclude)dist/*"
-    # ... aggiungi qui le tue esclusioni
-)
-```
-
-Attenzione: la lista di default è tarata su progetti Node/Prisma. Su altri stack può non
-intercettare nulla — su un repository PHP con client OpenAPI rimuoveva l'1,2% del churn.
-Verifica cosa domina davvero le tue statistiche prima di fidarti dei default.
-
-### Trovare i candidati: `find_generated_candidates.sh`
+Lo script (analizza churn per percorso, verifica generatori Prisma, trova posizioni
+storiche) **non pilota più le statistiche di questo tool** — resta utile in modo
+indipendente per chi vuole popolare `.gitattributes` a beneficio di **GitHub stesso**
+(che usa `linguist-generated`/`linguist-vendored` per collassare i diff nelle PR e per
+i grafici di percentuale-linguaggio del repository, indipendentemente da questo tool):
 
 ```bash
 ./find_generated_candidates.sh [--since <data>] [--threshold <pct>] [--depth <n>] [percorso-repo]
 ```
 
-Automatizza la ricerca manuale (churn per percorso, verifica del generatore, posizioni
-storiche) e stampa un report — **non scrive `.gitattributes`, non modifica nulla**: la
-classificazione generato/vendorizzato/scritto-a-mano richiede giudizio umano, come
-dimostra il fatto che in sviluppo una cartella di codice archiviato (`old/`) è stata
-etichettata come "generata" per errore prima di essere corretta a mano.
+**Non scrive `.gitattributes`, non modifica nulla**: la classificazione
+generato/vendorizzato/scritto-a-mano richiede giudizio umano, come dimostra il fatto che
+in sviluppo una cartella di codice archiviato (`old/`) è stata etichettata come "generata"
+per errore prima di essere corretta a mano — lo stesso genere di errore che, applicato
+automaticamente, avrebbe anche innescato il bug dei rename descritto sopra.
 
-Per ogni percorso sopra soglia riporta un livello di evidenza:
+Per ogni percorso sopra soglia riporta un livello di evidenza (FORTE/MEDIA/DEBOLE); i
+dettagli sono nell'help dello script (`--help`).
 
-- **FORTE**: output verificato di un generatore Prisma (legge il campo `output` di
-  `schema.prisma`, poi espande alle sue posizioni storiche — nomi di file identici
-  sotto prefissi diversi nella storia), oppure un marcatore esplicito nel contenuto
-  (`@generated`, `DO NOT EDIT`)
-- **MEDIA**: nome tipico di libreria vendorizzata (`vendor`, `third_party`...), da
-  confermare — non riconosce nomi di librerie specifiche (es. non capisce da solo che
-  una cartella chiamata `TCPDF` è una libreria vendorizzata)
-- **DEBOLE**: solo churn alto, nessuna evidenza automatica — verifica cosa produce
-  quei numeri prima di etichettare qualcosa. Molti percorsi DEBOLE sono codice
-  applicativo vero, non da escludere: è il tag corretto per "guarda qui", non "escludi qui"
-
-Per gli altri generatori (OpenAPI, protobuf...) individua ancora i percorsi ad alto
-churn, ma senza la verifica automatica sul file di configurazione — resta comunque
-utile come punto di partenza, con evidenza DEBOLE.
-
-Per analizzare **solo** certi tipi di file nei collector, sostituisci il `.` nel
-pathspec del comando `git log` con i pattern desiderati, es.
-`-- "*.java" "*.kt" "${EXCLUDE_PATHSPEC[@]}"`.
-
-### Un limite che le esclusioni non risolvono
+### Un limite che nessuna esclusione risolve comunque
 
 I commit prodotti da **squash o rebase merge** hanno un solo genitore, quindi sono
 strutturalmente commit normali e `--no-merges` non può escluderli: riportano il lavoro di
@@ -1307,30 +1281,37 @@ singola invocazione di `git log`).
 Non esiste un singolo numero che misuri il valore del lavoro di sviluppo. Per questo i
 report mostrano **tre metriche affiancate** invece di un punteggio unico, e relegano
 l'indice composito a metrica secondaria (visibile solo nella tabella di riepilogo).
+Sono presentate **in ordine di quanto sono attendibili**, non di quanto sono
+impressionanti — è anche l'ordine dei pannelli nei report.
 
-### 1. Churn — volume di cambiamento
+### 1. Giorni attivi — la metrica più robusta
 
-```txt
-churn = righe_aggiunte + 0.4 × righe_rimosse
-```
-
-Le rimozioni **contano**: cancellare codice morto è lavoro reale. Il peso `0.4 < 1`
-riflette il fatto che rimuovere costa in genere meno che scrivere. (Nella versione
-precedente la metrica usava solo `added`, quindi un commit di sole cancellazioni
-valeva esattamente zero.)
-
-Il campo `lines = aggiunte + rimosse` resta nel JSON per retrocompatibilità.
+Numero di giorni distinti con almeno un commit. È l'indicatore più difficile da
+distorcere: non è gonfiabile né da un singolo commit enorme né da tanti micro-commit,
+cattura la continuità del contributo meglio del volume, e non risente in alcun modo di
+codice generato o file voluminosi.
 
 ### 2. Commit
 
 - Ogni commit unico nel periodo, **esclusi i merge commit**
 - Attribuiti all'autore con **match esatto** sul nome
 
-### 3. Giorni attivi — la metrica più robusta
+### 3. Churn — volume di cambiamento (la meno indicativa delle tre)
 
-Numero di giorni distinti con almeno un commit. È l'indicatore più difficile da
-distorcere: non è gonfiabile né da un singolo commit enorme né da tanti micro-commit,
-e cattura la continuità del contributo meglio del volume.
+```txt
+churn = righe_aggiunte + 0.4 × righe_rimosse
+```
+
+Le rimozioni **contano**: cancellare codice morto è lavoro reale. Il peso `0.4 < 1`
+riflette il fatto che rimuovere costa in genere meno che scrivere.
+
+**Non viene applicata alcuna esclusione** (codice generato, vendorizzato, lock file, o
+altro — vedi [Perché non escludiamo codice generato/vendorizzato](#perché-non-escludiamo-codice-generatovendorizzato-e-prima-lo-facevamo)):
+un repository con client generati o lock file molto voluminosi lo mostrerà nel churn. È
+la ragione per cui questa metrica non è più la prima del report, e per cui va sempre
+letta insieme alle altre due, non da sola.
+
+Il campo `lines = aggiunte + rimosse` resta nel JSON per retrocompatibilità.
 
 ### Indice composito (metrica secondaria)
 
@@ -1361,9 +1342,15 @@ Tre proprietà sono deliberate e non vanno cambiate senza capirne l'effetto:
 ### Note Importanti
 
 - **Whitespace changes** sono inclusi
-- **File rinominati** appaiono come add+delete
+- **File rinominati senza modifiche di contenuto contano 0 righe**: git rileva i rename
+  di default in `git log --numstat` quando non gli si passa nessun pathspec di esclusione
+  (vedi sopra) — verificato, uno spostamento puro non gonfia più il churn. Se il rename
+  porta anche modifiche di contenuto, conta solo il vero diff, non il file per intero
 - **File binari** contano come file toccati ma non contribuiscono alle righe
 - **Refactoring massicci** possono gonfiare le metriche
+- **Nessuna esclusione**: codice generato, vendorizzato, lock file e dipendenze committate
+  per errore contano come qualsiasi altro file — è la ragione per cui churn è la meno
+  indicativa delle tre metriche (vedi sopra)
 - Le metriche sono **indicatori**, non misure assolute di produttività
 
 ---

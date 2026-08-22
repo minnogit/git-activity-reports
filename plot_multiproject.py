@@ -6,13 +6,22 @@ Legge da stdin il JSON prodotto da git_multiproject_stats_collector.sh e genera 
 METRICHE
 --------
 Non esiste un singolo numero che misuri il "valore" del lavoro di sviluppo, quindi
-questo report mostra TRE metriche affiancate invece di un punteggio unico:
+questo report mostra TRE metriche affiancate invece di un punteggio unico, in ordine
+di quanto sono attendibili — non di quanto sono impressionanti:
 
+  giorni attivi  Giorni distinti con almeno un commit. È la metrica più robusta:
+                 non è gonfiabile né da un singolo commit enorme né da tanti micro-commit,
+                 e non risente in alcun modo di codice generato o file voluminosi.
+                 Primo pannello.
+  commit         Numero di commit (esclusi i merge).
   churn          = aggiunte + 0.4 * rimozioni
                    Le rimozioni contano: cancellare codice morto è lavoro reale.
-  commit         Numero di commit (esclusi i merge).
-  giorni attivi  Giorni distinti con almeno un commit. È la metrica più robusta:
-                 non è gonfiabile né da un singolo commit enorme né da tanti micro-commit.
+                   È la meno indicativa delle tre: git_multiproject_stats_collector.sh
+                   NON esclude codice generato, vendorizzato o lock file (vedi il
+                   commento in testa a quello script per il perché — in breve, qualunque
+                   esclusione basata su directory può rompere il rilevamento dei rename
+                   di git, misurato fino a 9.7x di inflazione su una singola giornata).
+                   Per questo non è più il primo pannello del report.
 
 L'indice composito resta disponibile come metrica SECONDARIA (solo in tabella):
 
@@ -527,19 +536,25 @@ def main():
     fig.suptitle(f"Attività di sviluppo multi-progetto  ({start} → {end})",
                  fontsize=16, color=INK_PRIMARY, x=0.02, ha="left", y=0.975)
 
+    # Giorni attivi per primo: e' la meno gonfiabile delle metriche disponibili qui.
+    # Churn (per progetto e nella ciambella) non e' piu' la prima cosa che si legge:
+    # include codice generato/vendorizzato/lock file, nessuna esclusione (vedi
+    # git_multiproject_stats_collector.sh).
     ax1 = fig.add_subplot(2, 2, 1)
-    panel_churn_by_project(ax1, df, colors, author_order)
+    panel_active_days(ax1, df, colors)
 
     ax2 = fig.add_subplot(2, 2, 2)
-    panel_donut(ax2, df)
+    panel_churn_by_project(ax2, df, colors, author_order)
 
     ax3 = fig.add_subplot(2, 2, 3)
-    panel_active_days(ax3, df, colors)
+    panel_donut(ax3, df)
 
     ax4 = fig.add_subplot(2, 2, 4)
     panel_table(ax4, df)
 
-    handles, labs = ax1.get_legend_handles_labels()
+    # Le handle si prendono da ax2 (churn per progetto): l'unico pannello che disegna le
+    # barre impilate con label=autore, fonte della legenda unica di figura.
+    handles, labs = ax2.get_legend_handles_labels()
     if len(labs) >= 2:
         fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
                    fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
