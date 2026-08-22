@@ -274,18 +274,29 @@ modifica, va cambiata in tutti i posti.
 ### Estensione VS Code (`vscode-extension/src/extension.ts`)
 
 Wrapper GUI che non duplica la logica di analisi: risolve i repo Git nel workspace e invoca
-`gitstat.sh`/`gitstat-multi.sh` come processo figlio (`cp.execFile('bash', [scriptPath, ...args], ...)`),
-poi mostra il PNG risultante in una webview. Punti chiave:
+`gitstat.sh`/`gitstat-multi.sh` (o i loro equivalenti da PATH) come processo figlio, poi mostra
+il PNG risultante in una webview. Punti chiave:
 
 - `findClosestGitRepo`/`findAllGitRepos` risalgono/scansionano il filesystem per trovare `.git`
   (comando "Analizza Progetto Corrente" vs "Analizza Tutto il Workspace (Multi-Repo)").
-- Sceglie `gitstat.sh` o `gitstat-multi.sh` in base al numero di repo trovati (1 vs N).
-- Risolve `scriptPath` come `path.join(context.extensionPath, '..', scriptName)` — assume che
-  l'estensione sia installata/eseguita da dentro il repo (o accanto agli script), non come pacchetto
-  standalone. Se si cambia la disposizione delle cartelle, questo path va aggiornato.
+- Sceglie `gitstat.sh`/`gitstat-multi.sh` (o `gitstats`/`gitstats-multi`) in base al numero di
+  repo trovati (1 vs N).
+- `resolveRunner()` risolve lo script eseguibile in due modi, in ordine: (1) `gitstat(-multi).sh`
+  accanto a `context.extensionPath` (modalità sviluppo/checkout del repo), (2) fallback su
+  `gitstats`/`gitstats-multi` risolti dal `PATH` (`which`) — necessario perché un'estensione
+  installata da `.vsix` finisce in `~/.vscode/extensions/...`, scollegata dal checkout: senza
+  questo fallback l'installazione da VSIX/Marketplace non può funzionare (verificato: `vsce
+  package` impacchetta solo i file dentro `vscode-extension/`, mai script della cartella
+  genitrice). Se nessuno dei due è risolvibile, messaggio d'errore esplicito invece di un path
+  non trovato silenzioso.
 - Trova il PNG generato facendo match via regex sull'output testuale dei collector
   (`"Grafico generato con successo: ..."` / `"Report multi-progetto ... generato con successo: ..."`):
   se si cambia il messaggio di successo negli script bash, aggiornare anche queste regex.
+- I default di configurazione `git-activity.startDate`/`endDate` ("30 days ago"/"now") NON sono
+  risolti da nessuna parte in date reali prima di essere passati agli script, che validano con
+  un regex rigido `YYYY-MM-DD`: con la configurazione di fabbrica il primo utilizzo fallisce
+  sempre (verificato). Bug noto, non ancora corretto — non risolvere date relative assumendo che
+  funzioni già.
 
 ## Note per modifiche
 
