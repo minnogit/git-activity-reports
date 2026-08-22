@@ -136,6 +136,26 @@ function commandExistsOnPath(cmd) {
         return false;
     }
 }
+// Risolve una data in formato libero (qualunque stringa che GNU `date -d` capisca:
+// "2025-11-01", "30 days ago", "now", "yesterday", ...) in YYYY-MM-DD. Necessario perché
+// git_stats_collector.sh valida le date con un regex rigido YYYY-MM-DD (git non sa
+// interpretare date relative), mentre la configurazione di questa estensione — e i suoi
+// stessi valori di default, "30 days ago"/"now" — promette di accettare anche forme
+// relative: senza questa risoluzione la configurazione di fabbrica fallisce SEMPRE al
+// primo utilizzo (verificato). Usa `date -d`, non un parser di date scritto a mano in
+// JS/TS: è la stessa dipendenza (GNU coreutils) già richiesta da tutto il resto del
+// progetto (vedi README, "Richiede GNU date"), quindi stessa semantica ovunque — un
+// parser diverso in TypeScript rischierebbe di accettare/interpretare input in modo
+// leggermente diverso da come li interpretano gli script bash a valle.
+function resolveDate(value) {
+    try {
+        const out = cp.execFileSync('date', ['-d', value, '+%Y-%m-%d'], { stdio: ['ignore', 'pipe', 'ignore'] });
+        return out.toString().trim();
+    }
+    catch {
+        return null;
+    }
+}
 // Risolve come lanciare l'analisi in due modi, in ordine di preferenza:
 //   1. Modalità sviluppo: gitstat(-multi).sh accanto alla cartella dell'estensione
 //      (l'estensione eseguita da dentro il checkout del repo, o accanto agli script).
@@ -158,8 +178,16 @@ function resolveRunner(context, isMulti) {
 }
 async function runAnalysis(context, paths) {
     const config = vscode.workspace.getConfiguration('git-activity');
-    const startDate = config.get('startDate') || '30 days ago';
-    const endDate = config.get('endDate') || 'now';
+    const startDateRaw = config.get('startDate') || '30 days ago';
+    const endDateRaw = config.get('endDate') || 'now';
+    const startDate = resolveDate(startDateRaw);
+    const endDate = resolveDate(endDateRaw);
+    if (!startDate || !endDate) {
+        const invalid = !startDate ? startDateRaw : endDateRaw;
+        vscode.window.showErrorMessage(`Data non valida nelle impostazioni: "${invalid}". Usa un formato che ` +
+            `"date -d" riconosce (es. "2025-11-01", "30 days ago", "now").`);
+        return;
+    }
     vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
         title: paths.length > 1 ? `Analisi di ${paths.length} repository...` : "Generazione grafico attività Git...",
