@@ -64,9 +64,18 @@ rieseguire il plot separatamente (`cat dati.json | python3 plot_git.py`).
   (flag posizionale), filtro opzionale per autore (match **esatto**), `--repo <path|url>` per analizzare
   un repo diverso dalla cwd. Output JSON: `{metadata: {start_date, end_date, project, date_basis},
   data: [{author, total_commits, daily_data: [{day, date, commits, lines, added, deleted, files}],
-  punch_card: [{weekday, hour, commits}]}]}`. `punch_card` (0=lunedì..6=domenica, ora locale del
+  punch_card: [{weekday, hour, commits}]}], ownership: {ref_commit, ref_date, total_lines,
+  by_author: [{author, lines, pct}]}}`. `punch_card` (0=lunedì..6=domenica, ora locale del
   commit) alimenta il quinto pannello "quando" di `plot_git.py`; assente nei JSON di versioni precedenti,
-  nel qual caso il pannello viene saltato (non lasciato vuoto).
+  nel qual caso il pannello viene saltato (non lasciato vuoto). `ownership` (solo formato `json`,
+  disattivabile con `--no-ownership`) alimenta il sesto pannello: righe possedute per autore secondo
+  `git blame` all'**ultimo commit ≤ end_date** (non HEAD, per riproducibilità) — una fotografia, non
+  una serie temporale come il resto, quindi può includere autori mai attivi nel periodo. Nessuna
+  esclusione automatica di file generati/vendorizzati (stessa scelta del churn, coerente col default
+  di git-fame). Un `git blame` per file è inevitabile; parallelizzato con `xargs -P` (fino a `nproc`
+  processi) — l'aggregazione per-autore deve avvenire DENTRO ogni processo figlio prima di scrivere
+  sullo stdout condiviso: solo righe corte restano atomiche a livello di pipe, l'output multi-riga
+  crudo di `git blame` concatenato da processi concorrenti si corrompe per interleaving (misurato).
 - **`git_multiproject_stats_collector.sh`** → più repo, per progetto+autore **con dettaglio giornaliero**.
   Sorgente repo: argomenti posizionali, oppure `--file <path>` (uno per riga, `#` = commento, supporta `~`
   e spazi). Output: `{metadata, data: [{project, author, commits, added, deleted, lines, files,
@@ -182,8 +191,15 @@ senza `metadata`) per poter rielaborare file vecchi.
   Deliberatamente descrittivo ("quando"), non valutativo ("quanto si è lavorato") — i timestamp dei
   commit non sono un proxy affidabile delle ore lavorate, quindi non è una quarta metrica nell'ordine
   di attendibilità sopra. `fig.tight_layout()` non gestisce bene gli assi della colorbar (avvisa
-  "Axes that are not compatible" e lascia un vuoto ingiustificato sopra il pannello): quando il quinto
-  pannello è presente si usa `fig.subplots_adjust()` con margini espliciti invece di `tight_layout()`.
+  "Axes that are not compatible" e lascia un vuoto ingiustificato sopra il pannello): quando almeno
+  un pannello opzionale è presente si usa `fig.subplots_adjust()` con margini espliciti invece di
+  `tight_layout()`. **Sesto pannello opzionale** (`panel_ownership()`, striscia larga sotto gli altri):
+  barre orizzontali con le righe possedute per autore secondo `ownership` nel JSON — FOTOGRAFIA a
+  fine periodo (git blame all'ultimo commit ≤ end_date), non una serie temporale come tutto il resto:
+  può includere autori mai attivi nel periodo. Stessa palette/assegnazione colori degli altri
+  pannelli (chi non è tra i primi 8 per attività nel periodo si accorpa in "Altro", mai una tinta
+  nuova). Il numero di righe extra (`extra_rows` in `main()`) si adatta a quali dei due pannelli
+  opzionali (punch card, ownership) sono presenti nel JSON — 0, 1 o 2 righe in più sotto la griglia 2×2.
 - **`plot_multiproject.py`** → `git_activity_multi_project_report_<start>_<end>.png`, 4 pannelli: giorni
   attivi per autore (primo), churn per progetto e autore, distribuzione del churn, tabella riepilogo per
   progetto.

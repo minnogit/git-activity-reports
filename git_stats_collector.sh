@@ -18,6 +18,16 @@
 #   autore         Filtra per autore specifico (default: tutti, modalità TOTALE)
 #                  Il match è ESATTO sul nome autore (non più una sottostringa).
 #
+# OWNERSHIP (--no-ownership per disattivare):
+#   Solo con formato 'json': calcola, via `git blame`, quante righe del repository al
+#   commit di riferimento sono "possedute" da ciascun autore. È una FOTOGRAFIA dello
+#   stato dell'albero, non una serie temporale come il resto — vedi il commento sopra
+#   collect_ownership_tsv per i dettagli (riferimento, costo, nessuna esclusione).
+#   Costo misurato: un git blame per file è inevitabile; su un repository reale da 3133
+#   file, ~15-17s in parallelo (fino a `nproc` processi) contro ~98s in sequenza. Su
+#   repository molto grandi puo' comunque essere significativo: --no-ownership salta
+#   il calcolo.
+#
 # METODO DI RACCOLTA:
 #   - Un SOLO `git log` per repository (non uno per giorno/autore): il raggruppamento
 #     per autore e giorno avviene in awk. Oltre a essere molto più rapido, evita il
@@ -74,16 +84,30 @@
 #           { "weekday": 1, "hour": 10, "commits": 2 }
 #         ]
 #       }
-#     ]
+#     ],
+#     "ownership": {
+#       "ref_commit": "abcdef0123...",
+#       "ref_date": "2025-11-30",
+#       "total_lines": 48213,
+#       "by_author": [
+#         { "author": "Nome Autore", "lines": 30112, "pct": 62.45 }
+#       ]
+#     }
 #   }
 #
 #   Sono elencati solo i giorni/celle con attività: il plotter ricostruisce i giorni vuoti
 #   dal range in metadata. Per retrocompatibilità `plot_git.py` accetta ancora anche
-#   il vecchio formato (array JSON senza metadata, senza punch_card).
+#   il vecchio formato (array JSON senza metadata, senza punch_card/ownership).
 #
 #   `punch_card`: distribuzione dei commit per giorno della settimana (0=lunedì..6=domenica,
 #   convenzione Python `date.weekday()`) e ora (0-23, ora locale registrata nel commit —
 #   nessuna conversione a un fuso comune), aggregata su tutto il periodo richiesto.
+#
+#   `ownership` (assente se --no-ownership o se non c'è alcun commit ≤ DATA_FINE): righe
+#   possedute per autore all'ULTIMO COMMIT ≤ DATA_FINE (non HEAD, per riproducibilità),
+#   secondo `git blame` — chi ha scritto per ultimo ogni riga ancora presente nell'albero.
+#   Include anche autori mai attivi nel periodo richiesto, se hanno ancora codice presente.
+#   Nessuna esclusione di file generati/vendorizzati (stessa scelta fatta per il churn).
 #
 # REPOSITORY REMOTI (--repo):
 #   Senza --repo, lo script analizza il repository nella cartella corrente (comportamento storico).
@@ -121,6 +145,7 @@ OUTPUT_FORMAT="text"
 CLI_AUTHOR_FILTER=""
 FETCH_ENABLED=false
 REPO_ARG=""
+OWNERSHIP_ENABLED=true
 
 # Parse positional and optional arguments
 TEMP_ARGS=()
@@ -128,6 +153,10 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --fetch)
             FETCH_ENABLED=true
+            shift
+            ;;
+        --no-ownership)
+            OWNERSHIP_ENABLED=false
             shift
             ;;
         --repo)
@@ -146,6 +175,7 @@ UTILIZZO:
 OPZIONI:
   --fetch          Abilita l'aggiornamento del repository con git fetch
   --repo <path|url>  Analizza questo repository (path locale o URL) invece della cartella corrente
+  --no-ownership   Salta il calcolo dell'ownership (git blame per file, solo formato json)
   -h, --help       Mostra questo help
 
 PARAMETRI:
@@ -444,10 +474,92 @@ collect_daily_tsv() {
 }
 
 # -----------------------------------------------
+# Ownership del codice (git blame) — SOLO per formato json, disattivabile con --no-ownership
+# -----------------------------------------------
+# Risponde a una domanda diversa dal resto del report: non "chi ha lavorato nel periodo"
+# (serie temporale sui commit) ma "di chi è il codice presente nell'albero in un dato
+# momento" (fotografia). Tre scelte deliberate:
+#
+#   1. Riferimento = ULTIMO COMMIT ≤ DATA_FINE, non HEAD. Rieseguendo lo stesso report in
+#      futuro con la stessa DATA_FINE si ottiene lo stesso risultato, coerente con "cosa
+#      mostrava il repository alla fine del periodo". A differenza del bucketing
+#      giornaliero sopra (AUTHOR-DATE, rebase-safe), qui conta l'ordine del DAG dei commit
+#      (`git rev-list --before`, che segue la commit-date/l'ordine topologico): l'ownership
+#      riguarda lo STATO dei file nell'albero, non quando qualcuno ha scritto una riga.
+#   2. Nessuna esclusione automatica di file generati/vendorizzati — stessa scelta fatta
+#      per il churn sopra. Verificato (ricerca web) essere anche il comportamento di
+#      default di git-fame: l'esclusione lì è un flag manuale opt-in (--excl), non
+#      un'euristica automatica basata su .gitattributes/linguist-generated. Non è quindi
+#      una scorciatoia presa qui, è lo standard di riferimento del genere di tool.
+#   3. Un `git blame` per file è INEVITABILE: git non offre un comando che restituisca
+#      l'ownership per riga su tutto l'albero in una sola invocazione. Misurato su un
+#      repository reale da 3133 file: ~98s in sequenza, ~15-17s parallelizzando con
+#      `xargs -P` (fino a `nproc` processi) sullo stesso repository.
+#      ATTENZIONE se si modifica questa funzione: l'aggregazione per-autore deve avvenire
+#      DENTRO ogni processo figlio, che emette sul flusso condiviso solo poche righe corte
+#      (autore\tconteggio) — scritture brevi restano atomiche a livello di pipe (< PIPE_BUF).
+#      L'output multi-riga crudo di `git blame` invece NO: misurato, `xargs -P` su quell'
+#      output concatenato produce righe corrotte da interleaving fra processi concorrenti
+#      (scritture spezzate a metà riga), verificato confrontando byte-per-byte con la stessa
+#      raccolta eseguita in sequenza — un bug silenzioso se non fosse stato verificato così.
+
+resolve_ownership_ref() {
+    git rev-list -1 --before="$END_DATE 23:59:59" HEAD 2>/dev/null
+}
+
+# Emette TSV: autore \t righe_possedute, al commit di riferimento $1.
+# Alias applicati qui (stesso file usato per le statistiche giornaliere): senza questo,
+# identità multiple della stessa persona spezzerebbero l'ownership fra più righe.
+collect_ownership_tsv() {
+    local rev="$1" alias_tsv="$2" tmpdir="$3"
+    local jobs
+    jobs=$(nproc 2>/dev/null); jobs="${jobs:-4}"
+
+    local filelist="$tmpdir/ownership_files.lst"
+    # -z: percorsi separati da NUL, necessario perché possono contenere spazi (verificato:
+    # non è un'ipotesi teorica, capita in repository reali) o altri caratteri "scomodi".
+    git ls-tree -r -z "$rev" 2>/dev/null | while IFS= read -r -d '' entry; do
+        meta="${entry%%$'\t'*}"
+        path="${entry#*$'\t'}"
+        type=$(awk '{print $2}' <<< "$meta")
+        # Solo blob: esclude strutturalmente i gitlink dei submodule (type "commit"),
+        # non è una scelta editoriale di esclusione come quelle rimosse dal churn.
+        [[ "$type" == "blob" ]] && printf '%s\0' "$path"
+    done > "$filelist"
+
+    local nfiles
+    nfiles=$(git ls-tree -r "$rev" 2>/dev/null | awk -F'\t' '{split($1,a," "); if(a[2]=="blob") c++} END{print c+0}')
+    echo "Calcolo ownership: git blame su $nfiles file al commit ${rev:0:8} ($jobs processi in parallelo)..." >&2
+
+    xargs -0 -P "$jobs" -I{} bash -c '
+        git blame --line-porcelain "$1" -- "$2" 2>/dev/null \
+        | awk "/^author /{ sub(/^author /, \"\"); c[\$0]++ } END{ for (a in c) printf \"%s\t%d\n\", a, c[a] }"
+    ' _ "$rev" {} < "$filelist" \
+    | awk -v aliasfile="$alias_tsv" -F'\t' '
+        BEGIN {
+            if (aliasfile != "") {
+                while ((getline line < aliasfile) > 0) {
+                    n = split(line, p, "\t")
+                    if (n >= 2 && p[1] != "") alias[p[1]] = p[2]
+                }
+                close(aliasfile)
+            }
+        }
+        {
+            a = $1
+            if (a in alias) a = alias[a]
+            c[a] += $2
+        }
+        END {
+            for (a in c) print a "\t" c[a]
+        }'
+}
+
+# -----------------------------------------------
 # Emissione JSON
 # -----------------------------------------------
 emit_json() {
-    local tsv="$1" project="$2"
+    local tsv="$1" project="$2" ownership_tsv="$3" ownership_ref="$4" ownership_ref_date="$5"
     # awk gestisce l'aggregazione, python la serializzazione: quest'ultima deve restare
     # corretta anche con nomi autore contenenti virgolette, backslash o accenti.
     python3 -c '
@@ -455,6 +567,9 @@ import sys, json, datetime
 from collections import defaultdict
 
 start, end, project = sys.argv[1], sys.argv[2], sys.argv[3]
+ownership_tsv_path = sys.argv[4] if len(sys.argv) > 4 else ""
+ownership_ref = sys.argv[5] if len(sys.argv) > 5 else ""
+ownership_ref_date = sys.argv[6] if len(sys.argv) > 6 else ""
 # by_author_day: righe per (autore, data), una per ogni ora con attività quel giorno —
 # vanno risommate per ricostruire il totale del giorno (daily_data non conosce le ore).
 by_author_day = defaultdict(list)
@@ -505,7 +620,40 @@ for author in sorted(daily_by_author):
         "punch_card": punch_cells,
     })
 
-json.dump({
+# Ownership: fotografia (non serie temporale), letta da un TSV separato prodotto da
+# collect_ownership_tsv. Assente (nessuna chiave "ownership") se --no-ownership o se
+# non esisteva alcun commit prima di DATA_FINE.
+ownership = None
+if ownership_tsv_path:
+    entries = []
+    total = 0
+    try:
+        with open(ownership_tsv_path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                parts = line.split("\t")
+                if len(parts) < 2:
+                    continue
+                author, lines_n = parts[0], int(parts[1])
+                entries.append((author, lines_n))
+                total += lines_n
+    except OSError:
+        entries = []
+    if total > 0:
+        entries.sort(key=lambda e: e[1], reverse=True)
+        ownership = {
+            "ref_commit": ownership_ref,
+            "ref_date": ownership_ref_date,
+            "total_lines": total,
+            "by_author": [
+                {"author": a, "lines": n, "pct": round(n / total * 100, 2)}
+                for a, n in entries
+            ],
+        }
+
+payload = {
     "metadata": {
         "start_date": start,
         "end_date": end,
@@ -513,9 +661,13 @@ json.dump({
         "date_basis": "author",
     },
     "data": data,
-}, sys.stdout, ensure_ascii=False, indent=2)
+}
+if ownership is not None:
+    payload["ownership"] = ownership
+
+json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
 sys.stdout.write("\n")
-' "$START_DATE" "$END_DATE" "$project" < "$tsv"
+' "$START_DATE" "$END_DATE" "$project" "$ownership_tsv" "$ownership_ref" "$ownership_ref_date" < "$tsv"
 }
 
 # -----------------------------------------------
@@ -641,7 +793,21 @@ main() {
     fi
 
     if [[ "$OUTPUT_FORMAT" == "json" ]]; then
-        emit_json "$use_tsv" "$project"
+        # Ownership: solo per json (è l'unico consumatore) e solo se non disattivata.
+        # Costo non banale (un git blame per file, vedi collect_ownership_tsv): non ha
+        # senso pagarlo per un output testuale che non lo usa.
+        local ownership_tsv="" ownership_ref="" ownership_ref_date=""
+        if [[ "$OWNERSHIP_ENABLED" == true ]]; then
+            ownership_ref=$(resolve_ownership_ref)
+            if [[ -n "$ownership_ref" ]]; then
+                ownership_ref_date=$(git log -1 --format=%cd --date=short "$ownership_ref" 2>/dev/null)
+                ownership_tsv="$tmpdir/ownership.tsv"
+                collect_ownership_tsv "$ownership_ref" "$alias_tsv" "$tmpdir" > "$ownership_tsv"
+            else
+                echo "Avviso: nessun commit trovato prima del $END_DATE, ownership non calcolata." >&2
+            fi
+        fi
+        emit_json "$use_tsv" "$project" "$ownership_tsv" "$ownership_ref" "$ownership_ref_date"
     else
         echo "Generazione report dal $START_DATE al $END_DATE..."
         emit_text "$use_tsv" "${CLI_AUTHOR_FILTER:-TOTALE}"
