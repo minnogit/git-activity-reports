@@ -12,3 +12,4 @@ venv/
 project_list.txt
 node_modules/
 *.vsix
+__pycache__/

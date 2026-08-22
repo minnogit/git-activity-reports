@@ -711,18 +711,30 @@ def main():
                bbox_to_anchor=(0.5, legend_y))
 
     if n_extra:
-        # tight_layout calcola i margini dal testo EFFETTIVAMENTE renderizzato (incluse le
-        # etichette y lunghe come i nomi autore in "Giorni attivi"/"Righe possedute") — un
-        # margine sinistro fisso non si adatta e le tronca: misurato, "Gabriele Stringano"
-        # e "Massimo Raffaele" tagliati a "e Stringano"/"mo Raffaele" con left=0.045 fisso.
-        fig.tight_layout(rect=[0, 0.03, 1, 0.955])
-        # tight_layout lascia comunque un vuoto verticale ingiustificato sopra la prima riga
-        # extra con QUALUNQUE gridspec a >2 righe con altezze disomogenee (misurato: capita
-        # anche senza punch card/colorbar, quindi non è solo l'avviso "Axes that are not
-        # compatible" del punch card) — margine superiore fisso, riusando left/right/bottom
-        # già calcolati sopra (mai un valore fisso per quelli, per il motivo appena detto).
-        left, right, bottom = fig.subplotpars.left, fig.subplotpars.right, fig.subplotpars.bottom
-        fig.subplots_adjust(left=left, right=right, bottom=bottom, top=0.94,
+        # tight_layout() qui NON funziona: con un asse aggiuntivo "incompatibile" (la
+        # colorbar del punch card, o anche solo la legenda a livello di figura) avvisa
+        # "Axes that are not compatible" e poi NON calcola nulla — lascia i margini di
+        # default di matplotlib (0.125/0.9/0.11, verificato stampando fig.subplotpars),
+        # che non sono tarati sul contenuto: abbastanza larghi da non tagliare "Gabriele
+        # Stringano" per coincidenza, ma molto più dello spazio realmente necessario.
+        # Si misura quindi lo spazio EFFETTIVAMENTE occupato dall'etichetta y più lunga
+        # (bbox del testo già renderizzato, non una stima) e si calcola il margine sinistro
+        # minimo che la ospita — right/top/bottom/hspace/wspace restano fissi: valori già
+        # verificati sul contenuto di questo report (nessuna etichetta a destra dei valori
+        # delle barre o vuoto ingiustificato sopra la prima riga extra).
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        current_left = fig.subplotpars.left
+        min_x0 = 1.0
+        for ax in fig.axes:
+            for label in ax.get_yticklabels():
+                if not label.get_text():
+                    continue
+                bbox = label.get_window_extent(renderer).transformed(fig.transFigure.inverted())
+                min_x0 = min(min_x0, bbox.x0)
+        label_span = current_left - min_x0   # larghezza dell'etichetta più lunga, in frazione di figura
+        left_margin = max(0.035, label_span + 0.015)   # + un piccolo margine di sicurezza
+        fig.subplots_adjust(left=left_margin, right=0.97, top=0.94, bottom=0.09,
                              hspace=0.5, wspace=0.22)
     else:
         fig.tight_layout(rect=[0, 0.05, 1, 0.955])
