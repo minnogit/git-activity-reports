@@ -219,9 +219,22 @@ senza `metadata`) per poter rielaborare file vecchi.
   pannelli (chi non è tra i primi 8 per attività nel periodo si accorpa in "Altro", mai una tinta
   nuova). Il numero di righe extra (`extra_rows` in `main()`) si adatta a quali dei due pannelli
   opzionali (punch card, ownership) sono presenti nel JSON — 0, 1 o 2 righe in più sotto la griglia 2×2.
-- **`plot_multiproject.py`** → `git_activity_multi_project_report_<start>_<end>.png`, 4 pannelli: giorni
-  attivi per autore (primo), churn per progetto e autore, distribuzione del churn, tabella riepilogo per
-  progetto.
+- **`plot_multiproject.py`** → `git_activity_multi_project_report_<start>_<end>.png`, 6 pannelli su
+  griglia 4 righe × 2 colonne: giorni attivi per autore (riga 1, piena larghezza — il più affidabile,
+  da solo in cima), poi commit e churn per progetto e autore affiancati (riga 2,
+  `panel_metric_by_project()`, generica sulla metrica), poi distribuzione commit e distribuzione churn
+  affiancate (riga 3, `panel_donut()`, generica sulla metrica; barra 100% se i progetti sono < 3, via
+  `_share_bar()`), tabella riepilogo (riga 4, piena larghezza). Commit precede churn in ogni riga
+  apposta: è la metrica più affidabile delle due (nessuna esclusione di file generati/vendorizzati sul
+  churn), e le versioni precedenti di questo report davano al churn DUE pannelli (barre + ciambella) e
+  zero al commit (solo in tabella) — incoerente con l'ordine di attendibilità già dichiarato nel
+  docstring del modulo. Affiancare le due metriche con lo stesso tipo di grafico (non raggrupparle per
+  metrica) permette il confronto diretto riga per riga. Margini: stesso approccio di `plot_git.py`
+  (misurare il testo renderizzato per il margine sinistro, mai un valore fisso — altrimenti tronca nomi
+  lunghi come "Gabriele Stringano", misurato); la riga della tabella ha un height_ratio più alto delle
+  altre (1.35 contro 0.75-1.0) perché con 12 righe piene (il massimo mostrato) il contenuto sfora
+  altrimenti l'asse e si sovrappone alla legenda sotto — misurato con un dataset sintetico da 15
+  progetti, non un'ipotesi.
 
 #### Metriche (duplicate identiche nei due plotter — modificarle in entrambi)
 
