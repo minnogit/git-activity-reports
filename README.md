@@ -163,7 +163,7 @@ git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/progetti/repoA ~/pro
 | Aggiornamento da remoto | solo con `--fetch` | solo con `--fetch` |
 | Repository via URL | `--repo <url>` | passa l'URL come percorso (posizionale o riga di `--file`) |
 | Formato output | `text` o `json` su stdout | sempre `json` su stdout |
-| Grafico (in pipe) | `python3 plot_git.py` → report a 4 pannelli | `python3 plot_multiproject.py` → report a 4 pannelli |
+| Grafico (in pipe) | `python3 plot_git.py` → report a 4-6 pannelli | `python3 plot_multiproject.py` → report a 6 pannelli |
 
 Dettagli completi di ogni opzione più sotto: [Versione Singolo Repository](#-versione-singolo-repository), [Versione Multi-Repository](#-versione-multi-repository).
 
@@ -179,7 +179,7 @@ Dettagli completi di ogni opzione più sotto: [Versione Singolo Repository](#-ve
 ### Versione Multi-Repository
 
 - **`git_multiproject_stats_collector.sh`** - Analizza più repository contemporaneamente
-- **`plot_multiproject.py`** - Genera un report a 4 pannelli comparativi tra progetti (churn per progetto, distribuzione, giorni attivi, tabella riepilogo)
+- **`plot_multiproject.py`** - Genera un report a 6 pannelli comparativi tra progetti (giorni attivi, commit e churn per progetto/autore, distribuzione commit e churn, tabella riepilogo)
 
 Il raggruppamento degli autori tramite `git-activity-aliases.json` è gestito dai **collector**
 (non dai plotter), perché va applicato ai dati grezzi prima di ogni aggregazione.
@@ -486,7 +486,7 @@ locale — vedi [Repository Remoti](#-repository-remoti-analizzare-un-url-git).
 ./git_multiproject_stats_collector.sh --fetch 2025-11-01 2025-11-30 ~/repo1 ~/repo2
 ```
 
-**Output:** File `git_activity_multi_project_report_<inizio>_<fine>.png` con 4 pannelli.
+**Output:** File `git_activity_multi_project_report_<inizio>_<fine>.png` con 6 pannelli.
 
 ---
 
@@ -594,9 +594,10 @@ mv git_stats.png q4_strategic_daily.png
 
 ## 🎨 Interpretazione dei Grafici
 
-Entrambi i report sono composti da **4 pannelli**: tre metriche affiancate più una
-tabella con i valori esatti. Non c'è un punteggio unico in primo piano, di proposito
-(vedi [Metriche Calcolate](#-metriche-calcolate)).
+Entrambi i report affiancano le stesse metriche di attività invece di un punteggio
+unico, più una tabella con i valori esatti (vedi [Metriche Calcolate](#-metriche-calcolate)
+sul perché). Il report singolo repository ha una base di 4 pannelli più due opzionali;
+quello multi-repository ne ha sempre 6.
 
 ### Report Singolo Repository (`git_stats.png`)
 
@@ -652,15 +653,20 @@ inevitabile) e può essere costoso su repository molto grandi — `--no-ownershi
 
 ### Report Multi-Repository
 
-Stesso principio: giorni attivi per primo, churn (per progetto e nella ciambella) non
-più in prima posizione:
+Stesso principio dell'ordine di attendibilità, con un accorgimento in più: commit e
+churn sono disposti **riga per riga con lo stesso tipo di grafico affiancato**, apposta
+per il confronto diretto — un progetto con tanto churn ma pochi commit è spesso un file
+generato/vendorizzato voluminoso, non tanto lavoro (vedi sopra "controlla sempre cosa
+c'è dietro un picco").
 
 | Pannello | Cosa mostra |
 |---|---|
-| 1. Giorni attivi per autore | Continuità del contributo, sommata sui progetti |
-| 2. Churn per progetto e autore | Barre impilate. Dove si concentra il volume, **senza esclusioni** |
-| 3. Distribuzione del churn | Quota per progetto (ciambella; barra 100% se i progetti sono < 3) |
-| 4. Riepilogo per progetto | Tabella con churn, commit, giorni attivi, file, autori, indice |
+| 1. Giorni attivi per autore | Continuità del contributo, sommata sui progetti. Il più affidabile, da solo in cima |
+| 2. Commit per progetto e autore | Barre impilate. Più affidabile del churn (vedi sotto) |
+| 3. Churn per progetto e autore | Barre impilate, **senza esclusioni**. Affiancato al pannello 2 per il confronto diretto |
+| 4. Distribuzione dei commit | Quota per progetto (ciambella; barra 100% se i progetti sono < 3) |
+| 5. Distribuzione del churn | Stesso trattamento del pannello 4, affiancato per confronto |
+| 6. Riepilogo per progetto | Tabella con churn, commit, giorni attivi, file, autori, indice |
 
 Un progetto può avere churn alto e indice basso (pochi commit molto grossi, o un client
 generato molto voluminoso) o il contrario (attività distribuita su molti giorni): è la

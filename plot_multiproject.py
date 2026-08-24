@@ -12,8 +12,9 @@ di quanto sono attendibili — non di quanto sono impressionanti:
   giorni attivi  Giorni distinti con almeno un commit. È la metrica più robusta:
                  non è gonfiabile né da un singolo commit enorme né da tanti micro-commit,
                  e non risente in alcun modo di codice generato o file voluminosi.
-                 Primo pannello.
-  commit         Numero di commit (esclusi i merge).
+                 Primo pannello (da solo, a piena larghezza).
+  commit         Numero di commit (esclusi i merge). Secondo pannello (barre impilate
+                 per progetto e autore) e terzo (ciambella di distribuzione per progetto).
   churn          = aggiunte + 0.4 * rimozioni
                    Le rimozioni contano: cancellare codice morto è lavoro reale.
                    È la meno indicativa delle tre: git_multiproject_stats_collector.sh
@@ -21,7 +22,16 @@ di quanto sono attendibili — non di quanto sono impressionanti:
                    commento in testa a quello script per il perché — in breve, qualunque
                    esclusione basata su directory può rompere il rilevamento dei rename
                    di git, misurato fino a 9.7x di inflazione su una singola giornata).
-                   Per questo non è più il primo pannello del report.
+                   Quarto e quinto pannello (stesso trattamento del commit — barre
+                   impilate poi ciambella — ma dopo, non prima: coerenza fra "quanto è
+                   attendibile" e "quanto è in evidenza" era assente nelle versioni
+                   precedenti, dove il churn occupava DUE pannelli e il commit zero,
+                   nascosto nella sola tabella).
+
+Commit e churn sono disposti riga per riga con lo STESSO tipo di grafico affiancato
+(barre impilate riga 2, ciambelle riga 3) apposta per il confronto diretto: un progetto
+con tanto churn ma pochi commit è spesso un file generato/vendorizzato voluminoso, non
+tanto lavoro — vedi "controlla sempre cosa c'è dietro un picco" nel README.
 
 L'indice composito resta disponibile come metrica SECONDARIA (solo in tabella):
 
@@ -312,8 +322,10 @@ def recessive_spines(ax, keep=("left", "bottom")):
 # -----------------------------------------------------------------------------
 # Pannelli
 # -----------------------------------------------------------------------------
-def panel_churn_by_project(ax, df, colors, author_order):
-    pivot = (df.pivot_table(index="project", columns="author", values="churn",
+def panel_metric_by_project(ax, df, colors, author_order, metric, title, ylabel):
+    """Barre impilate per progetto×autore, generica sulla metrica (churn o commit):
+    stesso trattamento visivo per entrambe, cambia solo la colonna aggregata."""
+    pivot = (df.pivot_table(index="project", columns="author", values=metric,
                             aggfunc="sum").fillna(0))
     pivot = pivot.reindex(columns=[a for a in author_order if a in pivot.columns])
     pivot = pivot.loc[pivot.sum(axis=1).sort_values(ascending=False).index]
@@ -340,17 +352,16 @@ def panel_churn_by_project(ax, df, colors, author_order):
 
     ax.set_xticks(x)
     ax.set_xticklabels(pivot.index, rotation=30, ha="right", fontsize=9)
-    title = "Churn per progetto e autore"
     if folded:
         title += f"  (primi {MAX_PROJECT_BARS} di {len(pivot.index) - 1 + folded})"
     ax.set_title(title, fontsize=12, color=INK_PRIMARY, loc="left", pad=10)
-    ax.set_ylabel("Righe (aggiunte + 0.4 × rimosse)", fontsize=9)
+    ax.set_ylabel(ylabel, fontsize=9)
     ax.grid(axis="y", color=GRIDLINE, linewidth=0.8, linestyle="-")
     recessive_spines(ax)
     integer_axis(ax)
 
 
-def _share_bar(ax, totals, colors):
+def _share_bar(ax, totals, colors, title, xlabel):
     """Part-to-whole come singola barra orizzontale al 100% (alternativa alla
     ciambella quando i settori sarebbero troppo pochi perché una torta abbia senso)."""
     total = totals.sum()
@@ -367,15 +378,16 @@ def _share_bar(ax, totals, colors):
     ax.set_xlim(0, 100)
     ax.set_ylim(-0.5, 0.5)
     ax.set_yticks([])
-    ax.set_xlabel("Quota del churn totale (%)", fontsize=9)
-    ax.set_title("Distribuzione del churn per progetto", fontsize=12,
-                 color=INK_PRIMARY, loc="left", pad=10)
+    ax.set_xlabel(xlabel, fontsize=9)
+    ax.set_title(title, fontsize=12, color=INK_PRIMARY, loc="left", pad=10)
     recessive_spines(ax, keep=("bottom",))
     ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{int(v)}%"))
 
 
-def panel_donut(ax, df):
-    totals = df.groupby("project")["churn"].sum().sort_values(ascending=False)
+def panel_donut(ax, df, metric, title, xlabel):
+    """Distribuzione per progetto (quota del totale), generica sulla metrica
+    (churn o commit): stesso trattamento visivo per entrambe."""
+    totals = df.groupby("project")[metric].sum().sort_values(ascending=False)
     # Accorpiamo per RANGO, non per soglia percentuale: con una soglia, un portfolio
     # di 20 progetti equivalenti finiva interamente in "Altro" (torta al 100%).
     if len(totals) > DONUT_MAX_SLICES:
@@ -383,9 +395,10 @@ def panel_donut(ax, df):
         totals = pd.concat([head, pd.Series({OTHER_LABEL: totals.iloc[DONUT_MAX_SLICES - 1:].sum()})])
 
     if totals.sum() <= 0:
+        metric_label = "commit" if metric == "commits" else "churn"
         ax.axis("off")
-        ax.text(0.5, 0.5, "Nessun churn nel periodo", ha="center", va="center",
-                color=INK_MUTED, fontsize=10, transform=ax.transAxes)
+        ax.text(0.5, 0.5, f"Nessun {metric_label} nel periodo",
+                ha="center", va="center", color=INK_MUTED, fontsize=10, transform=ax.transAxes)
         return
 
     # Sequenziale a una tinta (magnitudine), non categorico: qui i settori sono
@@ -396,7 +409,7 @@ def panel_donut(ax, df):
     # Con meno di 3 progetti una ciambella è una torta a 2 fette: forma sbagliata.
     # Il part-to-whole si legge meglio come singola barra 100%.
     if len(totals) < 3:
-        _share_bar(ax, totals, colors)
+        _share_bar(ax, totals, colors, title, xlabel)
         return
 
     total = totals.sum()
@@ -429,8 +442,7 @@ def panel_donut(ax, df):
     ax.legend(wedges, legend_labels, loc="center left", bbox_to_anchor=(1.02, 0.5),
               fontsize=9, labelcolor=INK_SECONDARY, frameon=False)
 
-    ax.set_title("Distribuzione del churn per progetto", fontsize=12,
-                 color=INK_PRIMARY, loc="left", pad=10)
+    ax.set_title(title, fontsize=12, color=INK_PRIMARY, loc="left", pad=10)
     ax.axis("equal")
 
 
@@ -532,35 +544,76 @@ def main():
     colors = assign_colors(author_order)
 
     apply_style()
-    fig = plt.figure(figsize=(17, 11))
+    # 4 righe: giorni attivi da solo (il più affidabile, in cima), poi due righe che
+    # affiancano commit e churn con lo STESSO tipo di grafico (barre impilate, poi
+    # ciambella) — il confronto diretto fra le due metriche sullo stesso progetto è
+    # spesso più informativo di ciascuna presa da sola (un progetto con tanto churn ma
+    # pochi commit è spesso un file generato/vendorizzato voluminoso, non tanto lavoro).
+    # Commit precede churn in ogni riga: è la metrica più affidabile delle due (vedi
+    # METRICHE sopra), non perché "viene prima nel codice".
+    # La tabella mostra fino a 12 righe (vedi panel_table): nel vecchio layout 2x2
+    # occupava un intero quadrante (~metà figura); qui deve avere altezza paragonabile
+    # o il testo sfora l'asse e si sovrappone alla legenda sotto — misurato con 12
+    # righe piene, non un'ipotesi.
+    fig = plt.figure(figsize=(17, 21))
+    gs = fig.add_gridspec(4, 2, height_ratios=[0.75, 1.0, 1.0, 1.35],
+                           hspace=0.5, wspace=0.28)
     fig.suptitle(f"Attività di sviluppo multi-progetto  ({start} → {end})",
-                 fontsize=16, color=INK_PRIMARY, x=0.02, ha="left", y=0.975)
+                 fontsize=16, color=INK_PRIMARY, x=0.02, ha="left", y=0.98)
 
-    # Giorni attivi per primo: e' la meno gonfiabile delle metriche disponibili qui.
-    # Churn (per progetto e nella ciambella) non e' piu' la prima cosa che si legge:
-    # include codice generato/vendorizzato/lock file, nessuna esclusione (vedi
-    # git_multiproject_stats_collector.sh).
-    ax1 = fig.add_subplot(2, 2, 1)
+    ax1 = fig.add_subplot(gs[0, :])
     panel_active_days(ax1, df, colors)
 
-    ax2 = fig.add_subplot(2, 2, 2)
-    panel_churn_by_project(ax2, df, colors, author_order)
+    ax2 = fig.add_subplot(gs[1, 0])
+    panel_metric_by_project(ax2, df, colors, author_order, "commits",
+                             "Commit per progetto e autore", "Commit")
 
-    ax3 = fig.add_subplot(2, 2, 3)
-    panel_donut(ax3, df)
+    ax3 = fig.add_subplot(gs[1, 1])
+    panel_metric_by_project(ax3, df, colors, author_order, "churn",
+                             "Churn per progetto e autore",
+                             "Righe (aggiunte + 0.4 × rimosse)")
 
-    ax4 = fig.add_subplot(2, 2, 4)
-    panel_table(ax4, df)
+    ax4 = fig.add_subplot(gs[2, 0])
+    panel_donut(ax4, df, "commits", "Distribuzione dei commit per progetto",
+                "Quota dei commit totali (%)")
 
-    # Le handle si prendono da ax2 (churn per progetto): l'unico pannello che disegna le
-    # barre impilate con label=autore, fonte della legenda unica di figura.
+    ax5 = fig.add_subplot(gs[2, 1])
+    panel_donut(ax5, df, "churn", "Distribuzione del churn per progetto",
+                "Quota del churn totale (%)")
+
+    ax6 = fig.add_subplot(gs[3, :])
+    panel_table(ax6, df)
+
+    # Le handle si prendono da ax2 (commit per progetto): il primo pannello che disegna
+    # le barre impilate con label=autore, fonte della legenda unica di figura.
     handles, labs = ax2.get_legend_handles_labels()
     if len(labs) >= 2:
         fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
                    fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
-                   bbox_to_anchor=(0.5, 0.005))
+                   bbox_to_anchor=(0.5, 0.01))
 
-    fig.tight_layout(rect=[0, 0.05, 1, 0.955])
+    # tight_layout non gestisce bene le legende dentro le ciambelle (bbox_to_anchor
+    # fuori asse) su un gridspec a 4 righe disomogenee: margini espliciti invece di
+    # tight_layout. Right/top/bottom fissi (già verificati sul contenuto di questo
+    # report), ma il margine sinistro è misurato dal testo EFFETTIVAMENTE renderizzato
+    # (bbox reale via get_window_extent(), non una stima) — un valore fisso tronca le
+    # etichette y più lunghe del previsto (misurato: "Gabriele Stringano" e altri nomi
+    # tagliati con un left fisso; stesso bug già corretto in plot_git.py).
+    fig.subplots_adjust(left=0.055, right=0.86, top=0.955, bottom=0.035,
+                         hspace=0.5, wspace=0.28)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    current_left = fig.subplotpars.left
+    min_x0 = 1.0
+    for ax in fig.axes:
+        for label in ax.get_yticklabels():
+            if not label.get_text():
+                continue
+            bbox = label.get_window_extent(renderer).transformed(fig.transFigure.inverted())
+            min_x0 = min(min_x0, bbox.x0)
+    label_span = current_left - min_x0
+    left_margin = max(0.035, label_span + 0.015)
+    fig.subplots_adjust(left=left_margin)
 
     safe_start = str(start).replace(" ", "_").replace("/", "-")
     safe_end = str(end).replace(" ", "_").replace("/", "-")
