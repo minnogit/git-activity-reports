@@ -192,23 +192,27 @@ Entrambi leggono JSON da stdin, quindi vanno sempre invocati in pipe da uno dei 
 JSON salvato precedentemente), non da soli. Entrambi accettano anche il formato JSON precedente (array
 senza `metadata`) per poter rielaborare file vecchi.
 
-- **`plot_git.py`** → `git_stats.png`, 4 pannelli **in ordine di attendibilità, non di prima impressione**:
-  commit nel tempo per autore, churn nel tempo per autore (+ trend), giorni attivi per autore, tabella
-  riepilogo. Churn non è più il primo pannello (vedi "Vincoli di raccolta", punto 5). **Granularità
+- **`plot_git.py`** → `git_stats.png`, 4 pannelli su griglia a righe (non più una griglia 2×2 semplice)
+  **in ordine di attendibilità, non di prima impressione**: giorni attivi per autore (riga 1, piena
+  larghezza — il più affidabile, la stessa priorità visiva data alla metrica più affidabile nel report
+  multi-progetto), poi commit e churn nel tempo per autore affiancati (riga 2, quest'ultimo con la
+  linea di trend — churn non è il primo pannello, vedi "Vincoli di raccolta", punto 5), tabella
+  riepilogo (riga 3, piena larghezza). **Granularità
   adattiva**: ≤45 giorni → giornaliera, ≤250 → settimanale, oltre → mensile (`choose_bucket()`); serve
   perché una barra al giorno è illeggibile su periodi lunghi. **Quinto pannello opzionale** (striscia
-  larga sotto la griglia 2×2, `panel_punch_card()`): heatmap giorno×ora di quando avvengono i commit,
+  larga sotto le prime tre righe, `panel_punch_card()`): heatmap giorno×ora di quando avvengono i commit,
   sequenziale a una tinta (rampa blu di `palette.md`), presente solo se il JSON ha `punch_card`.
   Deliberatamente descrittivo ("quando"), non valutativo ("quanto si è lavorato") — i timestamp dei
   commit non sono un proxy affidabile delle ore lavorate, quindi non è una quarta metrica nell'ordine
-  di attendibilità sopra. Margini: quando almeno un pannello opzionale è presente, **non** si usa
-  `fig.tight_layout()` — con un asse aggiuntivo "incompatibile" presente (la colorbar del punch
-  card, o anche solo la legenda a livello di figura) avvisa "Axes that are not compatible" e poi
-  NON calcola nulla: lascia i margini di default di matplotlib (0.125/0.9/0.11, verificato
-  stampando `fig.subplotpars`), abbastanza larghi da non tagliare "Gabriele Stringano" per
-  coincidenza ma molto più dello spazio realmente necessario (misurato: margini vistosamente
-  sproporzionati). Si misura invece lo spazio EFFETTIVAMENTE occupato dall'etichetta y più lunga
-  dopo `fig.canvas.draw()` (bbox del testo già renderizzato via `get_window_extent()`, non una
+  di attendibilità sopra. Margini: **non** si usa mai `fig.tight_layout()` (nemmeno per il layout
+  base a 3 righe, punch card/ownership assenti) — un gridspec a >2 righe di altezze disomogenee
+  (vero anche solo per giorni attivi + commit/churn + tabella) e/o un asse aggiuntivo "incompatibile"
+  (la colorbar del punch card, la legenda a livello di figura) fa avvisare "Axes that are not
+  compatible" e poi NON calcola nulla: lascia i margini di default di matplotlib (0.125/0.9/0.11,
+  verificato stampando `fig.subplotpars`), abbastanza larghi da non tagliare "Gabriele Stringano"
+  per coincidenza ma molto più dello spazio realmente necessario (misurato: margini vistosamente
+  sproporzionati). Si misura invece SEMPRE lo spazio EFFETTIVAMENTE occupato dall'etichetta y più
+  lunga dopo `fig.canvas.draw()` (bbox del testo già renderizzato via `get_window_extent()`, non una
   stima) e si calcola da lì il margine sinistro minimo che la ospita, con `fig.subplots_adjust()`;
   right/top/bottom/hspace/wspace restano fissi (valori già verificati sul contenuto del report).
   Verificato anche con un nome sintetico da 47 caratteri: margine adattato correttamente, nessun
@@ -218,7 +222,7 @@ senza `metadata`) per poter rielaborare file vecchi.
   può includere autori mai attivi nel periodo. Stessa palette/assegnazione colori degli altri
   pannelli (chi non è tra i primi 8 per attività nel periodo si accorpa in "Altro", mai una tinta
   nuova). Il numero di righe extra (`extra_rows` in `main()`) si adatta a quali dei due pannelli
-  opzionali (punch card, ownership) sono presenti nel JSON — 0, 1 o 2 righe in più sotto la griglia 2×2.
+  opzionali (punch card, ownership) sono presenti nel JSON — 0, 1 o 2 righe in più sotto le prime tre.
 - **`plot_multiproject.py`** → `git_activity_multi_project_report_<start>_<end>.png`, 6 pannelli su
   griglia 4 righe × 2 colonne: giorni attivi per autore (riga 1, piena larghezza — il più affidabile,
   da solo in cima), poi commit e churn per progetto e autore affiancati (riga 2,

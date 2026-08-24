@@ -9,7 +9,12 @@ Non esiste un singolo numero che misuri il "valore" del lavoro di sviluppo, quin
 questo report mostra TRE metriche affiancate invece di un punteggio unico, in ordine
 di quanto sono attendibili — non di quanto sono impressionanti:
 
-  commit         Numero di commit (esclusi i merge). Primo pannello.
+  giorni attivi  Giorni distinti con almeno un commit. È la metrica più robusta:
+                 non è gonfiabile né da un singolo commit enorme né da tanti micro-commit,
+                 e non risente in alcun modo di codice generato o file voluminosi.
+                 Primo pannello, da solo a piena larghezza: la stessa priorità visiva
+                 data alla metrica più affidabile nel report multi-progetto.
+  commit         Numero di commit (esclusi i merge). Secondo pannello (a sinistra).
   churn          = aggiunte + 0.4 * rimozioni
                    Le rimozioni contano: cancellare codice morto è lavoro reale.
                    Il peso < 1 riflette che rimuovere costa in genere meno che scrivere.
@@ -17,11 +22,8 @@ di quanto sono attendibili — non di quanto sono impressionanti:
                    codice generato, vendorizzato o lock file (vedi il commento in testa
                    a quello script per il perché — in breve, qualunque esclusione basata
                    su directory può rompere il rilevamento dei rename di git, misurato
-                   fino a 9.7x di inflazione su una singola giornata). Per questo non è
-                   più il primo pannello del report.
-  giorni attivi  Giorni distinti con almeno un commit. È la metrica più robusta:
-                 non è gonfiabile né da un singolo commit enorme né da tanti micro-commit,
-                 e non risente in alcun modo di codice generato o file voluminosi.
+                   fino a 9.7x di inflazione su una singola giornata). Terzo pannello
+                   (a destra, affiancato al commit per il confronto diretto).
 
 L'indice composito resta disponibile come metrica SECONDARIA (solo in tabella):
 
@@ -632,11 +634,12 @@ def main():
     has_ownership = bool(ownership and ownership.get("total_lines"))
 
     apply_style()
-    # Il punch card e l'ownership sono pannelli AGGIUNTIVI (righe extra sotto la griglia
-    # 2x2 esistente, non un rimpiazzo di un pannello): entrambi assenti nei JSON che non
-    # li hanno (legacy, o prodotti con --no-ownership) — niente riga vuota in quel caso.
-    # Ogni riga extra e' larga quanto tutta la figura (gs[row, :]): il punch card lo
-    # richiede per la sua forma (24 colonne orarie), l'ownership no ma resta coerente.
+    # Layout a righe, non più una griglia 2x2 semplice: i giorni attivi (la metrica più
+    # robusta, vedi METRICHE sopra) stanno da soli in cima a piena larghezza — la stessa
+    # priorità visiva già data alla metrica più affidabile nel report multi-progetto —
+    # non più affiancati alla tabella in una posizione meno prominente di commit/churn,
+    # che pure sono meno attendibili. Punch card e ownership restano righe AGGIUNTIVE
+    # sotto, assenti nei JSON che non le hanno (legacy, o prodotti con --no-ownership).
     has_punch = punch.sum() > 0
     extra_rows = []
     if has_punch:
@@ -645,13 +648,10 @@ def main():
         extra_rows.append(("ownership", 0.6))
 
     n_extra = len(extra_rows)
-    if n_extra:
-        fig = plt.figure(figsize=(17, 11 + 3 * n_extra))
-        ratios = [1, 1] + [r for _, r in extra_rows]
-        gs = fig.add_gridspec(2 + n_extra, 2, height_ratios=ratios, hspace=0.65, wspace=0.22)
-    else:
-        fig = plt.figure(figsize=(17, 11))
-        gs = fig.add_gridspec(2, 2, hspace=0.45, wspace=0.22)
+    base_ratios = [0.85, 1.05, 1.3]   # giorni attivi, commit+churn, tabella
+    fig = plt.figure(figsize=(17, 15 + 3 * n_extra))
+    gs = fig.add_gridspec(3 + n_extra, 2, height_ratios=base_ratios + [r for _, r in extra_rows],
+                          hspace=0.6, wspace=0.22)
 
     title = "Attività di sviluppo"
     if project:
@@ -659,29 +659,29 @@ def main():
     fig.suptitle(f"{title}  ({start} → {end}, per {bucket_name})",
                  fontsize=16, color=INK_PRIMARY, x=0.02, ha="left", y=0.975)
 
-    # Commit per primo, churn per secondo: churn è la meno indicativa delle tre metriche
-    # (include codice generato/vendorizzato/lock file — nessuna esclusione, vedi
-    # git_stats_collector.sh) e non è più la prima cosa che si legge del report.
-    ax1 = fig.add_subplot(gs[0, 0])
+    ax0 = fig.add_subplot(gs[0, :])
+    panel_active_days(ax0, summary, colors)
+
+    # Commit per primo, churn per secondo (fra i due): churn è la meno indicativa delle
+    # tre metriche (include codice generato/vendorizzato/lock file — nessuna esclusione,
+    # vedi git_stats_collector.sh).
+    ax1 = fig.add_subplot(gs[1, 0])
     panel_stacked_over_time(
         ax1, commits_pivot, colors, labels,
         f"Commit per {bucket_name}, per autore", "Commit",
     )
 
-    ax2 = fig.add_subplot(gs[0, 1])
+    ax2 = fig.add_subplot(gs[1, 1])
     panel_stacked_over_time(
         ax2, churn_pivot, colors, labels,
         f"Churn per {bucket_name}, per autore",
         "Righe (aggiunte + 0.4 × rimosse)", trend_window,
     )
 
-    ax3 = fig.add_subplot(gs[1, 0])
-    panel_active_days(ax3, summary, colors)
-
-    ax4 = fig.add_subplot(gs[1, 1])
+    ax4 = fig.add_subplot(gs[2, :])
     panel_table(ax4, summary)
 
-    row = 2
+    row = 3
     if has_punch:
         ax5 = fig.add_subplot(gs[row, :])
         panel_punch_card(ax5, punch)
@@ -705,39 +705,36 @@ def main():
     paired = sorted(zip(labs, handles), key=lambda p: p[0].startswith("Trend"))
     labs = [p[0] for p in paired]
     handles = [p[1] for p in paired]
-    legend_y = 0.02 if n_extra else 0.005
+    legend_y = 0.02
     fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
                fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
                bbox_to_anchor=(0.5, legend_y))
 
-    if n_extra:
-        # tight_layout() qui NON funziona: con un asse aggiuntivo "incompatibile" (la
-        # colorbar del punch card, o anche solo la legenda a livello di figura) avvisa
-        # "Axes that are not compatible" e poi NON calcola nulla — lascia i margini di
-        # default di matplotlib (0.125/0.9/0.11, verificato stampando fig.subplotpars),
-        # che non sono tarati sul contenuto: abbastanza larghi da non tagliare "Gabriele
-        # Stringano" per coincidenza, ma molto più dello spazio realmente necessario.
-        # Si misura quindi lo spazio EFFETTIVAMENTE occupato dall'etichetta y più lunga
-        # (bbox del testo già renderizzato, non una stima) e si calcola il margine sinistro
-        # minimo che la ospita — right/top/bottom/hspace/wspace restano fissi: valori già
-        # verificati sul contenuto di questo report (nessuna etichetta a destra dei valori
-        # delle barre o vuoto ingiustificato sopra la prima riga extra).
-        fig.canvas.draw()
-        renderer = fig.canvas.get_renderer()
-        current_left = fig.subplotpars.left
-        min_x0 = 1.0
-        for ax in fig.axes:
-            for label in ax.get_yticklabels():
-                if not label.get_text():
-                    continue
-                bbox = label.get_window_extent(renderer).transformed(fig.transFigure.inverted())
-                min_x0 = min(min_x0, bbox.x0)
-        label_span = current_left - min_x0   # larghezza dell'etichetta più lunga, in frazione di figura
-        left_margin = max(0.035, label_span + 0.015)   # + un piccolo margine di sicurezza
-        fig.subplots_adjust(left=left_margin, right=0.97, top=0.94, bottom=0.09,
-                             hspace=0.5, wspace=0.22)
-    else:
-        fig.tight_layout(rect=[0, 0.05, 1, 0.955])
+    # tight_layout() qui NON funziona: con un gridspec a >2 righe di altezze disomogenee
+    # (già vero per il layout base ora, non solo con punch card/ownership) e/o un asse
+    # aggiuntivo "incompatibile" (la colorbar del punch card, la legenda a livello di
+    # figura) avvisa "Axes that are not compatible" e poi NON calcola nulla — lascia i
+    # margini di default di matplotlib (0.125/0.9/0.11, verificato stampando
+    # fig.subplotpars), che non sono tarati sul contenuto: abbastanza larghi da non
+    # tagliare "Gabriele Stringano" per coincidenza, ma molto più dello spazio realmente
+    # necessario. Si misura quindi lo spazio EFFETTIVAMENTE occupato dall'etichetta y più
+    # lunga (bbox del testo già renderizzato, non una stima) e si calcola il margine
+    # sinistro minimo che la ospita — right/top/bottom/hspace/wspace restano fissi: valori
+    # già verificati sul contenuto di questo report.
+    fig.subplots_adjust(left=0.055, right=0.97, top=0.94, bottom=0.09, hspace=0.6, wspace=0.22)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    current_left = fig.subplotpars.left
+    min_x0 = 1.0
+    for ax in fig.axes:
+        for label in ax.get_yticklabels():
+            if not label.get_text():
+                continue
+            bbox = label.get_window_extent(renderer).transformed(fig.transFigure.inverted())
+            min_x0 = min(min_x0, bbox.x0)
+    label_span = current_left - min_x0   # larghezza dell'etichetta più lunga, in frazione di figura
+    left_margin = max(0.035, label_span + 0.015)   # + un piccolo margine di sicurezza
+    fig.subplots_adjust(left=left_margin)
     fig.savefig(OUTPUT_FILENAME, dpi=200)
     # Messaggio invariato: l'estensione VS Code lo intercetta via regex.
     print(f"Grafico generato con successo: {OUTPUT_FILENAME}")
