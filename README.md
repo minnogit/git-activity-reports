@@ -174,7 +174,7 @@ Dettagli completi di ogni opzione più sotto: [Versione Singolo Repository](#-ve
 ### Versione Singolo Repository
 
 - **`git_stats_collector.sh`** - Analizza un repository alla volta con dettaglio giornaliero
-- **`plot_git.py`** - Genera un report a 4 pannelli (churn nel tempo, commit nel tempo, giorni attivi, tabella riepilogo)
+- **`plot_git.py`** - Genera un report a 4 pannelli base (giorni attivi, commit nel tempo, churn nel tempo, tabella riepilogo) più due opzionali
 
 ### Versione Multi-Repository
 
@@ -607,9 +607,9 @@ impressionanti — churn è per ultimo, non per primo (vedi
 
 | Pannello | Cosa mostra |
 |---|---|
-| 1. Commit nel tempo, per autore | Barre impilate. Frequenza di consegna, indipendente dalla dimensione |
-| 2. Churn nel tempo, per autore | Barre impilate + linea di trend (media mobile). Volume di cambiamento, **senza esclusioni** |
-| 3. Giorni attivi per autore | La metrica più robusta: continuità del contributo |
+| 1. Giorni attivi per autore | Piena larghezza, in cima: la metrica più robusta, continuità del contributo |
+| 2. Commit nel tempo, per autore | Barre impilate. Frequenza di consegna, indipendente dalla dimensione |
+| 3. Churn nel tempo, per autore | Barre impilate + linea di trend (media mobile). Volume di cambiamento, **senza esclusioni**. Affiancato al pannello 2 per il confronto diretto |
 | 4. Riepilogo per autore | Tabella con churn, commit, giorni attivi, file, indice |
 
 **Granularità adattiva:** l'asse temporale si adatta automaticamente al periodo, perché
@@ -622,7 +622,7 @@ una barra al giorno diventa illeggibile su intervalli lunghi:
 | > 250 giorni | mensile |
 
 **Insights tipici:** picchi prima dei rilasci, periodi di inattività, distribuzione del
-carico. Confrontare i pannelli 1 e 2 è spesso più informativo di ciascuno preso da solo:
+carico. Confrontare i pannelli 2 e 3 è spesso più informativo di ciascuno preso da solo:
 molti commit con poco churn indica iterazione a piccoli passi, il contrario indica
 cambiamenti grossi e rari (o, dato che il churn non esclude nulla, anche solo un file
 generato/vendorizzato molto voluminoso — controlla sempre cosa c'è dietro un picco).
