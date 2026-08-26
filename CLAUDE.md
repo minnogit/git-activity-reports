@@ -223,6 +223,14 @@ senza `metadata`) per poter rielaborare file vecchi.
   pannelli (chi non è tra i primi 8 per attività nel periodo si accorpa in "Altro", mai una tinta
   nuova). Il numero di righe extra (`extra_rows` in `main()`) si adatta a quali dei due pannelli
   opzionali (punch card, ownership) sono presenti nel JSON — 0, 1 o 2 righe in più sotto le prime tre.
+  **Altezza adattiva** (stesso fix, stesse costanti misurate indipendentemente — vedi
+  `plot_multiproject.py` per i dettagli, qui `TABLE_ROW_INCHES=0.267` per le 6 colonne di
+  `panel_table`, diverso dalle 7 colonne dell'altro file): la riga della tabella si dimensiona sul
+  numero di autori mostrati, non sul caso peggiore fisso, ed **anche il footer si adatta al numero
+  di righe della legenda** (autori + "Trend", quest'ultimo presente solo se `len(labels) >= 3`) —
+  con più di `ncol=6` voci la legenda va a capo, e un footer tarato su una riga sola lasciava
+  sovrapporre la seconda riga al pannello sotto (misurato: 9 autori + Trend, 2 righe di legenda,
+  sovrapposte alla punch card).
 - **`plot_multiproject.py`** → `git_activity_multi_project_report_<start>_<end>.png`, 6 pannelli su
   griglia 4 righe × 2 colonne, **una riga per metrica**: giorni attivi per autore (riga 1, piena
   larghezza — il più affidabile, da solo in cima), commit (riga 2: barre impilate per progetto/autore
@@ -248,10 +256,18 @@ senza `metadata`) per poter rielaborare file vecchi.
   effettivamente mostrati (`MAX_TABLE_ROWS`) e l'altezza della figura si accorcia di conseguenza,
   mantenendo `ROW_UNIT_INCHES` costante — così le prime tre righe conservano la stessa dimensione
   assoluta a ogni conteggio. Corollario da NON regredire: header e footer sono in POLLICI
-  (`HEADER_INCHES`/`FOOTER_INCHES`/`SUPTITLE_INCHES`/`LEGEND_INCHES`), non in frazione di figura —
-  con frazioni fisse, accorciando la figura il suptitle finiva sopra il titolo del primo pannello
+  (`HEADER_INCHES`/`SUPTITLE_INCHES`/`LEGEND_BOTTOM_PAD_INCHES`), non in frazione di figura — con
+  frazioni fisse, accorciando la figura il suptitle finiva sopra il titolo del primo pannello
   (misurato con 3 progetti). Se si cambiano fontsize o `table.scale` in `panel_table`, rimisurare
   `TABLE_ROW_INCHES` (due render con conteggi diversi bastano: l'altezza è lineare nelle righe).
+  **Il footer si adatta anche al numero di righe della legenda**: con più di `ncol=6` voci (8 autori
+  + "Altro") la legenda va a capo su una seconda riga — con un `FOOTER_INCHES` fisso tarato su una
+  riga sola, la seconda riga finiva sopra il pannello successivo (misurato: 9 autori sintetici, 2
+  righe di legenda, sovrapposte alla tabella). Il numero di righe (`legend_rows`, calcolato PRIMA di
+  creare la figura da `len(author_order)` con lo stesso `ncol` con cui la legenda verrà poi
+  disegnata) determina l'altezza riservata: 0.230" la prima riga, +0.1925" per ognuna successiva
+  (`LEGEND_ROW1_INCHES`/`LEGEND_EXTRA_ROW_INCHES`, misurate via `get_window_extent()`, non
+  un'ipotesi). Stesso bug e stesso fix in `plot_git.py`, dove alle voci-autore si aggiunge "Trend".
 
 #### Metriche (duplicate identiche nei due plotter — modificarle in entrambi)
 

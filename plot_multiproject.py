@@ -117,9 +117,16 @@ FIG_HSPACE = 0.5
 # (misurato: con 3 progetti il suptitle finiva sopra il titolo del primo pannello). Con
 # valori assoluti il margine resta identico a qualunque altezza di figura.
 HEADER_INCHES = 0.95      # spazio sopra la prima riga: suptitle + titolo del pannello
-FOOTER_INCHES = 0.75      # spazio sotto l'ultima riga: nota della tabella + legenda
 SUPTITLE_INCHES = 0.42    # distanza del suptitle dal bordo superiore
-LEGEND_INCHES = 0.21      # distanza della legenda dal bordo inferiore
+# Spazio sotto l'ultima riga: nota della tabella + legenda. La legenda va a capo su più
+# righe quando gli autori (fino a 8 + "Altro") superano ncol=6: con un FOOTER fisso
+# tarato su una riga sola, la seconda riga finisce sopra il pannello successivo — stesso
+# bug misurato e corretto in plot_git.py, stessa costante di altezza per riga (dipende
+# solo da fontsize=9, non dal numero di colonne della tabella o dalle metriche mostrate).
+LEGEND_ROW1_INCHES = 0.230
+LEGEND_EXTRA_ROW_INCHES = 0.1925
+LEGEND_BOTTOM_PAD_INCHES = 0.08   # distanza tra il bordo inferiore della figura e la legenda
+NOTE_INCHES = 0.30                # spazio per la nota sotto la tabella, sopra la legenda
 
 SURFACE = "#fcfcfb"
 INK_PRIMARY = "#0b0b0b"
@@ -618,9 +625,19 @@ def main():
     # più header e footer (assoluti, vedi le costanti in testa).
     gaps = (len(ratios) - 1) * FIG_HSPACE / len(ratios)
     rows_height = sum(ratios) * ROW_UNIT_INCHES * (1 + gaps)
-    fig_height = rows_height + HEADER_INCHES + FOOTER_INCHES
+
+    # Righe della legenda: stesso criterio con cui sarà disegnata più sotto (autori,
+    # ncol=min(n, 6)) — va saputo PRIMA di creare la figura, perché il footer deve
+    # riservare spazio per tutte le righe, non solo la prima.
+    n_legend_labels = len(author_order)
+    legend_ncol = min(n_legend_labels, 6) or 1
+    legend_rows = -(-n_legend_labels // legend_ncol)  # ceiling division
+    legend_height = LEGEND_ROW1_INCHES + max(0, legend_rows - 1) * LEGEND_EXTRA_ROW_INCHES
+    footer_inches = LEGEND_BOTTOM_PAD_INCHES + legend_height + NOTE_INCHES
+
+    fig_height = rows_height + HEADER_INCHES + footer_inches
     fig_top = 1 - HEADER_INCHES / fig_height
-    fig_bottom = FOOTER_INCHES / fig_height
+    fig_bottom = footer_inches / fig_height
 
     fig = plt.figure(figsize=(FIG_WIDTH_INCHES, fig_height))
     gs = fig.add_gridspec(4, 2, height_ratios=ratios,
@@ -658,7 +675,7 @@ def main():
     if len(labs) >= 2:
         fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
                    fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
-                   bbox_to_anchor=(0.5, LEGEND_INCHES / fig_height))
+                   bbox_to_anchor=(0.5, LEGEND_BOTTOM_PAD_INCHES / fig_height))
 
     # tight_layout non gestisce bene le legende dentro le ciambelle (bbox_to_anchor
     # fuori asse) su un gridspec a 4 righe disomogenee: margini espliciti invece di
