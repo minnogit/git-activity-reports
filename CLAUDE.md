@@ -240,10 +240,18 @@ senza `metadata`) per poter rielaborare file vecchi.
   righe). Un confronto commit-vs-churn onesto richiede un pannello dedicato (es. churn per commit per
   progetto), non due pannelli affiancati. Margini: stesso approccio di `plot_git.py`
   (misurare il testo renderizzato per il margine sinistro, mai un valore fisso — altrimenti tronca nomi
-  lunghi come "Gabriele Stringano", misurato); la riga della tabella ha un height_ratio più alto delle
-  altre (1.35 contro 0.75-1.0) perché con 12 righe piene (il massimo mostrato) il contenuto sfora
-  altrimenti l'asse e si sovrappone alla legenda sotto — misurato con un dataset sintetico da 15
-  progetti, non un'ipotesi.
+  lunghi come "Gabriele Stringano", misurato). **Altezza della figura adattiva**: le celle della
+  tabella sono dimensionate dal FONT e non dall'asse che le contiene (misurato: 0.289" per riga
+  header incluso, `TABLE_ROW_INCHES`, con l'asse fermo a 4.627" a qualunque conteggio di righe), quindi
+  un `height_ratio` fisso sulla riga della tabella lasciava ~3.5" di banda vuota con 3 progetti e
+  rischiava lo sforo con 12. Ora il ratio della quarta riga si calcola dal numero di progetti
+  effettivamente mostrati (`MAX_TABLE_ROWS`) e l'altezza della figura si accorcia di conseguenza,
+  mantenendo `ROW_UNIT_INCHES` costante — così le prime tre righe conservano la stessa dimensione
+  assoluta a ogni conteggio. Corollario da NON regredire: header e footer sono in POLLICI
+  (`HEADER_INCHES`/`FOOTER_INCHES`/`SUPTITLE_INCHES`/`LEGEND_INCHES`), non in frazione di figura —
+  con frazioni fisse, accorciando la figura il suptitle finiva sopra il titolo del primo pannello
+  (misurato con 3 progetti). Se si cambiano fontsize o `table.scale` in `panel_table`, rimisurare
+  `TABLE_ROW_INCHES` (due render con conteggi diversi bastano: l'altezza è lineare nelle righe).
 
 #### Metriche (duplicate identiche nei due plotter — modificarle in entrambi)
 
