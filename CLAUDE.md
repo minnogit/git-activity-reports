@@ -224,16 +224,21 @@ senza `metadata`) per poter rielaborare file vecchi.
   nuova). Il numero di righe extra (`extra_rows` in `main()`) si adatta a quali dei due pannelli
   opzionali (punch card, ownership) sono presenti nel JSON — 0, 1 o 2 righe in più sotto le prime tre.
 - **`plot_multiproject.py`** → `git_activity_multi_project_report_<start>_<end>.png`, 6 pannelli su
-  griglia 4 righe × 2 colonne: giorni attivi per autore (riga 1, piena larghezza — il più affidabile,
-  da solo in cima), poi commit e churn per progetto e autore affiancati (riga 2,
-  `panel_metric_by_project()`, generica sulla metrica), poi distribuzione commit e distribuzione churn
-  affiancate (riga 3, `panel_donut()`, generica sulla metrica; barra 100% se i progetti sono < 3, via
-  `_share_bar()`), tabella riepilogo (riga 4, piena larghezza). Commit precede churn in ogni riga
-  apposta: è la metrica più affidabile delle due (nessuna esclusione di file generati/vendorizzati sul
-  churn), e le versioni precedenti di questo report davano al churn DUE pannelli (barre + ciambella) e
-  zero al commit (solo in tabella) — incoerente con l'ordine di attendibilità già dichiarato nel
-  docstring del modulo. Affiancare le due metriche con lo stesso tipo di grafico (non raggrupparle per
-  metrica) permette il confronto diretto riga per riga. Margini: stesso approccio di `plot_git.py`
+  griglia 4 righe × 2 colonne, **una riga per metrica**: giorni attivi per autore (riga 1, piena
+  larghezza — il più affidabile, da solo in cima), commit (riga 2: barre impilate per progetto/autore
+  via `panel_metric_by_project()` + ciambella di distribuzione via `panel_donut()`, entrambe generiche
+  sulla metrica; barra 100% se i progetti sono < 3, via `_share_bar()`), churn (riga 3, stessi due
+  pannelli sulla metrica churn), tabella riepilogo (riga 4, piena larghezza). Due vincoli da non
+  regredire: (1) il churn sta SOTTO il commit, non accanto — le versioni più vecchie gli davano DUE
+  pannelli e al commit zero (solo in tabella), incoerente con l'ordine di attendibilità dichiarato nel
+  docstring del modulo; (2) **non** riaffiancare commit e churn sulla stessa riga "per confrontarli":
+  è stato provato e NON funziona, perché ogni pannello riordina i progetti per il PROPRIO totale
+  (`sort_values` in entrambe le funzioni) — misurato su dati sintetici, commit e churn producono
+  ordinamenti completamente diversi appena un progetto ha commit grossi (un client rigenerato finisce
+  ultimo per commit e primo per churn), quindi "prima barra a sinistra vs prima barra a destra"
+  confrontava progetti DIVERSI; le scale y sono anche incommensurabili (es. 560 commit vs 420.000
+  righe). Un confronto commit-vs-churn onesto richiede un pannello dedicato (es. churn per commit per
+  progetto), non due pannelli affiancati. Margini: stesso approccio di `plot_git.py`
   (misurare il testo renderizzato per il margine sinistro, mai un valore fisso — altrimenti tronca nomi
   lunghi come "Gabriele Stringano", misurato); la riga della tabella ha un height_ratio più alto delle
   altre (1.35 contro 0.75-1.0) perché con 12 righe piene (il massimo mostrato) il contenuto sfora

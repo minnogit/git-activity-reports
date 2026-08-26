@@ -13,8 +13,9 @@ di quanto sono attendibili — non di quanto sono impressionanti:
                  non è gonfiabile né da un singolo commit enorme né da tanti micro-commit,
                  e non risente in alcun modo di codice generato o file voluminosi.
                  Primo pannello (da solo, a piena larghezza).
-  commit         Numero di commit (esclusi i merge). Secondo pannello (barre impilate
-                 per progetto e autore) e terzo (ciambella di distribuzione per progetto).
+  commit         Numero di commit (esclusi i merge). RIGA 2, interamente sua: barre
+                 impilate per progetto e autore, più la ciambella di distribuzione per
+                 progetto affiancata (la stessa cosa a due livelli di dettaglio).
   churn          = aggiunte + 0.4 * rimozioni
                    Le rimozioni contano: cancellare codice morto è lavoro reale.
                    È la meno indicativa delle tre: git_multiproject_stats_collector.sh
@@ -22,16 +23,20 @@ di quanto sono attendibili — non di quanto sono impressionanti:
                    commento in testa a quello script per il perché — in breve, qualunque
                    esclusione basata su directory può rompere il rilevamento dei rename
                    di git, misurato fino a 9.7x di inflazione su una singola giornata).
-                   Quarto e quinto pannello (stesso trattamento del commit — barre
-                   impilate poi ciambella — ma dopo, non prima: coerenza fra "quanto è
-                   attendibile" e "quanto è in evidenza" era assente nelle versioni
-                   precedenti, dove il churn occupava DUE pannelli e il commit zero,
-                   nascosto nella sola tabella).
+                   RIGA 3, stesso trattamento del commit (barre impilate + ciambella
+                   affiancate) ma sotto, non sopra: coerenza fra "quanto è attendibile" e
+                   "quanto è in evidenza" era assente nelle versioni precedenti, dove il
+                   churn occupava DUE pannelli e il commit zero, nascosto nella sola
+                   tabella.
 
-Commit e churn sono disposti riga per riga con lo STESSO tipo di grafico affiancato
-(barre impilate riga 2, ciambelle riga 3) apposta per il confronto diretto: un progetto
-con tanto churn ma pochi commit è spesso un file generato/vendorizzato voluminoso, non
-tanto lavoro — vedi "controlla sempre cosa c'è dietro un picco" nel README.
+Una riga per metrica, non una riga per tipo di grafico. Un layout precedente affiancava
+commit e churn sulla stessa riga per permetterne il confronto diretto: non funzionava,
+perché ogni pannello ordina i progetti per il PROPRIO totale e la posizione sull'asse x
+non corrisponde fra i due (misurato: commit e churn producono ordinamenti completamente
+diversi appena un progetto ha commit grossi, es. un client rigenerato) — si finiva per
+confrontare progetti diversi. Un confronto commit-vs-churn onesto richiede un pannello
+dedicato (es. churn per commit per progetto), non due pannelli affiancati; per ora la
+tabella di riepilogo resta il posto dove leggere le due metriche sullo stesso progetto.
 
 L'indice composito resta disponibile come metrica SECONDARIA (solo in tabella):
 
@@ -544,13 +549,29 @@ def main():
     colors = assign_colors(author_order)
 
     apply_style()
-    # 4 righe: giorni attivi da solo (il più affidabile, in cima), poi due righe che
-    # affiancano commit e churn con lo STESSO tipo di grafico (barre impilate, poi
-    # ciambella) — il confronto diretto fra le due metriche sullo stesso progetto è
-    # spesso più informativo di ciascuna presa da sola (un progetto con tanto churn ma
-    # pochi commit è spesso un file generato/vendorizzato voluminoso, non tanto lavoro).
-    # Commit precede churn in ogni riga: è la metrica più affidabile delle due (vedi
-    # METRICHE sopra), non perché "viene prima nel codice".
+    # 4 righe: giorni attivi da solo (il più affidabile, in cima), poi UNA RIGA PER
+    # METRICA — commit (riga 2), churn (riga 3) — con dentro barre impilate e ciambella
+    # della stessa metrica affiancate. Due ragioni, entrambe misurate:
+    #
+    #   1. Barre e ciambella della stessa metrica raccontano la stessa cosa a due livelli
+    #      di dettaglio (dove si concentra, e la quota sul totale): appaiarle è la lettura
+    #      naturale. Churn interamente sulla riga sotto lo rende anche meno prominente del
+    #      commit, coerente con l'ordine di attendibilità (vedi METRICHE sopra).
+    #   2. Il layout precedente affiancava commit e churn sulla stessa riga per il
+    #      "confronto diretto" fra le due metriche. NON funziona, ed era peggio che
+    #      inutile: ogni pannello ordina i progetti per il PROPRIO totale
+    #      (`sort_values` in panel_metric_by_project/panel_donut), quindi la posizione
+    #      sull'asse x non corrisponde fra i due. Misurato su dati sintetici realistici:
+    #      commit -> [app-frontend, core-lib, docs, api-generated] mentre
+    #      churn  -> [api-generated, core-lib, app-frontend, docs]. Confrontare "prima
+    #      barra a sinistra vs prima barra a destra" confrontava due progetti DIVERSI (e
+    #      lo stesso vale per il fold in "Altro" delle ciambelle, calcolato per metrica).
+    #      Con scale y incommensurabili (es. 560 commit vs 420.000 righe) non restava
+    #      nemmeno un confronto di forma valido.
+    #
+    # Un confronto commit-vs-churn onesto richiederebbe un pannello dedicato (es. churn
+    # per commit per progetto), non due pannelli affiancati: non è stato aggiunto qui.
+    #
     # La tabella mostra fino a 12 righe (vedi panel_table): nel vecchio layout 2x2
     # occupava un intero quadrante (~metà figura); qui deve avere altezza paragonabile
     # o il testo sfora l'asse e si sovrappone alla legenda sotto — misurato con 12
@@ -569,13 +590,13 @@ def main():
                              "Commit per progetto e autore", "Commit")
 
     ax3 = fig.add_subplot(gs[1, 1])
-    panel_metric_by_project(ax3, df, colors, author_order, "churn",
-                             "Churn per progetto e autore",
-                             "Righe (aggiunte + 0.4 × rimosse)")
+    panel_donut(ax3, df, "commits", "Distribuzione dei commit per progetto",
+                "Quota dei commit totali (%)")
 
     ax4 = fig.add_subplot(gs[2, 0])
-    panel_donut(ax4, df, "commits", "Distribuzione dei commit per progetto",
-                "Quota dei commit totali (%)")
+    panel_metric_by_project(ax4, df, colors, author_order, "churn",
+                             "Churn per progetto e autore",
+                             "Righe (aggiunte + 0.4 × rimosse)")
 
     ax5 = fig.add_subplot(gs[2, 1])
     panel_donut(ax5, df, "churn", "Distribuzione del churn per progetto",
