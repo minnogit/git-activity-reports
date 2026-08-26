@@ -13,8 +13,9 @@ di quanto sono attendibili — non di quanto sono impressionanti:
                  non è gonfiabile né da un singolo commit enorme né da tanti micro-commit,
                  e non risente in alcun modo di codice generato o file voluminosi.
                  Primo pannello (da solo, a piena larghezza).
-  commit         Numero di commit (esclusi i merge). Secondo pannello (barre impilate
-                 per progetto e autore) e terzo (ciambella di distribuzione per progetto).
+  commit         Numero di commit (esclusi i merge). RIGA 2, interamente sua: barre
+                 impilate per progetto e autore, più la ciambella di distribuzione per
+                 progetto affiancata (la stessa cosa a due livelli di dettaglio).
   churn          = aggiunte + 0.4 * rimozioni
                    Le rimozioni contano: cancellare codice morto è lavoro reale.
                    È la meno indicativa delle tre: git_multiproject_stats_collector.sh
@@ -22,16 +23,20 @@ di quanto sono attendibili — non di quanto sono impressionanti:
                    commento in testa a quello script per il perché — in breve, qualunque
                    esclusione basata su directory può rompere il rilevamento dei rename
                    di git, misurato fino a 9.7x di inflazione su una singola giornata).
-                   Quarto e quinto pannello (stesso trattamento del commit — barre
-                   impilate poi ciambella — ma dopo, non prima: coerenza fra "quanto è
-                   attendibile" e "quanto è in evidenza" era assente nelle versioni
-                   precedenti, dove il churn occupava DUE pannelli e il commit zero,
-                   nascosto nella sola tabella).
+                   RIGA 3, stesso trattamento del commit (barre impilate + ciambella
+                   affiancate) ma sotto, non sopra: coerenza fra "quanto è attendibile" e
+                   "quanto è in evidenza" era assente nelle versioni precedenti, dove il
+                   churn occupava DUE pannelli e il commit zero, nascosto nella sola
+                   tabella.
 
-Commit e churn sono disposti riga per riga con lo STESSO tipo di grafico affiancato
-(barre impilate riga 2, ciambelle riga 3) apposta per il confronto diretto: un progetto
-con tanto churn ma pochi commit è spesso un file generato/vendorizzato voluminoso, non
-tanto lavoro — vedi "controlla sempre cosa c'è dietro un picco" nel README.
+Una riga per metrica, non una riga per tipo di grafico. Un layout precedente affiancava
+commit e churn sulla stessa riga per permetterne il confronto diretto: non funzionava,
+perché ogni pannello ordina i progetti per il PROPRIO totale e la posizione sull'asse x
+non corrisponde fra i due (misurato: commit e churn producono ordinamenti completamente
+diversi appena un progetto ha commit grossi, es. un client rigenerato) — si finiva per
+confrontare progetti diversi. Un confronto commit-vs-churn onesto richiede un pannello
+dedicato (es. churn per commit per progetto), non due pannelli affiancati; per ora la
+tabella di riepilogo resta il posto dove leggere le due metriche sullo stesso progetto.
 
 L'indice composito resta disponibile come metrica SECONDARIA (solo in tabella):
 
@@ -87,6 +92,34 @@ MAX_SERIES = len(SERIES)
 OTHER_LABEL = "Altro"
 DONUT_MAX_SLICES = 6      # part-to-whole resta leggibile solo con pochi settori
 MAX_PROJECT_BARS = 12     # oltre, le etichette sull'asse X dei progetti si sovrappongono
+MAX_TABLE_ROWS = 12       # righe di progetto mostrate in tabella (il resto va nella nota)
+
+# -----------------------------------------------------------------------------
+# Geometria della figura (vedi il commento sul layout in main())
+# -----------------------------------------------------------------------------
+# L'altezza della tabella di riepilogo NON dipende dall'altezza dell'asse che la
+# contiene: le celle sono dimensionate dal font, non dai limiti dell'asse. Misurato
+# (fontsize 9 + `table.scale(1, 1.45)` in panel_table): 0.289 pollici per riga, header
+# incluso, e l'altezza dell'asse resta 4.627" a prescindere dal numero di righe. Con un
+# height_ratio fisso, un report con 3 progetti lasciava quindi ~3.5" di banda vuota sotto
+# la tabella. Se si cambiano fontsize o scale in panel_table, questa costante va rimisurata
+# (bastano due render con conteggi di righe diversi: l'altezza è lineare nelle righe).
+TABLE_ROW_INCHES = 0.289
+TABLE_PAD_INCHES = 0.45   # respiro sotto l'ultima riga, prima della nota e della legenda
+ROW_UNIT_INCHES = 3.427   # altezza in pollici di UNA unità di height_ratio: mantenerla
+                          # costante lascia le prime tre righe della stessa dimensione
+                          # assoluta qualunque sia l'altezza della tabella
+TABLE_RATIO_MIN = 0.30    # una tabella con una riga sola non deve collassare
+FIG_WIDTH_INCHES = 17
+FIG_HSPACE = 0.5
+# Header e footer in POLLICI, non in frazione di figura: da quando l'altezza totale varia
+# col numero di progetti, una frazione fissa restringeva lo spazio assoluto sopra e sotto
+# (misurato: con 3 progetti il suptitle finiva sopra il titolo del primo pannello). Con
+# valori assoluti il margine resta identico a qualunque altezza di figura.
+HEADER_INCHES = 0.95      # spazio sopra la prima riga: suptitle + titolo del pannello
+FOOTER_INCHES = 0.75      # spazio sotto l'ultima riga: nota della tabella + legenda
+SUPTITLE_INCHES = 0.42    # distanza del suptitle dal bordo superiore
+LEGEND_INCHES = 0.21      # distanza della legenda dal bordo inferiore
 
 SURFACE = "#fcfcfb"
 INK_PRIMARY = "#0b0b0b"
@@ -482,7 +515,7 @@ def panel_table(ax, df):
                       autori=("author", "nunique"), indice=("index", "sum"))
                  .sort_values("churn", ascending=False))
 
-    shown = summary.head(12)
+    shown = summary.head(MAX_TABLE_ROWS)
     cells = []
     for project, r in shown.iterrows():
         name = project if len(str(project)) <= 20 else str(project)[:19] + "…"
@@ -544,22 +577,57 @@ def main():
     colors = assign_colors(author_order)
 
     apply_style()
-    # 4 righe: giorni attivi da solo (il più affidabile, in cima), poi due righe che
-    # affiancano commit e churn con lo STESSO tipo di grafico (barre impilate, poi
-    # ciambella) — il confronto diretto fra le due metriche sullo stesso progetto è
-    # spesso più informativo di ciascuna presa da sola (un progetto con tanto churn ma
-    # pochi commit è spesso un file generato/vendorizzato voluminoso, non tanto lavoro).
-    # Commit precede churn in ogni riga: è la metrica più affidabile delle due (vedi
-    # METRICHE sopra), non perché "viene prima nel codice".
-    # La tabella mostra fino a 12 righe (vedi panel_table): nel vecchio layout 2x2
-    # occupava un intero quadrante (~metà figura); qui deve avere altezza paragonabile
-    # o il testo sfora l'asse e si sovrappone alla legenda sotto — misurato con 12
-    # righe piene, non un'ipotesi.
-    fig = plt.figure(figsize=(17, 21))
-    gs = fig.add_gridspec(4, 2, height_ratios=[0.75, 1.0, 1.0, 1.35],
-                           hspace=0.5, wspace=0.28)
+    # 4 righe: giorni attivi da solo (il più affidabile, in cima), poi UNA RIGA PER
+    # METRICA — commit (riga 2), churn (riga 3) — con dentro barre impilate e ciambella
+    # della stessa metrica affiancate. Due ragioni, entrambe misurate:
+    #
+    #   1. Barre e ciambella della stessa metrica raccontano la stessa cosa a due livelli
+    #      di dettaglio (dove si concentra, e la quota sul totale): appaiarle è la lettura
+    #      naturale. Churn interamente sulla riga sotto lo rende anche meno prominente del
+    #      commit, coerente con l'ordine di attendibilità (vedi METRICHE sopra).
+    #   2. Il layout precedente affiancava commit e churn sulla stessa riga per il
+    #      "confronto diretto" fra le due metriche. NON funziona, ed era peggio che
+    #      inutile: ogni pannello ordina i progetti per il PROPRIO totale
+    #      (`sort_values` in panel_metric_by_project/panel_donut), quindi la posizione
+    #      sull'asse x non corrisponde fra i due. Misurato su dati sintetici realistici:
+    #      commit -> [app-frontend, core-lib, docs, api-generated] mentre
+    #      churn  -> [api-generated, core-lib, app-frontend, docs]. Confrontare "prima
+    #      barra a sinistra vs prima barra a destra" confrontava due progetti DIVERSI (e
+    #      lo stesso vale per il fold in "Altro" delle ciambelle, calcolato per metrica).
+    #      Con scale y incommensurabili (es. 560 commit vs 420.000 righe) non restava
+    #      nemmeno un confronto di forma valido.
+    #
+    # Un confronto commit-vs-churn onesto richiederebbe un pannello dedicato (es. churn
+    # per commit per progetto), non due pannelli affiancati: non è stato aggiunto qui.
+    #
+    # L'altezza della riga della tabella si ADATTA al numero di progetti effettivamente
+    # mostrati, invece di essere fissata sul caso peggiore (12 righe): le celle sono
+    # dimensionate dal font e non dall'asse (vedi TABLE_ROW_INCHES), quindi un ratio fisso
+    # lasciava una banda vuota di ~3.5" con pochi progetti e rischiava lo sforo con 12.
+    # Anche la figura si accorcia di conseguenza, così le prime tre righe conservano la
+    # stessa dimensione assoluta (ROW_UNIT_INCHES costante) e il PNG non porta con sé
+    # spazio bianco inutile.
+    n_table_rows = min(df["project"].nunique(), MAX_TABLE_ROWS)
+    table_ratio = max(
+        TABLE_RATIO_MIN,
+        (TABLE_ROW_INCHES * (n_table_rows + 1) + TABLE_PAD_INCHES) / ROW_UNIT_INCHES,
+    )
+    ratios = [0.75, 1.0, 1.0, table_ratio]
+    # Altezza figura che rende ROW_UNIT_INCHES l'altezza di un'unità di ratio: le righe
+    # occupano sum(ratios) unità, più un gap fra righe pari a hspace × altezza media,
+    # più header e footer (assoluti, vedi le costanti in testa).
+    gaps = (len(ratios) - 1) * FIG_HSPACE / len(ratios)
+    rows_height = sum(ratios) * ROW_UNIT_INCHES * (1 + gaps)
+    fig_height = rows_height + HEADER_INCHES + FOOTER_INCHES
+    fig_top = 1 - HEADER_INCHES / fig_height
+    fig_bottom = FOOTER_INCHES / fig_height
+
+    fig = plt.figure(figsize=(FIG_WIDTH_INCHES, fig_height))
+    gs = fig.add_gridspec(4, 2, height_ratios=ratios,
+                           hspace=FIG_HSPACE, wspace=0.28)
     fig.suptitle(f"Attività di sviluppo multi-progetto  ({start} → {end})",
-                 fontsize=16, color=INK_PRIMARY, x=0.02, ha="left", y=0.98)
+                 fontsize=16, color=INK_PRIMARY, x=0.02, ha="left",
+                 y=1 - SUPTITLE_INCHES / fig_height)
 
     ax1 = fig.add_subplot(gs[0, :])
     panel_active_days(ax1, df, colors)
@@ -569,13 +637,13 @@ def main():
                              "Commit per progetto e autore", "Commit")
 
     ax3 = fig.add_subplot(gs[1, 1])
-    panel_metric_by_project(ax3, df, colors, author_order, "churn",
-                             "Churn per progetto e autore",
-                             "Righe (aggiunte + 0.4 × rimosse)")
+    panel_donut(ax3, df, "commits", "Distribuzione dei commit per progetto",
+                "Quota dei commit totali (%)")
 
     ax4 = fig.add_subplot(gs[2, 0])
-    panel_donut(ax4, df, "commits", "Distribuzione dei commit per progetto",
-                "Quota dei commit totali (%)")
+    panel_metric_by_project(ax4, df, colors, author_order, "churn",
+                             "Churn per progetto e autore",
+                             "Righe (aggiunte + 0.4 × rimosse)")
 
     ax5 = fig.add_subplot(gs[2, 1])
     panel_donut(ax5, df, "churn", "Distribuzione del churn per progetto",
@@ -590,7 +658,7 @@ def main():
     if len(labs) >= 2:
         fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
                    fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
-                   bbox_to_anchor=(0.5, 0.01))
+                   bbox_to_anchor=(0.5, LEGEND_INCHES / fig_height))
 
     # tight_layout non gestisce bene le legende dentro le ciambelle (bbox_to_anchor
     # fuori asse) su un gridspec a 4 righe disomogenee: margini espliciti invece di
@@ -599,8 +667,8 @@ def main():
     # (bbox reale via get_window_extent(), non una stima) — un valore fisso tronca le
     # etichette y più lunghe del previsto (misurato: "Gabriele Stringano" e altri nomi
     # tagliati con un left fisso; stesso bug già corretto in plot_git.py).
-    fig.subplots_adjust(left=0.055, right=0.86, top=0.955, bottom=0.035,
-                         hspace=0.5, wspace=0.28)
+    fig.subplots_adjust(left=0.055, right=0.86, top=fig_top, bottom=fig_bottom,
+                         hspace=FIG_HSPACE, wspace=0.28)
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     current_left = fig.subplotpars.left

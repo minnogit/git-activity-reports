@@ -653,24 +653,29 @@ inevitabile) e può essere costoso su repository molto grandi — `--no-ownershi
 
 ### Report Multi-Repository
 
-Stesso principio dell'ordine di attendibilità, con un accorgimento in più: commit e
-churn sono disposti **riga per riga con lo stesso tipo di grafico affiancato**, apposta
-per il confronto diretto — un progetto con tanto churn ma pochi commit è spesso un file
-generato/vendorizzato voluminoso, non tanto lavoro (vedi sopra "controlla sempre cosa
-c'è dietro un picco").
+Stesso principio dell'ordine di attendibilità, organizzato **una riga per metrica**: la
+riga 2 è tutta sul commit, la riga 3 tutta sul churn. Dentro ciascuna riga, barre e
+ciambella raccontano la stessa cosa a due livelli di dettaglio — dove si concentra
+l'attività, e la quota sul totale.
 
 | Pannello | Cosa mostra |
 |---|---|
 | 1. Giorni attivi per autore | Continuità del contributo, sommata sui progetti. Il più affidabile, da solo in cima |
 | 2. Commit per progetto e autore | Barre impilate. Più affidabile del churn (vedi sotto) |
-| 3. Churn per progetto e autore | Barre impilate, **senza esclusioni**. Affiancato al pannello 2 per il confronto diretto |
-| 4. Distribuzione dei commit | Quota per progetto (ciambella; barra 100% se i progetti sono < 3) |
-| 5. Distribuzione del churn | Stesso trattamento del pannello 4, affiancato per confronto |
+| 3. Distribuzione dei commit | Quota per progetto (ciambella; barra 100% se i progetti sono < 3) |
+| 4. Churn per progetto e autore | Barre impilate, **senza esclusioni**. Sotto il commit, non accanto: è la metrica meno indicativa |
+| 5. Distribuzione del churn | Stesso trattamento del pannello 3, per il churn |
 | 6. Riepilogo per progetto | Tabella con churn, commit, giorni attivi, file, autori, indice |
 
 Un progetto può avere churn alto e indice basso (pochi commit molto grossi, o un client
 generato molto voluminoso) o il contrario (attività distribuita su molti giorni): è la
-differenza che un punteggio unico nasconderebbe.
+differenza che un punteggio unico nasconderebbe. Per leggere le due metriche **sullo
+stesso progetto** usa la tabella di riepilogo, non il confronto a occhio fra i pannelli
+2 e 4: ogni pannello ordina i progetti per il proprio totale, quindi la stessa posizione
+sull'asse X può corrispondere a progetti diversi nei due grafici (ed è esattamente quello
+che accade quando un progetto ha pochi commit ma churn enorme — il caso che più
+interesserebbe confrontare). Un confronto onesto richiederebbe un pannello dedicato,
+per esempio il churn per commit di ciascun progetto: non è ancora presente nel report.
 
 **Colori:** ogni autore ha un colore fisso, coerente tra tutti i pannelli e assegnato in
 ordine di palette, non per rango. Oltre 8 autori la coda viene accorpata in "Altro"
