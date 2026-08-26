@@ -112,6 +112,38 @@ BASELINE = "#c3c2b7"
 
 OUTPUT_FILENAME = "git_stats.png"
 
+# -----------------------------------------------------------------------------
+# Geometria della figura (vedi il commento sul layout in main())
+# -----------------------------------------------------------------------------
+# Stesso problema, stessa causa e stesso fix già misurati e applicati in
+# plot_multiproject.py: le celle della tabella sono dimensionate dal FONT, non
+# dall'asse che le contiene, quindi un height_ratio fisso lascia una banda vuota con
+# pochi autori (il caso comune per un singolo repo) e rischia lo sforo con molti.
+# Misurato per QUESTA tabella (6 colonne, fontsize 9, table.scale(1, 1.45) — diverso
+# dalle 7 colonne di plot_multiproject.py, da qui la costante diversa): 0.267 pollici
+# per riga, header incluso, indipendente dall'altezza dell'asse.
+MAX_TABLE_ROWS = 12       # righe di autore mostrate in tabella (il resto va nella nota)
+TABLE_ROW_INCHES = 0.267
+TABLE_PAD_INCHES = 0.45
+ROW_UNIT_INCHES = 2.846   # altezza in pollici di UNA unità di height_ratio: mantenerla
+                          # costante lascia giorni-attivi e commit/churn della stessa
+                          # dimensione assoluta qualunque sia l'altezza della tabella
+TABLE_RATIO_MIN = 0.30
+FIG_WIDTH_INCHES = 17
+FIG_HSPACE = 0.6
+HEADER_INCHES = 0.95      # spazio sopra la prima riga: suptitle + titolo del pannello
+SUPTITLE_INCHES = 0.40
+# Spazio sotto l'ultima riga: nota della tabella + legenda. La legenda va a capo su più
+# righe quando gli autori (fino a 8 + "Altro") più "Trend" superano ncol=6: con un
+# FOOTER fisso tarato su una riga sola, la seconda riga finiva sopra il pannello
+# successivo (misurato: 9 autori reali + Trend = 10 voci, 2 righe, sovrapposte alla
+# punch card sotto). Altezza di una riga di legenda misurata via get_window_extent():
+# 0.230" la prima, +0.1925" per ogni riga aggiuntiva — lineare, non un'ipotesi.
+LEGEND_ROW1_INCHES = 0.230
+LEGEND_EXTRA_ROW_INCHES = 0.1925
+LEGEND_BOTTOM_PAD_INCHES = 0.08   # distanza tra il bordo inferiore della figura e la legenda
+NOTE_INCHES = 0.30                # spazio per la nota sotto la tabella, sopra la legenda
+
 
 # -----------------------------------------------------------------------------
 # Configurazione (alias autori: solo per retrocompatibilità con JSON vecchi)
@@ -428,7 +460,7 @@ def panel_table(ax, summary):
     ax.set_title("Riepilogo per autore", fontsize=12, color=INK_PRIMARY,
                  loc="left", pad=10)
 
-    shown = summary.head(12)
+    shown = summary.head(MAX_TABLE_ROWS)
     cells = []
     for author, r in shown.iterrows():
         cells.append([
@@ -648,16 +680,44 @@ def main():
         extra_rows.append(("ownership", 0.6))
 
     n_extra = len(extra_rows)
-    base_ratios = [0.85, 1.05, 1.3]   # giorni attivi, commit+churn, tabella
-    fig = plt.figure(figsize=(17, 15 + 3 * n_extra))
-    gs = fig.add_gridspec(3 + n_extra, 2, height_ratios=base_ratios + [r for _, r in extra_rows],
-                          hspace=0.6, wspace=0.22)
+    # L'altezza della riga tabella si ADATTA al numero di autori effettivamente mostrati,
+    # invece di essere fissata sul caso peggiore (12 righe): vedi il commento sulle
+    # costanti sopra. La figura si accorcia di conseguenza, quindi header/footer sono
+    # espressi in pollici (non in frazione di figura) — altrimenti, accorciando la
+    # figura, il suptitle rischia di finire sopra il titolo del primo pannello (misurato
+    # con lo stesso bug in plot_multiproject.py prima del fix).
+    n_table_rows = min(len(summary), MAX_TABLE_ROWS)
+    table_ratio = max(
+        TABLE_RATIO_MIN,
+        (TABLE_ROW_INCHES * (n_table_rows + 1) + TABLE_PAD_INCHES) / ROW_UNIT_INCHES,
+    )
+    ratios = [0.85, 1.05, table_ratio] + [r for _, r in extra_rows]
+    gaps = (len(ratios) - 1) * FIG_HSPACE / len(ratios)
+    rows_height = sum(ratios) * ROW_UNIT_INCHES * (1 + gaps)
+
+    # Righe della legenda: stesso criterio con cui sarà disegnata più sotto (autori +
+    # "Trend" se disegnato, ncol=min(n, 6)) — va saputo PRIMA di creare la figura, perché
+    # il footer deve riservare spazio per tutte le righe, non solo la prima.
+    n_legend_labels = len(author_order) + (1 if trend_window and len(labels) >= 3 else 0)
+    legend_ncol = min(n_legend_labels, 6) or 1
+    legend_rows = -(-n_legend_labels // legend_ncol)  # ceiling division
+    legend_height = LEGEND_ROW1_INCHES + max(0, legend_rows - 1) * LEGEND_EXTRA_ROW_INCHES
+    footer_inches = LEGEND_BOTTOM_PAD_INCHES + legend_height + NOTE_INCHES
+
+    fig_height = rows_height + HEADER_INCHES + footer_inches
+    fig_top = 1 - HEADER_INCHES / fig_height
+    fig_bottom = footer_inches / fig_height
+
+    fig = plt.figure(figsize=(FIG_WIDTH_INCHES, fig_height))
+    gs = fig.add_gridspec(3 + n_extra, 2, height_ratios=ratios,
+                          hspace=FIG_HSPACE, wspace=0.22)
 
     title = "Attività di sviluppo"
     if project:
         title = f"{project} — {title}"
     fig.suptitle(f"{title}  ({start} → {end}, per {bucket_name})",
-                 fontsize=16, color=INK_PRIMARY, x=0.02, ha="left", y=0.975)
+                 fontsize=16, color=INK_PRIMARY, x=0.02, ha="left",
+                 y=1 - SUPTITLE_INCHES / fig_height)
 
     ax0 = fig.add_subplot(gs[0, :])
     panel_active_days(ax0, summary, colors)
@@ -705,10 +765,9 @@ def main():
     paired = sorted(zip(labs, handles), key=lambda p: p[0].startswith("Trend"))
     labs = [p[0] for p in paired]
     handles = [p[1] for p in paired]
-    legend_y = 0.02
     fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
                fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
-               bbox_to_anchor=(0.5, legend_y))
+               bbox_to_anchor=(0.5, LEGEND_BOTTOM_PAD_INCHES / fig_height))
 
     # tight_layout() qui NON funziona: con un gridspec a >2 righe di altezze disomogenee
     # (già vero per il layout base ora, non solo con punch card/ownership) e/o un asse
@@ -719,9 +778,11 @@ def main():
     # tagliare "Gabriele Stringano" per coincidenza, ma molto più dello spazio realmente
     # necessario. Si misura quindi lo spazio EFFETTIVAMENTE occupato dall'etichetta y più
     # lunga (bbox del testo già renderizzato, non una stima) e si calcola il margine
-    # sinistro minimo che la ospita — right/top/bottom/hspace/wspace restano fissi: valori
-    # già verificati sul contenuto di questo report.
-    fig.subplots_adjust(left=0.055, right=0.97, top=0.94, bottom=0.09, hspace=0.6, wspace=0.22)
+    # sinistro minimo che la ospita — right/hspace/wspace restano fissi: valori già
+    # verificati sul contenuto di questo report; top/bottom sono quelli calcolati sopra
+    # in pollici (adattivi all'altezza della figura, vedi il commento sulle costanti).
+    fig.subplots_adjust(left=0.055, right=0.97, top=fig_top, bottom=fig_bottom,
+                         hspace=FIG_HSPACE, wspace=0.22)
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     current_left = fig.subplotpars.left
