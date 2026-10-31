@@ -149,7 +149,7 @@ function commandExistsOnPath(cmd) {
 // relative: senza questa risoluzione la configurazione di fabbrica fallisce SEMPRE al
 // primo utilizzo (verificato). Usa `date -d`, non un parser di date scritto a mano in
 // JS/TS: è la stessa dipendenza (GNU coreutils) già richiesta da tutto il resto del
-// progetto (vedi README, "Richiede GNU date"), quindi stessa semantica ovunque — un
+// progetto (vedi README.it.md, "Richiede GNU date"), quindi stessa semantica ovunque — un
 // parser diverso in TypeScript rischierebbe di accettare/interpretare input in modo
 // leggermente diverso da come li interpretano gli script bash a valle.
 function resolveDate(value) {
@@ -213,7 +213,16 @@ function runPipeline(collector, plotter, collectorCwd, plotterCwd) {
         let p2;
         try {
             p1 = cp.spawn(collector.cmd, collectorArgs, { cwd: collectorCwd });
-            p2 = cp.spawn(plotter.cmd, plotterArgs, { cwd: plotterCwd });
+            // Lingua delle scritte nel grafico: quella dell'interfaccia di VS Code (italiano o,
+            // per qualunque altra lingua, inglese). Senza, il plotter userebbe il locale del
+            // sistema, che non è detto coincida con la lingua scelta in VS Code.
+            const chartLang = vscode.env.language.toLowerCase().startsWith('it') ? 'it' : 'en';
+            p2 = cp.spawn(plotter.cmd, plotterArgs, {
+                cwd: plotterCwd,
+                // Nome di variabile d'ambiente, non una proprietà TS: la regola camelCase non si applica.
+                // eslint-disable-next-line @typescript-eslint/naming-convention
+                env: { ...process.env, GIT_ACTIVITY_LANG: chartLang },
+            });
         }
         catch (err) {
             reject(err);

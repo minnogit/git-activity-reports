@@ -7,7 +7,7 @@
 # DESCRIZIONE:
 #   Analizza un repository Git ed elenca i percorsi che dominano il churn e sono
 #   candidati a essere marcati come codice generato o vendorizzato in .gitattributes
-#   (vedi la sezione "Escludere il codice generato" di README.md).
+#   (vedi la sezione "Escludere il codice generato" di README.it.md / "Excluding generated code" di README.md).
 #
 #   NON scrive .gitattributes, NON modifica nulla nel repository: stampa solo un
 #   report da verificare a mano. È deliberato — la classificazione generato/scritto

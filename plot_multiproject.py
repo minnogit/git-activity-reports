@@ -89,7 +89,7 @@ SERIES = [
     "#e34948",  # red
 ]
 MAX_SERIES = len(SERIES)
-OTHER_LABEL = "Altro"
+OTHER_LABEL = "Altro"     # reimpostata da set_lang() nella lingua scelta
 DONUT_MAX_SLICES = 6      # part-to-whole resta leggibile solo con pochi settori
 MAX_PROJECT_BARS = 12     # oltre, le etichette sull'asse X dei progetti si sovrappongono
 MAX_TABLE_ROWS = 12       # righe di progetto mostrate in tabella (il resto va nella nota)
@@ -127,6 +127,92 @@ LEGEND_ROW1_INCHES = 0.230
 LEGEND_EXTRA_ROW_INCHES = 0.1925
 LEGEND_BOTTOM_PAD_INCHES = 0.08   # distanza tra il bordo inferiore della figura e la legenda
 NOTE_INCHES = 0.30                # spazio per la nota sotto la tabella, sopra la legenda
+
+# -----------------------------------------------------------------------------
+# Lingua delle scritte nel grafico (solo il PNG: i messaggi su stdout restano invariati,
+# perché l'estensione VS Code li intercetta via regex). Stessa logica di selezione di
+# plot_git.py (detect_lang/set_lang duplicate identiche): aggiornarle entrambe.
+# -----------------------------------------------------------------------------
+STRINGS = {
+    "it": {
+        "other": "Altro",
+        "suptitle": "Attività di sviluppo multi-progetto  ({start} → {end})",
+        "active_title": "Giorni attivi per autore (somma sui progetti)",
+        "active_xlabel": "Giorni con almeno 1 commit",
+        "commits_title": "Commit per progetto e autore",
+        "commits_ylabel": "Commit",
+        "commits_donut": "Distribuzione dei commit per progetto",
+        "commits_share": "Quota dei commit totali (%)",
+        "churn_title": "Churn per progetto e autore",
+        "churn_ylabel": "Righe (aggiunte + 0.4 × rimosse)",
+        "churn_donut": "Distribuzione del churn per progetto",
+        "churn_share": "Quota del churn totale (%)",
+        "top_n": "  (primi {n} di {total})",
+        "no_metric": {"commits": "Nessun commit nel periodo", "churn": "Nessun churn nel periodo"},
+        "table_title": "Riepilogo per progetto",
+        "table_cols": ["Progetto", "Churn", "Commit", "Giorni att.", "File", "Autori", "Indice"],
+        "table_note": "Churn = aggiunte + 0.4 × rimozioni · Indice = metrica secondaria, "
+                      "additiva, con tetto giornaliero",
+        "table_shown": "Mostrati i primi {shown} di {total} progetti. ",
+        "thousands_sep": ".",
+    },
+    "en": {
+        "other": "Other",
+        "suptitle": "Multi-project development activity  ({start} → {end})",
+        "active_title": "Active days by author (sum over projects)",
+        "active_xlabel": "Days with at least 1 commit",
+        "commits_title": "Commits by project and author",
+        "commits_ylabel": "Commits",
+        "commits_donut": "Commit distribution by project",
+        "commits_share": "Share of total commits (%)",
+        "churn_title": "Churn by project and author",
+        "churn_ylabel": "Lines (added + 0.4 × deleted)",
+        "churn_donut": "Churn distribution by project",
+        "churn_share": "Share of total churn (%)",
+        "top_n": "  (top {n} of {total})",
+        "no_metric": {"commits": "No commits in the period", "churn": "No churn in the period"},
+        "table_title": "Summary by project",
+        "table_cols": ["Project", "Churn", "Commits", "Active days", "Files", "Authors", "Index"],
+        "table_note": "Churn = added + 0.4 × deleted · Index = secondary metric, "
+                      "additive, with a daily cap",
+        "table_shown": "Showing the top {shown} of {total} projects. ",
+        "thousands_sep": ",",
+    },
+}
+T = STRINGS["it"]
+
+
+def detect_lang(argv, environ):
+    """Lingua delle scritte del grafico, in ordine: --lang it|en, GIT_ACTIVITY_LANG,
+    locale di sistema (LC_ALL > LC_MESSAGES > LANG: "it_*" -> it), altrimenti inglese."""
+    for i, arg in enumerate(argv):
+        if arg.startswith("--lang="):
+            value = arg.split("=", 1)[1]
+        elif arg == "--lang" and i + 1 < len(argv):
+            value = argv[i + 1]
+        else:
+            continue
+        return "it" if value.lower().startswith("it") else "en"
+    value = environ.get("GIT_ACTIVITY_LANG", "")
+    if value:
+        return "it" if value.lower().startswith("it") else "en"
+    for var in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        value = environ.get(var, "")
+        if value:
+            return "it" if value.lower().startswith("it") else "en"
+    return "en"
+
+
+def set_lang(lang):
+    global T, OTHER_LABEL
+    T = STRINGS[lang]
+    OTHER_LABEL = T["other"]
+
+
+def fmt_int(v):
+    """Intero con separatore delle migliaia della lingua scelta (5.351 / 5,351)."""
+    return f"{int(v):,}".replace(",", T["thousands_sep"])
+
 
 SURFACE = "#fcfcfb"
 INK_PRIMARY = "#0b0b0b"
@@ -332,7 +418,7 @@ def integer_axis(ax, axis="y"):
     target = ax.yaxis if axis == "y" else ax.xaxis
     target.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True, nbins="auto"))
     target.set_major_formatter(
-        matplotlib.ticker.FuncFormatter(lambda v, _: f"{int(v):,}".replace(",", "."))
+        matplotlib.ticker.FuncFormatter(lambda v, _: fmt_int(v))
     )
 
 
@@ -389,11 +475,14 @@ def panel_metric_by_project(ax, df, colors, author_order, metric, title, ylabel)
         ax.bar(x, vals, bottom=bottom, width=width, color=colors[author],
                label=author, edgecolor=SURFACE, linewidth=0.6)
         bottom += vals
+    # Respiro sopra la barra più alta: senza, il vertice tocca il bordo superiore dell'asse.
+    if len(pivot.index) and float(bottom.max()) > 0:
+        ax.set_ylim(0, float(bottom.max()) * 1.08)
 
     ax.set_xticks(x)
     ax.set_xticklabels(pivot.index, rotation=30, ha="right", fontsize=9)
     if folded:
-        title += f"  (primi {MAX_PROJECT_BARS} di {len(pivot.index) - 1 + folded})"
+        title += T["top_n"].format(n=MAX_PROJECT_BARS, total=len(pivot.index) - 1 + folded)
     ax.set_title(title, fontsize=12, color=INK_PRIMARY, loc="left", pad=10)
     ax.set_ylabel(ylabel, fontsize=9)
     ax.grid(axis="y", color=GRIDLINE, linewidth=0.8, linestyle="-")
@@ -435,9 +524,8 @@ def panel_donut(ax, df, metric, title, xlabel):
         totals = pd.concat([head, pd.Series({OTHER_LABEL: totals.iloc[DONUT_MAX_SLICES - 1:].sum()})])
 
     if totals.sum() <= 0:
-        metric_label = "commit" if metric == "commits" else "churn"
         ax.axis("off")
-        ax.text(0.5, 0.5, f"Nessun {metric_label} nel periodo",
+        ax.text(0.5, 0.5, T["no_metric"]["commits" if metric == "commits" else "churn"],
                 ha="center", va="center", color=INK_MUTED, fontsize=10, transform=ax.transAxes)
         return
 
@@ -495,9 +583,9 @@ def panel_active_days(ax, df, colors):
             edgecolor=SURFACE, linewidth=0.6)
     ax.set_yticks(y)
     ax.set_yticklabels(data.index, fontsize=9, color=INK_SECONDARY)
-    ax.set_title("Giorni attivi per autore (somma sui progetti)", fontsize=12,
+    ax.set_title(T["active_title"], fontsize=12,
                  color=INK_PRIMARY, loc="left", pad=10)
-    ax.set_xlabel("Giorni con almeno 1 commit", fontsize=9)
+    ax.set_xlabel(T["active_xlabel"], fontsize=9)
     ax.grid(axis="x", color=GRIDLINE, linewidth=0.8, linestyle="-")
     recessive_spines(ax, keep=("bottom",))
     integer_axis(ax, axis="x")
@@ -513,7 +601,7 @@ def panel_table(ax, df):
     nessun valore è raggiungibile solo tramite il colore.
     """
     ax.axis("off")
-    ax.set_title("Riepilogo per progetto", fontsize=12, color=INK_PRIMARY,
+    ax.set_title(T["table_title"], fontsize=12, color=INK_PRIMARY,
                  loc="left", pad=10)
 
     summary = (df.groupby("project")
@@ -528,17 +616,17 @@ def panel_table(ax, df):
         name = project if len(str(project)) <= 20 else str(project)[:19] + "…"
         cells.append([
             name,
-            f"{int(r['churn']):,}".replace(",", "."),
-            f"{int(r['commit']):,}".replace(",", "."),
+            fmt_int(r['churn']),
+            fmt_int(r['commit']),
             f"{int(r['giorni'])}",
-            f"{int(r['file']):,}".replace(",", "."),
+            fmt_int(r['file']),
             f"{int(r['autori'])}",
             f"{r['indice']:.1f}",
         ])
 
     table = ax.table(
         cellText=cells,
-        colLabels=["Progetto", "Churn", "Commit", "Giorni att.", "File", "Autori", "Indice"],
+        colLabels=T["table_cols"],
         colWidths=[0.26, 0.14, 0.12, 0.14, 0.12, 0.10, 0.12],
         cellLoc="right", loc="upper center",
     )
@@ -557,18 +645,48 @@ def panel_table(ax, df):
         else:
             cell.set_text_props(color=INK_PRIMARY)
 
-    note = ("Churn = aggiunte + 0.4 × rimozioni · Indice = metrica secondaria, "
-            "additiva, con tetto giornaliero")
+    note = T["table_note"]
     if len(summary) > len(shown):
-        note = f"Mostrati i primi {len(shown)} di {len(summary)} progetti. " + note
+        note = T["table_shown"].format(shown=len(shown), total=len(summary)) + note
     ax.text(0, -0.04, note, transform=ax.transAxes, fontsize=8,
             color=INK_MUTED, va="top")
+
+
+FOOTER_GAP_INCHES = 0.12   # aria minima fra il fondo dell'ultimo pannello e la legenda
+
+
+def fit_footer(fig, last_ax, legend, footer_inches, suptitle):
+    """Allunga la figura se il fondo dell'ultimo pannello (nota compresa) scende sotto la
+    cima della legenda. Stessa funzione di plot_git.py (dove il caso si è presentato con
+    l'ownership come ultima riga): qui l'ultima riga è sempre la tabella e il footer è
+    tarato su quella, ma la nota cambia lunghezza con la lingua e con "Mostrati i primi…":
+    si misura il contenuto EFFETTIVAMENTE disegnato invece di fidarsi della costante.
+    Header, righe e legenda restano alla stessa distanza in pollici: cresce solo il footer.
+    """
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    content_bottom = last_ax.get_tightbbox(renderer).y0
+    legend_top = legend.get_window_extent(renderer).y1 if legend else 0.0
+    overlap_px = legend_top + FOOTER_GAP_INCHES * fig.dpi - content_bottom
+    if overlap_px <= 0:
+        return
+    extra = overlap_px / fig.dpi
+    width, height = fig.get_size_inches()
+    new_height = height + extra
+    fig.set_size_inches(width, new_height)
+    fig.subplots_adjust(top=1 - HEADER_INCHES / new_height,
+                        bottom=(footer_inches + extra) / new_height)
+    suptitle.set_y(1 - SUPTITLE_INCHES / new_height)
+    if legend:
+        legend.set_bbox_to_anchor((0.5, LEGEND_BOTTOM_PAD_INCHES / new_height),
+                                  transform=fig.transFigure)
 
 
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
 def main():
+    set_lang(detect_lang(sys.argv[1:], os.environ))
     payload = read_payload()
     aliases = load_aliases()
     if aliases and isinstance(payload, list):
@@ -642,7 +760,7 @@ def main():
     fig = plt.figure(figsize=(FIG_WIDTH_INCHES, fig_height))
     gs = fig.add_gridspec(4, 2, height_ratios=ratios,
                            hspace=FIG_HSPACE, wspace=0.28)
-    fig.suptitle(f"Attività di sviluppo multi-progetto  ({start} → {end})",
+    suptitle = fig.suptitle(T["suptitle"].format(start=start, end=end),
                  fontsize=16, color=INK_PRIMARY, x=0.02, ha="left",
                  y=1 - SUPTITLE_INCHES / fig_height)
 
@@ -651,20 +769,17 @@ def main():
 
     ax2 = fig.add_subplot(gs[1, 0])
     panel_metric_by_project(ax2, df, colors, author_order, "commits",
-                             "Commit per progetto e autore", "Commit")
+                             T["commits_title"], T["commits_ylabel"])
 
     ax3 = fig.add_subplot(gs[1, 1])
-    panel_donut(ax3, df, "commits", "Distribuzione dei commit per progetto",
-                "Quota dei commit totali (%)")
+    panel_donut(ax3, df, "commits", T["commits_donut"], T["commits_share"])
 
     ax4 = fig.add_subplot(gs[2, 0])
     panel_metric_by_project(ax4, df, colors, author_order, "churn",
-                             "Churn per progetto e autore",
-                             "Righe (aggiunte + 0.4 × rimosse)")
+                             T["churn_title"], T["churn_ylabel"])
 
     ax5 = fig.add_subplot(gs[2, 1])
-    panel_donut(ax5, df, "churn", "Distribuzione del churn per progetto",
-                "Quota del churn totale (%)")
+    panel_donut(ax5, df, "churn", T["churn_donut"], T["churn_share"])
 
     ax6 = fig.add_subplot(gs[3, :])
     panel_table(ax6, df)
@@ -672,10 +787,11 @@ def main():
     # Le handle si prendono da ax2 (commit per progetto): il primo pannello che disegna
     # le barre impilate con label=autore, fonte della legenda unica di figura.
     handles, labs = ax2.get_legend_handles_labels()
+    legend = None
     if len(labs) >= 2:
-        fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
-                   fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
-                   bbox_to_anchor=(0.5, LEGEND_BOTTOM_PAD_INCHES / fig_height))
+        legend = fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
+                            fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
+                            bbox_to_anchor=(0.5, LEGEND_BOTTOM_PAD_INCHES / fig_height))
 
     # tight_layout non gestisce bene le legende dentro le ciambelle (bbox_to_anchor
     # fuori asse) su un gridspec a 4 righe disomogenee: margini espliciti invece di
@@ -699,6 +815,7 @@ def main():
     label_span = current_left - min_x0
     left_margin = max(0.035, label_span + 0.015)
     fig.subplots_adjust(left=left_margin)
+    fit_footer(fig, ax6, legend, footer_inches, suptitle)
 
     safe_start = str(start).replace(" ", "_").replace("/", "-")
     safe_end = str(end).replace(" ", "_").replace("/", "-")

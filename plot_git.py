@@ -101,7 +101,110 @@ SERIES = [
     "#e34948",  # red
 ]
 MAX_SERIES = len(SERIES)
-OTHER_LABEL = "Altro"
+OTHER_LABEL = "Altro"     # reimpostata da set_lang() nella lingua scelta
+
+# -----------------------------------------------------------------------------
+# Lingua delle scritte nel grafico (solo il PNG: i messaggi su stdout restano invariati,
+# perché l'estensione VS Code li intercetta via regex). Tabella duplicata in
+# plot_multiproject.py, come le metriche e la palette: aggiornarle entrambe.
+# -----------------------------------------------------------------------------
+STRINGS = {
+    "it": {
+        "other": "Altro",
+        "buckets": {"D": "giorno", "W-MON": "settimana", "MS": "mese"},
+        "suptitle": "Attività di sviluppo",
+        "suptitle_range": "{title}  ({start} → {end}, per {bucket})",
+        "trend": "Trend (media {n})",
+        "active_title": "Giorni attivi per autore",
+        "active_xlabel": "Giorni con almeno 1 commit",
+        "commits_title": "Commit per {bucket}, per autore",
+        "commits_ylabel": "Commit",
+        "churn_title": "Churn per {bucket}, per autore",
+        "churn_ylabel": "Righe (aggiunte + 0.4 × rimosse)",
+        "table_title": "Riepilogo per autore",
+        "table_cols": ["Autore", "Churn", "Commit", "Giorni att.", "File", "Indice"],
+        "table_note": "Churn = aggiunte + 0.4 × rimozioni · Indice = metrica secondaria, "
+                      "additiva, con tetto giornaliero",
+        "table_shown": "Mostrati i primi {shown} di {total} autori. ",
+        "weekdays": ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"],
+        "punch_title": "Quando avvengono i commit (giorno × ora)",
+        "punch_xlabel": "Ora (locale del commit)",
+        "punch_cbar": "Commit",
+        "punch_caption": "Picco: {wd} alle {h1:02d}-{h2:02d} ({n} commit) · "
+                         "Weekend: {pct:.0f}% del totale",
+        "own_title": "Righe possedute per autore (fotografia a fine periodo)",
+        "own_xlabel": "Righe (git blame)",
+        "own_caption": "Istantanea al commit {ref} del {date} · {total} righe totali "
+                       "(git blame, nessuna esclusione) · non è una somma sul periodo: può "
+                       "includere autori non attivi in questo report",
+        "thousands_sep": ".",
+    },
+    "en": {
+        "other": "Other",
+        "buckets": {"D": "day", "W-MON": "week", "MS": "month"},
+        "suptitle": "Development activity",
+        "suptitle_range": "{title}  ({start} → {end}, per {bucket})",
+        "trend": "Trend ({n}-period avg)",
+        "active_title": "Active days by author",
+        "active_xlabel": "Days with at least 1 commit",
+        "commits_title": "Commits per {bucket}, by author",
+        "commits_ylabel": "Commits",
+        "churn_title": "Churn per {bucket}, by author",
+        "churn_ylabel": "Lines (added + 0.4 × deleted)",
+        "table_title": "Summary by author",
+        "table_cols": ["Author", "Churn", "Commits", "Active days", "Files", "Index"],
+        "table_note": "Churn = added + 0.4 × deleted · Index = secondary metric, "
+                      "additive, with a daily cap",
+        "table_shown": "Showing the top {shown} of {total} authors. ",
+        "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        "punch_title": "When commits happen (day × hour)",
+        "punch_xlabel": "Hour (commit local time)",
+        "punch_cbar": "Commits",
+        "punch_caption": "Peak: {wd} at {h1:02d}-{h2:02d} ({n} commits) · "
+                         "Weekend: {pct:.0f}% of total",
+        "own_title": "Lines owned by author (snapshot at end of period)",
+        "own_xlabel": "Lines (git blame)",
+        "own_caption": "Snapshot at commit {ref} of {date} · {total} total lines "
+                       "(git blame, no exclusions) · not a sum over the period: it may "
+                       "include authors not active in this report",
+        "thousands_sep": ",",
+    },
+}
+T = STRINGS["it"]
+
+
+def detect_lang(argv, environ):
+    """Lingua delle scritte del grafico, in ordine: --lang it|en, GIT_ACTIVITY_LANG,
+    locale di sistema (LC_ALL > LC_MESSAGES > LANG: "it_*" -> it), altrimenti inglese.
+    Il locale come default lascia invariato l'uso storico da riga di comando su un
+    sistema italiano; l'estensione VS Code passa GIT_ACTIVITY_LANG dalla lingua di VS Code."""
+    for i, arg in enumerate(argv):
+        if arg.startswith("--lang="):
+            value = arg.split("=", 1)[1]
+        elif arg == "--lang" and i + 1 < len(argv):
+            value = argv[i + 1]
+        else:
+            continue
+        return "it" if value.lower().startswith("it") else "en"
+    value = environ.get("GIT_ACTIVITY_LANG", "")
+    if value:
+        return "it" if value.lower().startswith("it") else "en"
+    for var in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        value = environ.get(var, "")
+        if value:
+            return "it" if value.lower().startswith("it") else "en"
+    return "en"
+
+
+def set_lang(lang):
+    global T, OTHER_LABEL
+    T = STRINGS[lang]
+    OTHER_LABEL = T["other"]
+
+
+def fmt_int(v):
+    """Intero con separatore delle migliaia della lingua scelta (5.351 / 5,351)."""
+    return f"{int(v):,}".replace(",", T["thousands_sep"])
 
 SURFACE = "#fcfcfb"
 INK_PRIMARY = "#0b0b0b"
@@ -297,10 +400,12 @@ def flatten(payload, aliases):
 def choose_bucket(start, end):
     span = (date.fromisoformat(end) - date.fromisoformat(start)).days + 1
     if span <= 45:
-        return "D", "giorno", 7
-    if span <= 250:
-        return "W-MON", "settimana", 4
-    return "MS", "mese", 3
+        freq, window = "D", 7
+    elif span <= 250:
+        freq, window = "W-MON", 4
+    else:
+        freq, window = "MS", 3
+    return freq, T["buckets"][freq], window
 
 
 def assign_colors(authors_by_size):
@@ -373,7 +478,7 @@ def thousands(ax, axis="y"):
     target = ax.yaxis if axis == "y" else ax.xaxis
     target.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True, nbins="auto"))
     target.set_major_formatter(
-        matplotlib.ticker.FuncFormatter(lambda v, _: f"{int(v):,}".replace(",", "."))
+        matplotlib.ticker.FuncFormatter(lambda v, _: fmt_int(v))
     )
 
 
@@ -405,13 +510,18 @@ def panel_stacked_over_time(ax, pivot, colors, labels, title, ylabel, trend_wind
             edgecolor=SURFACE, linewidth=0.6,
         )
         bottom += vals
+    # Respiro sopra la barra più alta: senza, il vertice tocca il bordo superiore dell'asse.
+    if len(pivot.index):
+        top = float(bottom.max())
+        if top > 0:
+            ax.set_ylim(0, top * 1.08)
 
     if trend_window and len(pivot.index) >= 3:
         total = pivot.sum(axis=1)
         trend = total.rolling(window=trend_window, min_periods=1).mean()
         ax.plot(
             x, trend.to_numpy(), color=INK_PRIMARY, linewidth=2,
-            label=f"Trend (media {trend_window})", zorder=5,
+            label=T["trend"].format(n=trend_window), zorder=5,
             solid_capstyle="round", solid_joinstyle="round",
         )
 
@@ -433,9 +543,9 @@ def panel_active_days(ax, summary, colors):
     )
     ax.set_yticks(y)
     ax.set_yticklabels(data.index, fontsize=9, color=INK_SECONDARY)
-    ax.set_title("Giorni attivi per autore", fontsize=12, color=INK_PRIMARY,
+    ax.set_title(T["active_title"], fontsize=12, color=INK_PRIMARY,
                  loc="left", pad=10)
-    ax.set_xlabel("Giorni con almeno 1 commit", fontsize=9)
+    ax.set_xlabel(T["active_xlabel"], fontsize=9)
     ax.set_axisbelow(True)
     ax.grid(axis="x", color=GRIDLINE, linewidth=0.8, linestyle="-")
     for side in ("top", "right", "left"):
@@ -457,7 +567,7 @@ def panel_table(ax, summary):
     (aqua/yellow/magenta): nessun valore è raggiungibile solo tramite il colore.
     """
     ax.axis("off")
-    ax.set_title("Riepilogo per autore", fontsize=12, color=INK_PRIMARY,
+    ax.set_title(T["table_title"], fontsize=12, color=INK_PRIMARY,
                  loc="left", pad=10)
 
     shown = summary.head(MAX_TABLE_ROWS)
@@ -465,16 +575,16 @@ def panel_table(ax, summary):
     for author, r in shown.iterrows():
         cells.append([
             author if len(author) <= 22 else author[:21] + "…",
-            f"{int(r['churn']):,}".replace(",", "."),
-            f"{int(r['commit']):,}".replace(",", "."),
+            fmt_int(r['churn']),
+            fmt_int(r['commit']),
             f"{int(r['giorni_attivi'])}",
-            f"{int(r['file']):,}".replace(",", "."),
+            fmt_int(r['file']),
             f"{r['indice']:.1f}",
         ])
 
     table = ax.table(
         cellText=cells,
-        colLabels=["Autore", "Churn", "Commit", "Giorni att.", "File", "Indice"],
+        colLabels=T["table_cols"],
         colWidths=[0.34, 0.14, 0.12, 0.14, 0.12, 0.12],
         cellLoc="right", loc="upper center",
     )
@@ -494,10 +604,9 @@ def panel_table(ax, summary):
             cell.set_text_props(color=INK_PRIMARY)
             cell.set_facecolor(SURFACE)
 
-    note = ("Churn = aggiunte + 0.4 × rimozioni · Indice = metrica secondaria, "
-            "additiva, con tetto giornaliero")
+    note = T["table_note"]
     if len(summary) > len(shown):
-        note = f"Mostrati i primi {len(shown)} di {len(summary)} autori. " + note
+        note = T["table_shown"].format(shown=len(shown), total=len(summary)) + note
     ax.text(0, -0.04, note, transform=ax.transAxes, fontsize=8,
             color=INK_MUTED, va="top", wrap=True)
 
@@ -505,7 +614,6 @@ def panel_table(ax, summary):
 # Rampa sequenziale blu (passi 100→700 di palette.md, la stessa usata per la ciambella
 # multiprogetto): una tinta, chiaro→scuro, mai un arcobaleno.
 PUNCH_RAMP = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
-WEEKDAY_LABELS_IT = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
 
 
 def panel_punch_card(ax, punch):
@@ -520,11 +628,11 @@ def panel_punch_card(ax, punch):
     im = ax.imshow(punch, aspect="auto", cmap=cmap, interpolation="nearest")
 
     ax.set_yticks(range(7))
-    ax.set_yticklabels(WEEKDAY_LABELS_IT, fontsize=9, color=INK_SECONDARY)
+    ax.set_yticklabels(T["weekdays"], fontsize=9, color=INK_SECONDARY)
     ax.set_xticks(range(0, 24, 3))
     ax.set_xticklabels([f"{h:02d}" for h in range(0, 24, 3)], fontsize=9, color=INK_MUTED)
-    ax.set_xlabel("Ora (locale del commit)", fontsize=9)
-    ax.set_title("Quando avvengono i commit (giorno × ora)", fontsize=12,
+    ax.set_xlabel(T["punch_xlabel"], fontsize=9)
+    ax.set_title(T["punch_title"], fontsize=12,
                  color=INK_PRIMARY, loc="left", pad=10)
     for spine in ax.spines.values():
         spine.set_visible(False)
@@ -545,7 +653,7 @@ def panel_punch_card(ax, punch):
     cbar = plt.colorbar(im, ax=ax, fraction=0.025, pad=0.012)
     cbar.outline.set_visible(False)
     cbar.ax.tick_params(length=0, labelsize=8, colors=INK_MUTED)
-    cbar.set_label("Commit", fontsize=8, color=INK_MUTED)
+    cbar.set_label(T["punch_cbar"], fontsize=8, color=INK_MUTED)
 
 
 def punch_card_caption(punch):
@@ -556,8 +664,8 @@ def punch_card_caption(punch):
         return ""
     wd, hr = np.unravel_index(np.argmax(punch), punch.shape)
     weekend = int(punch[5:7, :].sum())  # Sab (5) + Dom (6)
-    return (f"Picco: {WEEKDAY_LABELS_IT[wd]} alle {hr:02d}-{(hr+1)%24:02d} "
-            f"({int(punch[wd, hr])} commit) · Weekend: {weekend/total*100:.0f}% del totale")
+    return T["punch_caption"].format(wd=T["weekdays"][wd], h1=hr, h2=(hr + 1) % 24,
+                                     n=int(punch[wd, hr]), pct=weekend / total * 100)
 
 
 def panel_ownership(ax, ownership, colors):
@@ -584,9 +692,9 @@ def panel_ownership(ax, ownership, colors):
     )
     ax.set_yticks(y)
     ax.set_yticklabels(names, fontsize=9, color=INK_SECONDARY)
-    ax.set_title("Righe possedute per autore (fotografia a fine periodo)", fontsize=12,
+    ax.set_title(T["own_title"], fontsize=12,
                  color=INK_PRIMARY, loc="left", pad=10)
-    ax.set_xlabel("Righe (git blame)", fontsize=9)
+    ax.set_xlabel(T["own_xlabel"], fontsize=9)
     ax.set_axisbelow(True)
     ax.grid(axis="x", color=GRIDLINE, linewidth=0.8, linestyle="-")
     for side in ("top", "right", "left"):
@@ -597,7 +705,7 @@ def panel_ownership(ax, ownership, colors):
     thousands(ax, axis="x")
     for yi, v in zip(y, values):
         pct = v / total * 100
-        label = f" {int(v):,}".replace(",", ".") + f" ({pct:.0f}%)"
+        label = f" {fmt_int(v)} ({pct:.0f}%)"
         ax.text(v, yi, label, va="center", ha="left", fontsize=9, color=INK_SECONDARY)
 
 
@@ -609,16 +717,48 @@ def ownership_caption(ownership):
     ref = (ownership.get("ref_commit") or "")[:8]
     ref_date = ownership.get("ref_date") or "?"
     total = int(ownership.get("total_lines", 0))
-    total_s = f"{total:,}".replace(",", ".")
-    return (f"Istantanea al commit {ref} del {ref_date} · {total_s} righe totali "
-            f"(git blame, nessuna esclusione) · non è una somma sul periodo: può "
-            f"includere autori non attivi in questo report")
+    return T["own_caption"].format(ref=ref, date=ref_date, total=fmt_int(total))
+
+
+FOOTER_GAP_INCHES = 0.12   # aria minima fra il fondo dell'ultimo pannello e la legenda
+
+
+def fit_footer(fig, last_ax, legend, footer_inches, suptitle):
+    """Allunga la figura se il fondo dell'ultimo pannello (etichetta dell'asse e
+    didascalia comprese) scende sotto la cima della legenda.
+
+    Il footer è dimensionato per la nota della tabella (NOTE_INCHES), ma quando l'ultima
+    riga è la punch card o l'ownership sotto l'asse ci sono anche un'etichetta x e una
+    didascalia: misurato, con l'ownership in fondo "Righe (git blame)" finiva sotto la
+    legenda. Invece di un'altra costante per ogni combinazione di pannelli, si misura il
+    contenuto EFFETTIVAMENTE disegnato (bbox reali dopo draw()) e si aggiunge solo lo spazio
+    mancante. Header, righe e legenda restano alla stessa distanza in POLLICI dai bordi
+    (stessa logica delle costanti in testa): cresce solo il footer.
+    """
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    content_bottom = last_ax.get_tightbbox(renderer).y0           # pixel dal basso
+    legend_top = legend.get_window_extent(renderer).y1 if legend else 0.0
+    overlap_px = legend_top + FOOTER_GAP_INCHES * fig.dpi - content_bottom
+    if overlap_px <= 0:
+        return
+    extra = overlap_px / fig.dpi
+    width, height = fig.get_size_inches()
+    new_height = height + extra
+    fig.set_size_inches(width, new_height)
+    fig.subplots_adjust(top=1 - HEADER_INCHES / new_height,
+                        bottom=(footer_inches + extra) / new_height)
+    suptitle.set_y(1 - SUPTITLE_INCHES / new_height)
+    if legend:
+        legend.set_bbox_to_anchor((0.5, LEGEND_BOTTOM_PAD_INCHES / new_height),
+                                  transform=fig.transFigure)
 
 
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
 def main():
+    set_lang(detect_lang(sys.argv[1:], os.environ))
     payload = read_payload()
     aliases = load_aliases()
     if aliases and isinstance(payload, list):
@@ -712,10 +852,11 @@ def main():
     gs = fig.add_gridspec(3 + n_extra, 2, height_ratios=ratios,
                           hspace=FIG_HSPACE, wspace=0.22)
 
-    title = "Attività di sviluppo"
+    title = T["suptitle"]
     if project:
         title = f"{project} — {title}"
-    fig.suptitle(f"{title}  ({start} → {end}, per {bucket_name})",
+    suptitle = fig.suptitle(T["suptitle_range"].format(title=title, start=start, end=end,
+                                            bucket=bucket_name),
                  fontsize=16, color=INK_PRIMARY, x=0.02, ha="left",
                  y=1 - SUPTITLE_INCHES / fig_height)
 
@@ -728,23 +869,25 @@ def main():
     ax1 = fig.add_subplot(gs[1, 0])
     panel_stacked_over_time(
         ax1, commits_pivot, colors, labels,
-        f"Commit per {bucket_name}, per autore", "Commit",
+        T["commits_title"].format(bucket=bucket_name), T["commits_ylabel"],
     )
 
     ax2 = fig.add_subplot(gs[1, 1])
     panel_stacked_over_time(
         ax2, churn_pivot, colors, labels,
-        f"Churn per {bucket_name}, per autore",
-        "Righe (aggiunte + 0.4 × rimosse)", trend_window,
+        T["churn_title"].format(bucket=bucket_name),
+        T["churn_ylabel"], trend_window,
     )
 
     ax4 = fig.add_subplot(gs[2, :])
     panel_table(ax4, summary)
+    last_ax = ax4   # pannello più in basso: serve a fit_footer() per evitare la legenda
 
     row = 3
     if has_punch:
         ax5 = fig.add_subplot(gs[row, :])
         panel_punch_card(ax5, punch)
+        last_ax = ax5
         caption = punch_card_caption(punch)
         if caption:
             ax5.text(0, -0.34, caption, transform=ax5.transAxes, fontsize=8,
@@ -754,6 +897,7 @@ def main():
     if has_ownership:
         ax6 = fig.add_subplot(gs[row, :])
         panel_ownership(ax6, ownership, colors)
+        last_ax = ax6
         ax6.text(0, -0.28, ownership_caption(ownership), transform=ax6.transAxes,
                  fontsize=8, color=INK_MUTED, va="top")
         row += 1
@@ -765,9 +909,9 @@ def main():
     paired = sorted(zip(labs, handles), key=lambda p: p[0].startswith("Trend"))
     labs = [p[0] for p in paired]
     handles = [p[1] for p in paired]
-    fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
-               fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
-               bbox_to_anchor=(0.5, LEGEND_BOTTOM_PAD_INCHES / fig_height))
+    legend = fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
+                        fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
+                        bbox_to_anchor=(0.5, LEGEND_BOTTOM_PAD_INCHES / fig_height))
 
     # tight_layout() qui NON funziona: con un gridspec a >2 righe di altezze disomogenee
     # (già vero per il layout base ora, non solo con punch card/ownership) e/o un asse
@@ -796,6 +940,7 @@ def main():
     label_span = current_left - min_x0   # larghezza dell'etichetta più lunga, in frazione di figura
     left_margin = max(0.035, label_span + 0.015)   # + un piccolo margine di sicurezza
     fig.subplots_adjust(left=left_margin)
+    fit_footer(fig, last_ax, legend, footer_inches, suptitle)
     fig.savefig(OUTPUT_FILENAME, dpi=200)
     # Messaggio invariato: l'estensione VS Code lo intercetta via regex.
     print(f"Grafico generato con successo: {OUTPUT_FILENAME}")
