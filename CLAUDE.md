@@ -184,7 +184,7 @@ reale: 139.719 righe in un commit).
   `~/.config/git-activity-reports/git-activity-repos-map.json` (`{"<url>": "<nome-cartella>"}`).
 - `lines = added + deleted` resta nel JSON per retrocompatibilità, ma i grafici usano `churn`
   (vedi sotto) — non è mai una misura assoluta, va sempre letta come indicatore (vedi le sezioni di
-  interpretazione in README.md prima di aggiungere nuove metriche "KPI").
+  interpretazione in README.it.md prima di aggiungere nuove metriche "KPI").
 
 ### Plotter Python
 
@@ -269,6 +269,26 @@ senza `metadata`) per poter rielaborare file vecchi.
   (`LEGEND_ROW1_INCHES`/`LEGEND_EXTRA_ROW_INCHES`, misurate via `get_window_extent()`, non
   un'ipotesi). Stesso bug e stesso fix in `plot_git.py`, dove alle voci-autore si aggiunge "Trend".
 
+**Lingua delle scritte nei grafici** (duplicata identica nei due plotter: `STRINGS`,
+`detect_lang()`, `set_lang()`, `fmt_int()`). Ogni testo disegnato nel PNG passa da `T[...]`, mai
+una stringa letterale nel codice dei pannelli: aggiungendo un testo, va messo in ENTRAMBE le
+lingue di `STRINGS` in entrambi i file. Ordine di scelta: `--lang it|en`, `GIT_ACTIVITY_LANG`,
+locale (`LC_ALL` > `LC_MESSAGES` > `LANG`, `it*` → italiano), altrimenti inglese — il locale come
+default lascia invariato l'uso storico su un sistema italiano. Anche il separatore delle migliaia
+segue la lingua (`5.351` / `5,351`). `OTHER_LABEL` ("Altro"/"Other") è reimpostata da `set_lang()`
+prima di qualunque aggregazione. I messaggi su stdout/stderr restano in italiano: "Grafico generato
+con successo"/"Report multi-progetto ... generato con successo" sono intercettati via regex
+dall'estensione, che passa `GIT_ACTIVITY_LANG` dalla lingua di VS Code.
+
+**`fit_footer()`** (duplicata nei due plotter): dopo il disegno misura il fondo reale dell'ultimo
+pannello (`get_tightbbox`, etichette e didascalie comprese) e la cima della legenda, e se si
+sovrappongono allunga la figura solo del necessario, tenendo header/righe/legenda alla stessa
+distanza in pollici. Serve perché il footer (`NOTE_INCHES`) è tarato sulla nota della tabella,
+ma in `plot_git.py` l'ultima riga può essere la punch card o l'ownership, con etichetta x e
+didascalia sotto l'asse: misurato, con l'ownership in fondo "Righe (git blame)" finiva sotto la
+legenda. Non sostituirla con un'altra costante per combinazione di pannelli. Le barre impilate
+hanno inoltre un 8% di respiro sopra il massimo (`set_ylim`), altrimenti il vertice toccava il bordo.
+
 #### Metriche (duplicate identiche nei due plotter — modificarle in entrambi)
 
 ```python
@@ -293,7 +313,7 @@ di nuovo ad agosto 2026 (repository reali con uso di agenti di coding AI) risult
 della distribuzione — troncava il 72% del churn di giornate normali (gen-mag: 44%), non solo di outlier.
 Un commit reale da 336 file/22.180 churn ("CRUD per tutte le tabelle") ha confermato che non era rumore
 da attenuare. Alzato a 15000 (p99 osservato). Se il modello di sviluppo cambia ancora, ricontrollare la
-distribuzione (vedi README.md, sezione "Pesi delle metriche") prima di assumere che il valore attuale
+distribuzione (vedi README.it.md, sezione "Pesi delle metriche") prima di assumere che il valore attuale
 resti corretto — non è una scelta estetica, è calibrata sui dati e va rifatta quando i dati cambiano.
 
 #### Grafica
@@ -409,6 +429,12 @@ PNG risultante in una webview. Punti chiave:
   due plotter. La duplicazione è una scelta del progetto: gli script devono restare eseguibili
   standalone (finiscono singolarmente in `/usr/local/bin` via pacchetto `.deb`), quindi non c'è un
   modulo condiviso da importare.
+- **README bilingue**: `README.md` (inglese, pagina di GitHub/Marketplace) e `README.it.md` (italiano, la
+  fonte originale) esistono sia nella root sia in `vscode-extension/`, con la stessa struttura e lo
+  stesso ordine di intestazioni — vanno aggiornati entrambi. I rimandi a sezioni per nome (qui, in
+  `find_generated_candidates.sh`, in `extension.ts`) usano i titoli italiani, quindi puntano a
+  `README.it.md`. Gli screenshot in `docs/images/` sono generati da repository SINTETICI (autori
+  fittizi), mai da repository reali: non sostituirli con grafici di dati veri.
 - Il formato JSON di output è un contratto tra bash e python: cambiare le chiavi in un collector richiede
   aggiornare il plotter corrispondente. **Attenzione in fase di test**: se esistono copie in
   `/usr/local/bin`, il `PATH` le trova prima del working tree, e i wrapper `gitstats`/`gitstats-multi`
@@ -418,5 +444,5 @@ PNG risultante in una webview. Punti chiave:
   `"Report multi-progetto ... generato con successo: ..."`) sono intercettati via regex
   dall'estensione VS Code: non cambiarli senza aggiornare `vscode-extension/src/extension.ts`.
 - Prima di modificare le metriche, leggere le sezioni "Metriche Calcolate" e "Interpretazione dei Dati"
-  del README: le proprietà della formula (additiva, cap per giorno, cancellazioni pesate) sono
+  del README (italiano: `README.it.md`): le proprietà della formula (additiva, cap per giorno, cancellazioni pesate) sono
   correzioni di difetti misurati, non preferenze estetiche.

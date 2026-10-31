@@ -1,6 +1,8 @@
 *.png
 # ...tranne l'icona dell'estensione VS Code (asset sorgente, non un grafico generato)
 !vscode-extension/images/icon.png
+# ...e gli screenshot della documentazione (generati da repository sintetici, non dati reali)
+!docs/images/*.png
 
 # Eventuali file JSON di dati grezzi salvati manualmente nella root del repo (es. con
 # "> file.json") o il file di alias personale (git-activity-aliases.json). Ancorato alla

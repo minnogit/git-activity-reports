@@ -3,6 +3,7 @@
 ## [Non rilasciato]
 
 ### Aggiunto
+- Le scritte nei grafici seguono la lingua di VS Code (italiano o inglese).
 - Gli script collector/plotter sono inclusi nel `.vsix` (`bundled/`): non serve più il pacchetto `.deb`.
 - Impostazione `git-activity.outputDir` e notifica "Report salvato in…" con i pulsanti "Salva con nome…" e "Mostra nella cartella".
 - Messaggi e impostazioni localizzati (inglese come lingua sorgente, traduzione italiana).

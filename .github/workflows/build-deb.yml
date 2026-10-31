@@ -57,6 +57,7 @@ jobs:
         cp gitstat.sh git-activity-reports/usr/local/bin/gitstats
         cp gitstat-multi.sh git-activity-reports/usr/local/bin/gitstats-multi
         cp README.md git-activity-reports/usr/share/doc/git-activity-reports/
+        cp README.it.md git-activity-reports/usr/share/doc/git-activity-reports/
 
     - name: Make scripts executable
       run: |

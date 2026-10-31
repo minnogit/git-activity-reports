@@ -1,25 +1,35 @@
-# Git Stats Collector - Documentazione Completa
+# Git Stats Collector - Complete Documentation
 
-Sistema completo per analizzare e visualizzare statistiche Git, disponibile in due versioni: **singolo repository** e **multi-repository**.
+**English** · [Italiano](README.it.md)
 
-## Indice
+A complete system for analyzing and visualizing Git statistics, available in two versions: **single repository** and **multi-repository**.
 
-- [📦 Installazione](#-installazione) · [🚀 Guida Rapida](#-guida-rapida)
-- [Componenti](#componenti)
-- [📊 Versione Singolo Repository](#-versione-singolo-repository) · [🌐 Repository Remoti](#-repository-remoti-analizzare-un-url-git)
-- [🗂️ Versione Multi-Repository](#-versione-multi-repository) · [Esempi Pratici Multi-Repository](#esempi-pratici-multi-repository)
-- [🔄 Confronto tra le Due Versioni](#-confronto-tra-le-due-versioni)
-- [📋 Casi d'Uso Combinati](#-casi-duso-combinati) · [🎨 Interpretazione dei Grafici](#-interpretazione-dei-grafici)
+![Single-repository report](docs/images/single-repo-report-en.png)
+
+*Single-repository report. Generated from a synthetic repository (fictional authors). Charts are available in English and Italian (see [Chart language](#chart-language)).*
+
+![Multi-repository report](docs/images/multi-repo-report-en.png)
+
+*Multi-repository report, same synthetic data split across three projects.*
+
+## Table of Contents
+
+- [📦 Installation](#-installation) · [🚀 Quick Start](#-quick-start)
+- [Components](#components)
+- [📊 Single Repository Version](#-single-repository-version) · [🌐 Remote Repositories](#-remote-repositories-analyzing-a-git-url)
+- [🗂️ Multi-Repository Version](#-multi-repository-version) · [Multi-Repository Practical Examples](#multi-repository-practical-examples)
+- [🔄 Comparison of the Two Versions](#-comparison-between-the-two-versions)
+- [📋 Combined Use Cases](#-combined-use-cases) · [🎨 Interpreting the Charts](#-interpreting-the-charts)
 - [🚨 Troubleshooting](#-troubleshooting) · [💡 Tips & Best Practices](#-tips--best-practices)
-- [🔧 Personalizzazione](#-personalizzazione) · [📈 Metriche Calcolate](#-metriche-calcolate) · [🎯 Interpretazione dei Dati](#-interpretazione-dei-dati)
-- [❓ FAQ](#-faq) · [🚀 Comandi Semplificati (gitstats/gitstats-multi)](#-comandi-semplificati-gitstats--gitstats-multi)
-- [🧩 Estensione VS Code](#-estensione-vs-code)
+- [🔧 Customization](#-customization) · [📈 Calculated Metrics](#-calculated-metrics) · [🎯 Interpreting the Data](#-interpreting-the-data)
+- [❓ FAQ](#-faq) · [🚀 Simplified Commands (gitstats/gitstats-multi)](#-simplified-commands-gitstats--gitstats-multi)
+- [🧩 VS Code Extension](#-vs-code-extension)
 
 ---
 
-## 📦 Installazione
+## 📦 Installation
 
-### 1. Scarica il progetto
+### 1. Download the project
 
 ```bash
 git clone https://github.com/minnogit/git-activity-reports.git ~/git-activity-reports
@@ -27,20 +37,20 @@ cd ~/git-activity-reports
 chmod +x *.sh *.py
 ```
 
-In alternativa, su Debian/Ubuntu puoi installare il **pacchetto `.deb`** dalla pagina Release del
-repository: mette già tutto pronto in `/usr/local/bin` (inclusi i comandi `gitstats`/`gitstats-multi`) —
-in tal caso puoi saltare il resto di questa sezione e andare direttamente alla [Guida Rapida](#-guida-rapida).
+Alternatively, on Debian/Ubuntu you can install the **`.deb` package** from the repository's Releases
+page: it sets everything up in `/usr/local/bin` (including the `gitstats`/`gitstats-multi` commands) —
+in that case you can skip the rest of this section and go straight to the [Quick Start](#-quick-start).
 
-### 2. Requisiti
+### 2. Requirements
 
-**Script Bash:**
+**Bash scripts:**
 
 - Bash 4.0+
-- Git installato e configurato
-- Accesso ai repository da analizzare
-- `date` command con supporto `-d` (GNU coreutils)
+- Git installed and configured
+- Access to the repositories to analyze
+- `date` command with `-d` support (GNU coreutils)
 
-**Script Python** (una delle tre opzioni):
+**Python scripts** (one of the three options):
 
 ```bash
 sudo apt update
@@ -57,33 +67,33 @@ source git-activity-env/bin/activate
 pip install pandas matplotlib
 ```
 
-### 3. Rendi gli script richiamabili da qualsiasi cartella (consigliato)
+### 3. Make the scripts callable from any folder (recommended)
 
-Gli script vanno eseguiti **nella cartella del repository che vuoi analizzare** (es. `cd ~/progetti/backend`),
-non nella cartella dove li hai scaricati al passo 1 — per questo è comodo aggiungerli al `PATH` invece
-di scrivere ogni volta il percorso completo:
+The scripts must be run **in the folder of the repository you want to analyze** (e.g. `cd ~/projects/backend`),
+not in the folder where you downloaded them in step 1 — which is why it is convenient to add them to the `PATH` instead
+of typing the full path every time:
 
 ```bash
 echo 'export PATH="$HOME/git-activity-reports:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-Da qui in avanti, da qualsiasi cartella:
+From here on, from any folder:
 
 ```bash
-cd ~/progetti/backend
+cd ~/projects/backend
 git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py
 ```
 
-**Senza questo passaggio**, dovrai invocare gli script con il loro percorso completo, es.
-`~/git-activity-reports/git_stats_collector.sh ...` (oppure `cd ~/git-activity-reports` e usare `./`,
-ma solo se stai analizzando quella stessa cartella).
+**Without this step**, you will have to invoke the scripts with their full path, e.g.
+`~/git-activity-reports/git_stats_collector.sh ...` (or `cd ~/git-activity-reports` and use `./`,
+but only if you are analyzing that same folder).
 
-> ⚠️ **Se hai già installato una versione precedente in `/usr/local/bin`** (a mano o via
-> pacchetto `.deb`), quelle sono **copie**: il `PATH` le trova prima del repository, quindi
-> continuerai a eseguire il codice vecchio anche dopo un `git pull`. Verifica con
-> `command -v plot_git.py` e aggiorna tutti i file insieme — collector e plotter devono
-> essere della stessa versione, perché il JSON è un contratto tra loro:
+> ⚠️ **If you have already installed a previous version in `/usr/local/bin`** (by hand or via the
+> `.deb` package), those are **copies**: the `PATH` finds them before the repository, so
+> you will keep running the old code even after a `git pull`. Check with
+> `command -v plot_git.py` and update all the files together — collector and plotter must be
+> the same version, because the JSON is a contract between them:
 >
 > ```bash
 > cd ~/git-activity-reports
@@ -93,127 +103,127 @@ ma solo se stai analizzando quella stessa cartella).
 > sudo install -m 755 gitstat-multi.sh /usr/local/bin/gitstats-multi
 > ```
 
-### 4. (Opzionale) Comandi ancora più brevi: `gitstats` / `gitstats-multi`
+### 4. (Optional) Even shorter commands: `gitstats` / `gitstats-multi`
 
-Un ulteriore passo, descritto in [🚀 Comandi Semplificati](#-comandi-semplificati-gitstats--gitstats-multi)
-più sotto, installa `gitstats`/`gitstats-multi`: un solo comando al posto della pipe collector + plot
-(`gitstats 2025-11-01 2025-11-30` invece di `git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py`).
-Sono i comandi usati negli esempi della Guida Rapida qui sotto.
+One more step, described in [🚀 Simplified Commands](#-simplified-commands-gitstats--gitstats-multi)
+below, installs `gitstats`/`gitstats-multi`: a single command in place of the collector + plot pipe
+(`gitstats 2025-11-01 2025-11-30` instead of `git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py`).
+These are the commands used in the Quick Start examples below.
 
 ---
 
-## 🚀 Guida Rapida
+## 🚀 Quick Start
 
-### Quale comando uso?
+### Which command should I use?
 
-| Voglio... | Comando |
+| I want... | Command |
 | --- | --- |
-| Il dettaglio **giorno per giorno** di UN repository, su poche settimane/un mese (sono già dentro la sua cartella) | `git_stats_collector.sh` |
-| Il **totale aggregato** di uno o più repository su un periodo lungo (mesi/trimestri) | `git_multiproject_stats_collector.sh` |
-| **Confrontare più repository** tra loro (portfolio, team, microservizi) | `git_multiproject_stats_collector.sh` |
-| Analizzare un repository che **non ho ancora clonato in locale** (solo l'URL) | entrambi accettano un URL Git — vedi [Repository Remoti](#-repository-remoti-analizzare-un-url-git) |
+| The **day-by-day** detail of ONE repository, over a few weeks/a month (I am already inside its folder) | `git_stats_collector.sh` |
+| The **aggregated total** of one or more repositories over a long period (months/quarters) | `git_multiproject_stats_collector.sh` |
+| To **compare multiple repositories** with each other (portfolio, team, microservices) | `git_multiproject_stats_collector.sh` |
+| To analyze a repository that **I have not cloned locally yet** (only the URL) | both accept a Git URL — see [Remote Repositories](#-remote-repositories-analyzing-a-git-url) |
 
-> Il grafico giornaliero di `git_stats_collector.sh` perde leggibilità su periodi lunghi (una barra per
-> giorno) — dettagli e alternative nella sezione [Versione Singolo Repository](#-versione-singolo-repository).
+> The daily chart of `git_stats_collector.sh` loses readability over long periods (one bar per
+> day) — details and alternatives in the [Single Repository Version](#-single-repository-version) section.
 
-### I comandi che userai più spesso
+### The commands you will use most often
 
-I comandi qui sotto (`gitstats`, `gitstats-multi`) sono i wrapper installati con il passo 4 di
-[📦 Installazione](#-installazione) — se non li hai ancora installati, o hai fatto solo il passo 3
-(script nel `PATH`), usa la variante "senza wrapper" più sotto.
+The commands below (`gitstats`, `gitstats-multi`) are the wrappers installed with step 4 of
+[📦 Installation](#-installation) — if you have not installed them yet, or you only did step 3
+(scripts in the `PATH`), use the "without wrappers" variant further below.
 
-**Con `gitstats`/`gitstats-multi` installati:**
+**With `gitstats`/`gitstats-multi` installed:**
 
 ```bash
-# 1. Report giornaliero di un repository (eseguito dentro la sua cartella), con grafico
-cd ~/progetti/backend
+# 1. Daily report of a repository (run inside its folder), with chart
+cd ~/projects/backend
 gitstats 2025-11-01 2025-11-30
-# -> genera git_stats.png
+# -> generates git_stats.png
 
-# 2. Stesso report, filtrato per un autore
+# 2. Same report, filtered by author
 gitstats 2025-11-01 2025-11-30 "Mario Rossi"
 
-# 3. Confronto tra più repository (locali e/o remoti), con grafico
-gitstats-multi 2025-11-01 2025-11-30 ~/progetti/repoA ~/progetti/repoB
-# -> genera git_activity_multi_project_report_<inizio>_<fine>.png (es. ..._2025-11-01_2025-11-30.png)
+# 3. Comparison across multiple repositories (local and/or remote), with chart
+gitstats-multi 2025-11-01 2025-11-30 ~/projects/repoA ~/projects/repoB
+# -> generates git_activity_multi_project_report_<start>_<end>.png (e.g. ..._2025-11-01_2025-11-30.png)
 
-# 4. Stesso confronto, leggendo l'elenco progetti da file invece che da riga di comando
+# 4. Same comparison, reading the project list from a file instead of the command line
 gitstats-multi --file project_list.txt 2025-11-01 2025-11-30
 ```
 
-**Senza wrapper** (solo script nel `PATH`, passo 3 di Installazione — fa la stessa cosa "a mano",
-utile anche per il formato `text` o per salvare il JSON intermedio, non esposti dai wrapper):
+**Without wrappers** (only the scripts in the `PATH`, step 3 of Installation — it does the same thing "by hand",
+also useful for the `text` format or for saving the intermediate JSON, which the wrappers do not expose):
 
 ```bash
-cd ~/progetti/backend
+cd ~/projects/backend
 git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py
-git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/progetti/repoA ~/progetti/repoB \
+git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/projects/repoA ~/projects/repoB \
   | python3 plot_multiproject.py
 ```
 
-### Parametri in breve
+### Parameters at a glance
 
 | | `git_stats_collector.sh` | `git_multiproject_stats_collector.sh` |
 | --- | --- | --- |
-| Sintassi | `[opzioni] <INIZIO> <FINE> [formato] [autore]` | `[opzioni] <INIZIO> <FINE> [percorsi...]` |
-| Dove va eseguito | Dentro la cartella del repo (oppure con `--repo`) | Da qualsiasi cartella |
-| `INIZIO` / `FINE` | `YYYY-MM-DD`, obbligatorie | `YYYY-MM-DD`, obbligatorie (anche via `--start`/`--end`) |
-| 3° argomento posizionale | `text` (default) o `json` | — (percorso/URL repository) |
-| 4° argomento posizionale | nome autore (opzionale, filtra) | — |
-| Elenco repository | non applicabile (un solo repo per esecuzione) | percorsi/URL in coda al comando, oppure `--file lista.txt` |
-| Aggiornamento da remoto | solo con `--fetch` | solo con `--fetch` |
-| Repository via URL | `--repo <url>` | passa l'URL come percorso (posizionale o riga di `--file`) |
-| Formato output | `text` o `json` su stdout | sempre `json` su stdout |
-| Grafico (in pipe) | `python3 plot_git.py` → report a 4-6 pannelli | `python3 plot_multiproject.py` → report a 6 pannelli |
+| Syntax | `[options] <START> <END> [format] [author]` | `[options] <START> <END> [paths...]` |
+| Where to run it | Inside the repo folder (or with `--repo`) | From any folder |
+| `START` / `END` | `YYYY-MM-DD`, required | `YYYY-MM-DD`, required (also via `--start`/`--end`) |
+| 3rd positional argument | `text` (default) or `json` | — (repository path/URL) |
+| 4th positional argument | author name (optional, filters) | — |
+| Repository list | not applicable (a single repo per run) | paths/URLs at the end of the command, or `--file list.txt` |
+| Update from remote | only with `--fetch` | only with `--fetch` |
+| Repository via URL | `--repo <url>` | pass the URL as a path (positional or a line of `--file`) |
+| Output format | `text` or `json` on stdout | always `json` on stdout |
+| Chart (piped) | `python3 plot_git.py` → 4-6 panel report | `python3 plot_multiproject.py` → 6 panel report |
 
-Dettagli completi di ogni opzione più sotto: [Versione Singolo Repository](#-versione-singolo-repository), [Versione Multi-Repository](#-versione-multi-repository).
-
----
-
-## Componenti
-
-### Versione Singolo Repository
-
-- **`git_stats_collector.sh`** - Analizza un repository alla volta con dettaglio giornaliero
-- **`plot_git.py`** - Genera un report a 4 pannelli base (giorni attivi, commit nel tempo, churn nel tempo, tabella riepilogo) più due opzionali
-
-### Versione Multi-Repository
-
-- **`git_multiproject_stats_collector.sh`** - Analizza più repository contemporaneamente
-- **`plot_multiproject.py`** - Genera un report a 6 pannelli comparativi tra progetti (giorni attivi, commit e churn per progetto/autore, distribuzione commit e churn, tabella riepilogo)
-
-Il raggruppamento degli autori tramite `git-activity-aliases.json` è gestito dai **collector**
-(non dai plotter), perché va applicato ai dati grezzi prima di ogni aggregazione.
+Full details of every option below: [Single Repository Version](#-single-repository-version), [Multi-Repository Version](#-multi-repository-version).
 
 ---
 
-## 📊 Versione Singolo Repository
+## Components
 
-### Panoramica
+### Single Repository Version
 
-Analizza un singolo repository Git con dettaglio **giornaliero**, ideale per:
+- **`git_stats_collector.sh`** - Analyzes one repository at a time with daily detail
+- **`plot_git.py`** - Generates a base 4-panel report (active days, commits over time, churn over time, summary table) plus two optional ones
 
-- Report personali di attività
-- Analisi sprint su un progetto specifico
-- Monitoraggio giornaliero del team su un repository
+### Multi-Repository Version
 
-**⚠️ Limite del grafico su intervalli lunghi:** `plot_git.py` disegna una barra per ogni giorno del
-periodo. Su un intervallo di poche settimane il grafico è leggibile; su diversi mesi (es. un semestre)
-le barre diventano troppo strette/numerose e il grafico perde di leggibilità. Per periodi lunghi:
+- **`git_multiproject_stats_collector.sh`** - Analyzes multiple repositories at once
+- **`plot_multiproject.py`** - Generates a 6-panel report comparing projects (active days, commits and churn by project/author, commit and churn distribution, summary table)
 
-- restringi l'intervallo a poche settimane/un mese per volta, oppure
-- usa `git_multiproject_stats_collector.sh` (aggregato, non giornaliero — vedi sezione dedicata più sotto)
-  se ti interessa solo il totale del periodo e non il dettaglio giorno per giorno, oppure
-- dividi il periodo lungo in più chiamate (una per settimana/mese) e genera un grafico per ciascuna,
-  come nell'esempio ["Analisi Mensile Multi-Livello"](#analisi-mensile-multi-livello).
+The grouping of authors via `git-activity-aliases.json` (author aliases) is handled by the **collectors**
+(not by the plotters), because it must be applied to the raw data before any aggregation.
 
-### Sintassi
+---
+
+## 📊 Single Repository Version
+
+### Overview
+
+Analyzes a single Git repository with **daily** detail, ideal for:
+
+- Personal activity reports
+- Sprint analysis on a specific project
+- Daily team monitoring on a repository
+
+**⚠️ Chart limitation over long ranges:** `plot_git.py` draws one bar for each day of the
+period. Over a range of a few weeks the chart is readable; over several months (e.g. a semester)
+the bars become too narrow/numerous and the chart loses readability. For long periods:
+
+- narrow the range to a few weeks/a month at a time, or
+- use `git_multiproject_stats_collector.sh` (aggregated, not daily — see the dedicated section further below)
+  if you only care about the total for the period and not the day-by-day detail, or
+- split the long period into multiple calls (one per week/month) and generate a chart for each,
+  as in the ["Multi-Level Monthly Analysis"](#multi-level-monthly-analysis) example.
+
+### Syntax
 
 ```bash
-./git_stats_collector.sh <DATA_INIZIO> <DATA_FINE> [formato] [autore]
+./git_stats_collector.sh <START_DATE> <END_DATE> [format] [author]
 ```
 
-**Nota:** Lo script Python `plot_git.py` supporta il raggruppamento degli autori attraverso un file opzionale `git-activity-aliases.json` nella stessa directory. Questo file permette di raggruppare diversi nomi di autori Git sotto un unico nome comune, utile quando lo stesso sviluppatore ha contribuito con nomi diversi. Esempio:
+**Note:** The Python script `plot_git.py` supports grouping authors through an optional `git-activity-aliases.json` file in the same directory. This file lets you group several Git author names under a single common name, which is useful when the same developer has contributed under different names. Example:
 
 ```json
 {
@@ -223,55 +233,55 @@ le barre diventano troppo strette/numerose e il grafico perde di leggibilità. P
 }
 ```
 
-Il file di configurazione può essere posizionato in diverse posizioni e verrà cercato in questo ordine:
+The configuration file can be placed in several locations and will be searched for in this order:
 
-1. Nella directory corrente (`./git-activity-aliases.json`)
-2. Nella directory di configurazione XDG specifica per l'applicazione (`~/.config/git-activity-reports/git-activity-aliases.json`)
-3. Nella directory di configurazione XDG generica (`~/.config/git-activity-git-activity-aliases.json`)
-4. **Accanto agli script** (`<cartella-degli-script>/git-activity-aliases.json`) — utile perché il
-   collector si esegue *dentro il repository da analizzare*, dove `.` è un'altra cartella: un file
-   messo accanto agli script vale così per tutti i repository
-5. Nella directory di sistema (`/etc/git-activity-reports/git-activity-aliases.json`)
+1. In the current directory (`./git-activity-aliases.json`)
+2. In the application-specific XDG configuration directory (`~/.config/git-activity-reports/git-activity-aliases.json`)
+3. In the generic XDG configuration directory (`~/.config/git-activity-git-activity-aliases.json`)
+4. **Next to the scripts** (`<scripts-folder>/git-activity-aliases.json`) — useful because the
+   collector runs *inside the repository to analyze*, where `.` is a different folder: a file
+   placed next to the scripts thus applies to all repositories
+5. In the system directory (`/etc/git-activity-reports/git-activity-aliases.json`)
 
-Se nessun file di configurazione esiste, lo script continuerà a funzionare normalmente senza raggruppare gli autori.
+If no configuration file exists, the script will keep working normally without grouping authors.
 
-## 🌐 Repository Remoti (analizzare un URL Git)
+## 🌐 Remote Repositories (analyzing a Git URL)
 
-Sia `git_stats_collector.sh` (via `--repo <url>`) sia `git_multiproject_stats_collector.sh` (come
-percorso posizionale o riga di `--file`) accettano, al posto di un path locale, un URL Git qualsiasi
-(`https://...`, `git://...`, `ssh://...` o la forma scp `git@host:org/repo.git`).
+Both `git_stats_collector.sh` (via `--repo <url>`) and `git_multiproject_stats_collector.sh` (as a
+positional path or a line of `--file`) accept, in place of a local path, any Git URL
+(`https://...`, `git://...`, `ssh://...` or the scp form `git@host:org/repo.git`).
 
-**Come funziona:**
+**How it works:**
 
-1. Al primo utilizzo, il repository viene **clonato** in una cartella visibile (non nascosta) sotto
-   `$GIT_ACTIVITY_REPOS_DIR` (default: `~/repos`), usando come nome cartella l'ultimo segmento dell'URL
-   (senza `.git`).
-2. Alle esecuzioni successive, se la cartella corrisponde già a quell'URL (stesso `remote origin`), viene
-   **riusata** senza clonare di nuovo — l'aggiornamento (`git fetch`) resta opt-in con `--fetch`, come per
-   i repository locali.
-3. Poiché la cartella è visibile e normale (non un bare clone nascosto), può coincidere con un repository
-   su cui stai già lavorando: se ci clonavi già a mano quel progetto in `~/repos/nome-progetto`, lo script
-   lo riconosce e lo riusa (a patto che l'`origin` combaci con l'URL richiesto).
+1. On first use, the repository is **cloned** into a visible (not hidden) folder under
+   `$GIT_ACTIVITY_REPOS_DIR` (default: `~/repos`), using the last segment of the URL as the folder name
+   (without `.git`).
+2. On subsequent runs, if the folder already matches that URL (same `remote origin`), it is
+   **reused** without cloning again — updating (`git fetch`) remains opt-in with `--fetch`, as for
+   local repositories.
+3. Since the folder is visible and ordinary (not a hidden bare clone), it can coincide with a repository
+   you are already working on: if you had already cloned that project by hand into `~/repos/project-name`, the script
+   recognizes it and reuses it (provided the `origin` matches the requested URL).
 
-**Esempi:**
+**Examples:**
 
 ```bash
-# Singolo repository remoto
+# Single remote repository
 ./git_stats_collector.sh --repo https://github.com/org/repo.git 2025-11-01 2025-11-30 json | python3 plot_git.py
 
-# Multi-repository: mix di URL e path locali
+# Multi-repository: mix of URLs and local paths
 ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 \
-  https://github.com/org/backend.git ~/progetti/frontend git@github.com:org/mobile.git \
+  https://github.com/org/backend.git ~/projects/frontend git@github.com:org/mobile.git \
   | python3 plot_multiproject.py
 
-# Cartella di clonazione personalizzata
+# Custom clone folder
 GIT_ACTIVITY_REPOS_DIR=/data/git-mirrors ./git_multiproject_stats_collector.sh --file progetti.txt 2025-11-01 2025-11-30
 ```
 
-**Collisioni di nome cartella:** se due URL diversi produrrebbero lo stesso nome di cartella (es. due
-repository chiamati entrambi `backend` su host diversi), lo script si **ferma con un errore** invece di
-sovrascrivere/confondere i due repository. Per risolvere, assegna un nome di cartella dedicato a uno dei
-due URL tramite un file di mapping opzionale (obbligatorio solo in caso di collisione):
+**Folder name collisions:** if two different URLs would produce the same folder name (e.g. two
+repositories both named `backend` on different hosts), the script **stops with an error** instead of
+overwriting/mixing up the two repositories. To resolve it, assign a dedicated folder name to one of the
+two URLs through an optional mapping file (required only in case of a collision):
 
 `~/.config/git-activity-reports/git-activity-repos-map.json`
 
@@ -282,32 +292,32 @@ due URL tramite un file di mapping opzionale (obbligatorio solo in caso di colli
 }
 ```
 
-Le chiavi devono combaciare esattamente con l'URL passato sulla riga di comando/nel file `--file`.
+The keys must match exactly the URL passed on the command line/in the `--file` file.
 
-### Parametri
+### Parameters
 
-| Posizione | Parametro     | Obbligatorio | Descrizione                     | Default |
+| Position | Parameter     | Required | Description                     | Default |
 | --------- | ------------- | ------------ | ------------------------------- | ------- |
-| 1         | `DATA_INIZIO` | ✓            | Data inizio (YYYY-MM-DD)        | -       |
-| 2         | `DATA_FINE`   | ✓            | Data fine (YYYY-MM-DD)          | -       |
-| 3         | `formato`     | ✗            | Formato output: `text` o `json` | `text`  |
-| 4         | `autore`      | ✗            | Filtra per autore, **match esatto** sul nome | tutti   |
+| 1         | `DATA_INIZIO` | ✓            | Start date (YYYY-MM-DD)         | -       |
+| 2         | `DATA_FINE`   | ✓            | End date (YYYY-MM-DD)           | -       |
+| 3         | `formato`     | ✗            | Output format: `text` or `json` | `text`  |
+| 4         | `autore`      | ✗            | Filter by author, **exact match** on the name | all     |
 
-### Opzioni Disponibili
+### Available Options
 
-| Opzione      | Argomento     | Descrizione                                                                                                                     |
+| Option       | Argument      | Description                                                                                                                     |
 | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `--fetch`    | -             | Abilita l'aggiornamento del repository con git fetch                                                                            |
-| `--repo`     | `<path\|url>` | Analizza questo repository invece della cartella corrente (vedi [Repository Remoti](#-repository-remoti-analizzare-un-url-git)) |
-| `--no-ownership` | -         | Salta il calcolo dell'ownership (git blame per file, solo formato `json`) — vedi [Interpretazione dei Grafici](#-interpretazione-dei-grafici) |
-| `-h, --help` | -             | Mostra l'help                                                                                                                   |
+| `--fetch`    | -             | Enables updating the repository with git fetch                                                                                  |
+| `--repo`     | `<path\|url>` | Analyzes this repository instead of the current folder (see [Remote Repositories](#-remote-repositories-analyzing-a-git-url))   |
+| `--no-ownership` | -         | Skips the ownership computation (git blame per file, `json` format only) — see [Interpreting the Charts](#-interpreting-the-charts) |
+| `-h, --help` | -             | Shows the help                                                                                                                  |
 
-### Esempi - Singolo Repository
+### Examples - Single Repository
 
-#### 1. Report testuale per tutti gli autori (modalità totale)
+#### 1. Text report for all authors (total mode)
 
 ```bash
-cd ~/progetti/backend
+cd ~/projects/backend
 ./git_stats_collector.sh 2025-11-01 2025-11-30
 ```
 
@@ -327,27 +337,27 @@ Mer        2025-11-06          2            156            100             56
 TOTALE:                       10           1498           1030            468
 ```
 
-#### 2. Report testuale per autore specifico
+#### 2. Text report for a specific author
 
 ```bash
 ./git_stats_collector.sh 2025-11-01 2025-11-30 text "Mario Rossi"
 ```
 
-#### 3. JSON per visualizzazione grafica (tutti gli autori)
+#### 3. JSON for graphical visualization (all authors)
 
 ```bash
 ./git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py
 ```
 
-**Genera:** `git_stats.png` con grafico stacked bar giornaliero
+**Generates:** `git_stats.png` with a daily stacked bar chart
 
-#### 4. JSON per singolo autore
+#### 4. JSON for a single author
 
 ```bash
 ./git_stats_collector.sh 2025-11-01 2025-11-30 json "Laura Bianchi"
 ```
 
-**Output JSON:**
+**JSON output:**
 
 ```json
 [
@@ -362,95 +372,95 @@ TOTALE:                       10           1498           1030            468
 ]
 ```
 
-#### 5. Salvataggio dati per analisi successive
+#### 5. Saving data for later analysis
 
 ```bash
-# Genera e salva JSON
+# Generate and save JSON
 ./git_stats_collector.sh 2025-11-01 2025-11-30 json > novembre.json
 
-# Visualizza in seguito
+# Visualize later
 cat novembre.json | python3 plot_git.py
 
-# Oppure ispeziona i dati
+# Or inspect the data
 cat novembre.json | jq '.[] | {author, total_commits}'
 ```
 
-#### 6. Con aggiornamento esplicito del repository
+#### 6. With explicit repository update
 
 ```bash
-# Esegue git fetch prima dell'analisi
+# Runs git fetch before the analysis
 ./git_stats_collector.sh --fetch 2025-11-01 2025-11-30 json | python3 plot_git.py
 
-# Con formato testuale
+# With text format
 ./git_stats_collector.sh --fetch 2025-11-01 2025-11-30 text "Mario Rossi"
 ```
 
 ---
 
-## 🗂️ Versione Multi-Repository
+## 🗂️ Multi-Repository Version
 
-### Panoramica
+### Overview
 
-Analizza più repository contemporaneamente con statistiche **per progetto e autore** (con dettaglio
-giornaliero), ideale per:
+Analyzes multiple repositories at once with statistics **per project and author** (with daily
+detail), ideal for:
 
-- Confronto attività tra progetti diversi
-- Report di team distribuiti su più repository
-- Analisi portfolio completo
+- Comparing activity across different projects
+- Reports for teams distributed across multiple repositories
+- Full portfolio analysis
 
-**Note importanti:**
+**Important notes:**
 
-- I merge commits sono esclusi dalle statistiche
-- **Nessun file è escluso dal churn** (node_modules, lock file, codice generato compresi) — vedi
-  [Perché non escludiamo codice generato/vendorizzato](#perché-non-escludiamo-codice-generatovendorizzato-e-prima-lo-facevamo)
-- Le righe totali sono calcolate come: aggiunte + eliminate
+- Merge commits are excluded from the statistics
+- **No file is excluded from the churn** (node_modules, lock files, generated code included) — see
+  [Why we don't exclude generated/vendored code (and why we used to)](#why-we-dont-exclude-generatedvendored-code-and-used-to)
+- Total lines are calculated as: added + deleted
 
-### Sintassi Completa
+### Full Syntax
 
 ```bash
-./git_multiproject_stats_collector.sh [OPZIONI] <DATA_INIZIO> <DATA_FINE> [percorsi...]
+./git_multiproject_stats_collector.sh [OPTIONS] <START_DATE> <END_DATE> [paths...]
 ```
 
-### Opzioni Disponibili
+### Available Options
 
-| Opzione      | Argomento | Descrizione                                            |
+| Option       | Argument  | Description                                            |
 | ------------ | --------- | ------------------------------------------------------ |
-| `--file`     | `<file>`  | Legge i percorsi dei repository da file (uno per riga) |
-| `--start`    | `<data>`  | Data di inizio periodo (formato: YYYY-MM-DD)           |
-| `--end`      | `<data>`  | Data di fine periodo (formato: YYYY-MM-DD)             |
-| `--fetch`    | -         | Abilita l'aggiornamento dei repository con git fetch   |
-| `-h, --help` | -         | Mostra l'help                                          |
+| `--file`     | `<file>`  | Reads the repository paths from a file (one per line)  |
+| `--start`    | `<date>`  | Period start date (format: YYYY-MM-DD)                 |
+| `--end`      | `<date>`  | Period end date (format: YYYY-MM-DD)                   |
+| `--fetch`    | -         | Enables updating the repositories with git fetch       |
+| `-h, --help` | -         | Shows the help                                         |
 
-**Nota:** ogni percorso (posizionale o riga di `--file`) può essere anche un URL Git, non solo un path
-locale — vedi [Repository Remoti](#-repository-remoti-analizzare-un-url-git).
+**Note:** each path (positional or a line of `--file`) can also be a Git URL, not just a local
+path — see [Remote Repositories](#-remote-repositories-analyzing-a-git-url).
 
 ---
 
-## Esempi Pratici Multi-Repository
+## Multi-Repository Practical Examples
 
-### 1. Analisi di repository specifici
+### 1. Analyzing specific repositories
 
 ```bash
 ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/progetti/repoA ~/progetti/repoB
 ```
 
-**Risultato:** Analizza `repoA` e `repoB` per tutto novembre 2025.
+**Result:** Analyzes `repoA` and `repoB` for all of November 2025.
 
 ---
 
-### 2. Repository da file di configurazione
+### 2. Repositories from a configuration file
 
-**Crea il file `progetti.txt`:**
+**Create the file `progetti.txt`:**
 
 ```txt
 ~/progetti/backend
 ~/progetti/frontend
 /var/www/api-service
-# Questo è un commento - verrà ignorato
+# This is a comment - it will be ignored
 ~/workspace/mobile-app
 ```
 
-**Esegui lo script:**
+**Run the script:**
 
 ```bash
 ./git_multiproject_stats_collector.sh --file progetti.txt 2025-11-01 2025-11-30
@@ -458,113 +468,113 @@ locale — vedi [Repository Remoti](#-repository-remoti-analizzare-un-url-git).
 
 ---
 
-### 3. Date come opzioni (ordine flessibile)
+### 3. Dates as options (flexible order)
 
 ```bash
-# Date specificate con flag
+# Dates specified with flags
 ./git_multiproject_stats_collector.sh --start 2025-11-01 --end 2025-11-30 ~/repo1 ~/repo2
 
-# Mixando file e date con flag
+# Mixing file and dates with flags
 ./git_multiproject_stats_collector.sh --file progetti.txt --start 2025-11-01 --end 2025-11-30
 ```
 
 ---
 
-### 4. Pipeline completa con visualizzazione
+### 4. Full pipeline with visualization
 
 ```bash
-# Genera JSON e crea grafici
+# Generate JSON and create charts
 ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/repo1 ~/repo2 | python3 plot_multiproject.py
 ```
 
-### 5. Con aggiornamento esplicito dei repository
+### 5. With explicit repository update
 
 ```bash
-# Esegue git fetch prima dell'analisi
+# Runs git fetch before the analysis
 ./git_multiproject_stats_collector.sh --fetch --file progetti.txt 2025-11-01 2025-11-30
 
-# Oppure con repository specifici
+# Or with specific repositories
 ./git_multiproject_stats_collector.sh --fetch 2025-11-01 2025-11-30 ~/repo1 ~/repo2
 ```
 
-**Output:** File `git_activity_multi_project_report_<inizio>_<fine>.png` con 6 pannelli.
+**Output:** File `git_activity_multi_project_report_<start>_<end>.png` with 6 panels.
 
 ---
 
-### 5. Salvataggio intermedio dei dati
+### 5. Saving intermediate data
 
 ```bash
-# Salva JSON per analisi successive
+# Save JSON for later analysis
 ./git_multiproject_stats_collector.sh --file progetti.txt 2025-11-01 2025-11-30 > dati_novembre.json
 
-# Usa i dati salvati
+# Use the saved data
 cat dati_novembre.json | python3 plot_multiproject.py
 ```
 
 ---
 
-## 🔄 Confronto tra le Due Versioni
+## 🔄 Comparison Between the Two Versions
 
-| Caratteristica       | Singolo Repository               | Multi-Repository                     |
+| Feature              | Single Repository                | Multi-Repository                     |
 | -------------------- | -------------------------------- | ------------------------------------ |
-| **Granularità**      | Giornaliera                      | Aggregata per progetto               |
-| **Scope**            | Un repository alla volta         | Multipli contemporaneamente          |
-| **Formato output**   | text/json                        | json (solo)                          |
-| **Filtro autore**    | Sì, via parametro                | No (mostra tutti)                    |
-| **Grafici generati** | 1 (stacked bar)                  | 3 (bar, donut, ranking)              |
-| **Uso tipico**       | Sprint review, analisi personale | Portfolio review, confronto progetti |
-| **Esecuzione**       | Nella cartella del repo          | Da qualsiasi posizione               |
+| **Granularity**      | Daily                            | Aggregated per project               |
+| **Scope**            | One repository at a time         | Multiple at once                     |
+| **Output format**    | text/json                        | json (only)                          |
+| **Author filter**    | Yes, via parameter               | No (shows everyone)                  |
+| **Charts generated** | 1 (stacked bar)                  | 3 (bar, donut, ranking)              |
+| **Typical use**      | Sprint review, personal analysis | Portfolio review, project comparison |
+| **Execution**        | Inside the repo folder           | From any location                    |
 
-### Quando Usare Quale Versione?
+### When to Use Which Version?
 
-**Usa Singolo Repository se:**
+**Use Single Repository if:**
 
-- Vuoi vedere l'attività **giorno per giorno**
-- Ti interessa un **progetto specifico**
-- Vuoi report testuali leggibili
-- Necessiti filtrare per autore specifico
+- You want to see activity **day by day**
+- You are interested in a **specific project**
+- You want readable text reports
+- You need to filter by a specific author
 
-**Usa Multi-Repository se:**
+**Use Multi-Repository if:**
 
-- Devi confrontare **più progetti**
-- Ti interessa la **distribuzione del lavoro** tra repository
-- Vuoi una **visione d'insieme** del team
-- Lavori su un ecosistema di microservizi
+- You need to compare **multiple projects**
+- You are interested in the **distribution of work** across repositories
+- You want an **overview** of the team
+- You work on a microservices ecosystem
 
 ---
 
-## 📋 Casi d'Uso Combinati
+## 📋 Combined Use Cases
 
-### Sprint Retrospective Completa
+### Complete Sprint Retrospective
 
 ```bash
-# 1. Overview generale su tutti i progetti del team
+# 1. General overview of all the team's projects
 ./git_multiproject_stats_collector.sh --file team-repos.txt 2025-11-15 2025-11-30 \
   | python3 plot_multiproject.py
   
-# 2. Dettaglio giornaliero sul progetto principale
+# 2. Daily detail on the main project
 cd ~/progetti/backend
 ./git_stats_collector.sh 2025-11-15 2025-11-30 json | python3 plot_git.py
 
-# 3. Report testuale per uno sviluppatore specifico
+# 3. Text report for a specific developer
 ./git_stats_collector.sh 2025-11-15 2025-11-30 text "Mario Rossi"
 ```
 
-### Analisi Mensile Multi-Livello
+### Multi-Level Monthly Analysis
 
 ```bash
-# Novembre: vista generale
+# November: general view
 ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 \
   ~/backend ~/frontend ~/mobile > novembre_overview.json
 
-# Dettaglio settimanale su frontend
+# Weekly detail on frontend
 cd ~/frontend
 ./git_stats_collector.sh 2025-11-01 2025-07 json > week1.json
 ./git_stats_collector.sh 2025-11-08 2025-11-14 json > week2.json
 ./git_stats_collector.sh 2025-11-15 2025-11-21 json > week3.json
 ./git_stats_collector.sh 2025-11-22 2025-11-30 json > week4.json
 
-# Visualizza settimana per settimana
+# Visualize week by week
 for week in week*.json; do
   echo "Analisi $week"
   cat $week | python3 plot_git.py
@@ -572,7 +582,7 @@ for week in week*.json; do
 done
 ```
 
-### Confronto Performance Q3 vs Q4
+### Q3 vs Q4 Performance Comparison
 
 ```bash
 # Q3: Multi-repo
@@ -585,7 +595,7 @@ mv git_activity_multi_project_report_*.png q3_portfolio.png
   | python3 plot_multiproject.py
 mv git_activity_multi_project_report_*.png q4_portfolio.png
 
-# Dettaglio Q4 su progetto strategico
+# Q4 detail on a strategic project
 cd ~/progetti/strategic-project
 ./git_stats_collector.sh 2025-10-01 2025-12-31 json | python3 plot_git.py
 mv git_stats.png q4_strategic_daily.png
@@ -593,105 +603,123 @@ mv git_stats.png q4_strategic_daily.png
 
 ---
 
-## 🎨 Interpretazione dei Grafici
+## 🎨 Interpreting the Charts
 
-Entrambi i report affiancano le stesse metriche di attività invece di un punteggio
-unico, più una tabella con i valori esatti (vedi [Metriche Calcolate](#-metriche-calcolate)
-sul perché). Il report singolo repository ha una base di 4 pannelli più due opzionali;
-quello multi-repository ne ha sempre 6.
+Both reports place the same activity metrics side by side instead of a single
+score, plus a table with the exact values (see [Metriche Calcolate](#-calculated-metrics)
+for why). The single repository report has a base of 4 panels plus two optional ones;
+the multi-repository one always has 6.
 
-### Report Singolo Repository (`git_stats.png`)
+### Chart language
 
-I pannelli sono ordinati per quanto sono attendibili, non per quanto sono
-impressionanti — churn è per ultimo, non per primo (vedi
-[Metriche Calcolate](#-metriche-calcolate) sul perché):
+The text drawn in the charts (titles, axes, table, legend) is available in **English** and
+**Italian**. The plotters choose the language in this order:
 
-| Pannello | Cosa mostra |
+1. the `--lang en` / `--lang it` option of `plot_git.py` / `plot_multiproject.py`;
+2. the `GIT_ACTIVITY_LANG` environment variable (`en` or `it`);
+3. the system locale (`LC_ALL`, `LC_MESSAGES`, `LANG`): a value starting with `it` gives Italian;
+4. otherwise English.
+
+```bash
+./git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py --lang en
+GIT_ACTIVITY_LANG=it gitstats 2025-11-01 2025-11-30
+```
+
+The messages printed on the terminal stay in Italian. The VS Code extension passes the
+VS Code display language.
+
+### Single Repository Report (`git_stats.png`)
+
+Panels are ordered by how reliable they are, not by how
+impressive they look: churn comes last, not first (see
+[Metriche Calcolate](#-calculated-metrics) for why):
+
+| Panel | What it shows |
 |---|---|
-| 1. Giorni attivi per autore | Piena larghezza, in cima: la metrica più robusta, continuità del contributo |
-| 2. Commit nel tempo, per autore | Barre impilate. Frequenza di consegna, indipendente dalla dimensione |
-| 3. Churn nel tempo, per autore | Barre impilate + linea di trend (media mobile). Volume di cambiamento, **senza esclusioni**. Affiancato al pannello 2 per il confronto diretto |
-| 4. Riepilogo per autore | Tabella con churn, commit, giorni attivi, file, indice |
+| 1. Active days by author | Full width, at the top: the most robust metric, continuity of contribution |
+| 2. Commits over time, per author | Stacked bars. Delivery frequency, independent of size |
+| 3. Churn over time, per author | Stacked bars + trend line (moving average). Volume of change, **with no exclusions**. Placed next to panel 2 for direct comparison |
+| 4. Summary per author | Table with churn, commits, active days, files, index |
 
-**Granularità adattiva:** l'asse temporale si adatta automaticamente al periodo, perché
-una barra al giorno diventa illeggibile su intervalli lunghi:
+**Adaptive granularity:** the time axis adapts automatically to the period, because
+one bar per day becomes unreadable over long intervals:
 
-| Periodo richiesto | Granularità |
+| Requested period | Granularity |
 |---|---|
-| ≤ 45 giorni | giornaliera |
-| 46–250 giorni | settimanale |
-| > 250 giorni | mensile |
+| ≤ 45 days | daily |
+| 46–250 days | weekly |
+| > 250 days | monthly |
 
-**Insights tipici:** picchi prima dei rilasci, periodi di inattività, distribuzione del
-carico. Confrontare i pannelli 2 e 3 è spesso più informativo di ciascuno preso da solo:
-molti commit con poco churn indica iterazione a piccoli passi, il contrario indica
-cambiamenti grossi e rari (o, dato che il churn non esclude nulla, anche solo un file
-generato/vendorizzato molto voluminoso — controlla sempre cosa c'è dietro un picco).
+**Typical insights:** peaks before releases, periods of inactivity, distribution of the
+workload. Comparing panels 2 and 3 is often more informative than either one taken alone:
+many commits with little churn indicates small-step iteration, the opposite indicates
+large, infrequent changes (or, since churn excludes nothing, even just a very large
+generated/vendored file — always check what is behind a peak).
 
-**5. Quando avvengono i commit (giorno × ora)** — pannello aggiuntivo, presente solo se
-il JSON ha il campo `punch_card` (assente nei JSON prodotti da versioni precedenti del
-collector: il pannello viene saltato, non lasciato vuoto). È una griglia giorno della
-settimana × ora del giorno, colorata per numero di commit — **descrittivo, non
-valutativo**: dice *quando* succede l'attività, non *quanto* si è lavorato. I timestamp
-dei commit non sono un proxy affidabile delle ore lavorate, quindi non proviamo a
-stimarle; per questo non è una quarta metrica nell'ordine di attendibilità sopra, è
-un'informazione di natura diversa. L'ora è quella locale registrata nel commit (il fuso
-dell'autore, nessuna conversione a un fuso comune).
+**5. When commits happen (day × hour)** — additional panel, present only if
+the JSON has the `punch_card` field (absent from JSON produced by earlier versions of the
+collector: the panel is skipped, not left empty). It is a grid of day of the
+week × hour of the day, colored by number of commits — **descriptive, not
+evaluative**: it tells *when* activity happens, not *how much* work was done. Commit
+timestamps are not a reliable proxy for hours worked, so we do not try to
+estimate them; that is why it is not a fourth metric in the order of reliability above, it is
+a different kind of information. The hour is the local one recorded in the commit (the author's
+time zone, no conversion to a common time zone).
 
-**6. Righe possedute per autore (ownership)** — pannello aggiuntivo, presente solo se il
-JSON ha la chiave `ownership` (assente nei JSON prodotti con `--no-ownership` o da
-versioni precedenti del collector: il pannello viene saltato, non lasciato vuoto). A
-differenza di tutti gli altri pannelli, che sono serie temporali sull'attività nel
-periodo richiesto, questo è una **fotografia**: quante righe del repository, secondo
-`git blame`, sono state scritte per ultimo da ciascun autore all'ULTIMO COMMIT ≤ data
-fine (non l'HEAD corrente, per riproducibilità). Può quindi mostrare autori mai attivi
-nel periodo del report, se hanno ancora codice presente che nessuno ha più toccato.
-Nessuna esclusione di file generati/vendorizzati (stessa scelta fatta per il churn — vedi
-[Metriche Calcolate](#-metriche-calcolate)): coerente con il comportamento di default di
-git-fame, che lascia l'esclusione come opzione manuale (`--excl`) e non la applica in
-automatico. Il calcolo richiede un `git blame` per file (un'operazione per file è
-inevitabile) e può essere costoso su repository molto grandi — `--no-ownership` lo salta.
+**6. Lines owned per author (ownership)** — additional panel, present only if the
+JSON has the `ownership` key (absent from JSON produced with `--no-ownership` or by
+earlier versions of the collector: the panel is skipped, not left empty). Unlike
+all the other panels, which are time series of activity in the
+requested period, this is a **snapshot**: how many lines of the repository, according to
+`git blame`, were last written by each author at the LAST COMMIT ≤ end
+date (not the current HEAD, for reproducibility). It can therefore show authors who were never active
+in the report period, if they still have code present that nobody has touched since.
+No exclusion of generated/vendored files (same choice made for churn — see
+[Metriche Calcolate](#-calculated-metrics)): consistent with the default behavior of
+git-fame, which leaves exclusion as a manual option (`--excl`) and does not apply it
+automatically. The computation requires one `git blame` per file (one operation per file is
+unavoidable) and can be expensive on very large repositories — `--no-ownership` skips it.
 
-### Report Multi-Repository
+### Multi-Repository Report
 
-Stesso principio dell'ordine di attendibilità, organizzato **una riga per metrica**: la
-riga 2 è tutta sul commit, la riga 3 tutta sul churn. Dentro ciascuna riga, barre e
-ciambella raccontano la stessa cosa a due livelli di dettaglio — dove si concentra
-l'attività, e la quota sul totale.
+Same principle of the order of reliability, organized **one row per metric**: row
+2 is all about commits, row 3 all about churn. Within each row, bars and
+donut tell the same story at two levels of detail — where activity
+is concentrated, and the share of the total.
 
-| Pannello | Cosa mostra |
+| Panel | What it shows |
 |---|---|
-| 1. Giorni attivi per autore | Continuità del contributo, sommata sui progetti. Il più affidabile, da solo in cima |
-| 2. Commit per progetto e autore | Barre impilate. Più affidabile del churn (vedi sotto) |
-| 3. Distribuzione dei commit | Quota per progetto (ciambella; barra 100% se i progetti sono < 3) |
-| 4. Churn per progetto e autore | Barre impilate, **senza esclusioni**. Sotto il commit, non accanto: è la metrica meno indicativa |
-| 5. Distribuzione del churn | Stesso trattamento del pannello 3, per il churn |
-| 6. Riepilogo per progetto | Tabella con churn, commit, giorni attivi, file, autori, indice |
+| 1. Active days by author | Continuity of contribution, summed across projects. The most reliable, alone at the top |
+| 2. Commits per project and author | Stacked bars. More reliable than churn (see below) |
+| 3. Commit distribution | Share per project (donut; 100% bar if projects are < 3) |
+| 4. Churn per project and author | Stacked bars, **with no exclusions**. Below commits, not next to them: it is the least indicative metric |
+| 5. Churn distribution | Same treatment as panel 3, for churn |
+| 6. Summary per project | Table with churn, commits, active days, files, authors, index |
 
-Un progetto può avere churn alto e indice basso (pochi commit molto grossi, o un client
-generato molto voluminoso) o il contrario (attività distribuita su molti giorni): è la
-differenza che un punteggio unico nasconderebbe. Per leggere le due metriche **sullo
-stesso progetto** usa la tabella di riepilogo, non il confronto a occhio fra i pannelli
-2 e 4: ogni pannello ordina i progetti per il proprio totale, quindi la stessa posizione
-sull'asse X può corrispondere a progetti diversi nei due grafici (ed è esattamente quello
-che accade quando un progetto ha pochi commit ma churn enorme — il caso che più
-interesserebbe confrontare). Un confronto onesto richiederebbe un pannello dedicato,
-per esempio il churn per commit di ciascun progetto: non è ancora presente nel report.
+A project can have high churn and a low index (few very large commits, or a very
+large generated client) or the opposite (activity spread over many days): that is the
+difference a single score would hide. To read the two metrics **on the
+same project** use the summary table, not an eyeball comparison between panels
+2 and 4: each panel sorts projects by its own total, so the same position
+on the X axis can correspond to different projects in the two charts (and that is exactly
+what happens when a project has few commits but huge churn — the case you would
+most want to compare). An honest comparison would require a dedicated panel,
+for example churn per commit of each project: it is not yet present in the report.
 
-**Colori:** ogni autore ha un colore fisso, coerente tra tutti i pannelli e assegnato in
-ordine di palette, non per rango. Oltre 8 autori la coda viene accorpata in "Altro"
-invece di generare tinte nuove (indistinguibili per chi ha deficit di visione dei colori).
-La palette è verificata per separazione CVD e contrasto.
+**Colors:** each author has a fixed color, consistent across all panels and assigned in
+palette order, not by rank. Beyond 8 authors the tail is merged into "Other"
+instead of generating new hues (indistinguishable for people with color vision deficiency).
+The palette is verified for CVD separation and contrast.
 
 ---
 
 ## 📊 Output Format Details
 
-Il JSON è un **contratto** tra lo script bash e quello Python: se aggiorni un collector
-devi aggiornare anche il plotter corrispondente (e viceversa). I plotter accettano anche
-il formato precedente, per poter rielaborare file JSON salvati in passato.
+The JSON is a **contract** between the bash script and the Python one: if you update a collector
+you must also update the corresponding plotter (and vice versa). The plotters also accept
+the previous format, so that previously saved JSON files can be reprocessed.
 
-### JSON Singolo Repository
+### Single Repository JSON
 
 ```json
 {
@@ -732,23 +760,23 @@ il formato precedente, per poter rielaborare file JSON salvati in passato.
 }
 ```
 
-Sono elencati **solo i giorni/celle con attività**: il plotter ricostruisce i giorni vuoti
-dal range in `metadata`, quindi il tempo non viene compresso nel grafico.
+**Only days/cells with activity** are listed: the plotter reconstructs the empty days
+from the range in `metadata`, so time is not compressed in the chart.
 
-`punch_card`: distribuzione dei commit per giorno della settimana (`weekday`, 0=lunedì..
-6=domenica, convenzione Python `date.weekday()`) e ora (`hour`, 0-23, ora locale
-registrata nel commit — nessuna conversione a un fuso comune), aggregata su tutto il
-periodo richiesto. Assente nei JSON prodotti da versioni precedenti del collector; in
-quel caso il pannello corrispondente nel grafico viene saltato, non lasciato vuoto.
+`punch_card`: distribution of commits by day of the week (`weekday`, 0=Monday..
+6=Sunday, Python `date.weekday()` convention) and hour (`hour`, 0-23, local time
+recorded in the commit — no conversion to a common time zone), aggregated over the whole
+requested period. Absent from JSON produced by earlier versions of the collector; in
+that case the corresponding panel in the chart is skipped, not left empty.
 
-`ownership` (assente con `--no-ownership`, o se non esiste alcun commit ≤ data fine):
-righe possedute per autore secondo `git blame` all'ULTIMO COMMIT ≤ data fine — una
-fotografia, non un'aggregazione sul periodo, quindi può includere autori mai attivi nel
-periodo richiesto. `ref_commit`/`ref_date` identificano il commit di riferimento;
-`total_lines` è il totale righe dell'albero a quel commit; `by_author` è ordinato per
-`lines` decrescente. Nessuna esclusione di file generati/vendorizzati.
+`ownership` (absent with `--no-ownership`, or if no commit ≤ end date exists):
+lines owned per author according to `git blame` at the LAST COMMIT ≤ end date — a
+snapshot, not an aggregation over the period, so it can include authors who were never active in the
+requested period. `ref_commit`/`ref_date` identify the reference commit;
+`total_lines` is the total number of lines in the tree at that commit; `by_author` is sorted by
+`lines` descending. No exclusion of generated/vendored files.
 
-### JSON Multi-Repository
+### Multi-Repository JSON
 
 ```json
 {
@@ -775,51 +803,51 @@ periodo richiesto. `ref_commit`/`ref_date` identificano il commit di riferimento
 }
 ```
 
-**Campi:**
+**Fields:**
 
-| Campo | Significato |
+| Field | Meaning |
 |---|---|
-| `project` | Nome del repository (nome della cartella) |
-| `author` | Nome autore Git, con alias già applicati |
-| `commits` | Commit esclusi i merge |
-| `added` / `deleted` | Righe aggiunte / rimosse |
-| `lines` | `added + deleted` (retrocompatibilità) |
-| `files` | File **distinti** toccati nel periodo |
-| `active_days` | Giorni distinti con almeno 1 commit |
-| `daily_data` | Dettaglio giornaliero, con `files` distinti **per giorno** |
-| `date_basis` | `"author"`: i giorni sono attribuiti per author-date |
+| `project` | Repository name (folder name) |
+| `author` | Git author name, with aliases already applied |
+| `commits` | Commits, excluding merges |
+| `added` / `deleted` | Lines added / removed |
+| `lines` | `added + deleted` (backward compatibility) |
+| `files` | **Distinct** files touched in the period |
+| `active_days` | Distinct days with at least 1 commit |
+| `daily_data` | Daily detail, with distinct `files` **per day** |
+| `date_basis` | `"author"`: days are attributed by author-date |
 
-`daily_data` è necessario, non decorativo: senza di esso il tetto anti-outlier
-dell'indice si applicherebbe all'aggregato di periodo e saturerebbe (vedi
-[Metriche Calcolate](#-metriche-calcolate)).
+`daily_data` is necessary, not decorative: without it the index's anti-outlier
+cap would be applied to the period aggregate and would saturate (see
+[Metriche Calcolate](#-calculated-metrics)).
 
 ---
 
-## Formato File dei Percorsi
+## Path File Format
 
-Il file specificato con `--file` deve seguire queste regole:
+The file specified with `--file` must follow these rules:
 
 ```txt
-# Percorsi assoluti
+# Absolute paths
 /home/utente/progetti/repo1
 /var/www/progetto2
 
-# Percorsi con tilde (espansa automaticamente)
+# Paths with tilde (expanded automatically)
 ~/workspace/backend
 ~/progetti/frontend
 
-# Linee vuote e commenti sono ignorati
-# TODO: aggiungere nuovo-progetto
+# Blank lines and comments are ignored
+# TODO: add new-project
 
-# ⚠️ Supporto per percorsi con spazi
+# ⚠️ Support for paths with spaces
 /home/utente/My Projects/repo name
 ```
 
-**Nota:** i dati raccolti da questi percorsi vengono elaborati da `plot_multiproject.py`, che calcola
-churn, commit e giorni attivi più un indice composito secondario (vedi
-[Metriche Calcolate](#-metriche-calcolate)).
+**Note:** the data collected from these paths is processed by `plot_multiproject.py`, which computes
+churn, commits and active days plus a secondary composite index (see
+[Metriche Calcolate](#-calculated-metrics)).
 
-Il file `git-activity-aliases.json` permette di raggruppare diversi nomi di autori Git sotto un unico nome comune, utile quando lo stesso sviluppatore ha contribuito con nomi diversi. È letto dai **collector**, che applicano gli alias prima di aggregare. Esempio:
+The `git-activity-aliases.json` file lets you group different Git author names under a single common name, useful when the same developer has contributed under different names. It is read by the **collectors**, which apply the aliases before aggregating. Example:
 
 ```json
 {
@@ -829,58 +857,58 @@ Il file `git-activity-aliases.json` permette di raggruppare diversi nomi di auto
 }
 ```
 
-Il file di configurazione può essere posizionato in diverse posizioni e verrà cercato in questo ordine:
+The configuration file can be placed in several locations and will be searched in this order:
 
-1. Nella directory corrente (`./git-activity-aliases.json`)
-2. Nella directory di configurazione XDG specifica per l'applicazione (`~/.config/git-activity-reports/git-activity-aliases.json`)
-3. Nella directory di configurazione XDG generica (`~/.config/git-activity-git-activity-aliases.json`)
-4. **Accanto agli script** (`<cartella-degli-script>/git-activity-aliases.json`) — utile perché il
-   collector si esegue *dentro il repository da analizzare*, dove `.` è un'altra cartella: un file
-   messo accanto agli script vale così per tutti i repository
-5. Nella directory di sistema (`/etc/git-activity-reports/git-activity-aliases.json`)
+1. In the current directory (`./git-activity-aliases.json`)
+2. In the application-specific XDG configuration directory (`~/.config/git-activity-reports/git-activity-aliases.json`)
+3. In the generic XDG configuration directory (`~/.config/git-activity-git-activity-aliases.json`)
+4. **Next to the scripts** (`<scripts-folder>/git-activity-aliases.json`) — useful because the
+   collector runs *inside the repository to be analyzed*, where `.` is a different folder: a file
+   placed next to the scripts thus applies to all repositories
+5. In the system directory (`/etc/git-activity-reports/git-activity-aliases.json`)
 
-Se nessun file di configurazione esiste, lo script continuerà a funzionare normalmente senza raggruppare gli autori.
-
----
-
-## Output JSON e visualizzazioni
-
-Il formato JSON completo di entrambi i collector, con la descrizione di tutti i campi, è
-documentato in [Output Format Details](#-output-format-details).
-La composizione dei pannelli di ciascun report è descritta in
-[Interpretazione dei Grafici](#-interpretazione-dei-grafici).
+If no configuration file exists, the script will keep working normally without grouping authors.
 
 ---
 
-## Casi d'Uso Comuni
+## JSON Output and Visualizations
+
+The complete JSON format of both collectors, with the description of all fields, is
+documented in [Output Format Details](#-output-format-details).
+The composition of the panels of each report is described in
+[Interpretazione dei Grafici](#-interpreting-the-charts).
+
+---
+
+## Common Use Cases
 
 ### Sprint Review
 
 ```bash
-# Analisi dello sprint appena concluso (ultimi 14 giorni)
+# Analysis of the sprint just ended (last 14 days)
 ./git_multiproject_stats_collector.sh --start 2025-11-15 --end 2025-11-30 \
   ~/team/backend ~/team/frontend ~/team/mobile | python3 plot_multiproject.py
 ```
 
-### Report Mensile
+### Monthly Report
 
 ```bash
-# Tutto il team, tutti i progetti, ultimo mese
+# Whole team, all projects, last month
 ./git_multiproject_stats_collector.sh --file team-repos.txt 2025-11-01 2025-11-30 \
   > report_novembre.json
 
 python3 plot_multiproject.py < report_novembre.json
 ```
 
-### Confronto Trimestrale
+### Quarterly Comparison
 
 ```bash
 # Q3 vs Q4
 ./git_multiproject_stats_collector.sh 2025-07-01 2025-09-30 ~/repo1 ~/repo2 > q3.json
 ./git_multiproject_stats_collector.sh 2025-10-01 2025-12-31 ~/repo1 ~/repo2 > q4.json
 
-# Analizza separatamente
-python3 plot_multiproject.py < q3.json  # genera git_activity_multi_project_report_*.png
+# Analyze separately
+python3 plot_multiproject.py < q3.json  # generates git_activity_multi_project_report_*.png
 mv git_activity_multi_project_report_*.png q3_report.png
 
 python3 plot_multiproject.py < q4.json
@@ -889,77 +917,77 @@ mv git_activity_multi_project_report_*.png q4_report.png
 
 ---
 
-## Note Tecniche
+## Technical Notes
 
-### Commit Considerati
+### Commits Considered
 
-- **Inclusi:** Commit standard con modifiche ai file
-- **Esclusi:** Merge commits (flag `--no-merges`)
-- Un solo `git log` per repository: il raggruppamento per autore e giorno avviene in `awk`.
-  Oltre a essere molto più rapido (prima si lanciava un `git log` per ogni giorno *per ogni
-  autore*), evita un doppio conteggio reale, descritto sotto.
+- **Included:** Standard commits with file changes
+- **Excluded:** Merge commits (`--no-merges` flag)
+- A single `git log` per repository: grouping by author and day happens in `awk`.
+  Besides being much faster (previously a `git log` was launched for each day *for each
+  author*), it avoids a real double-counting issue, described below.
 
-### Attribuzione all'autore
+### Author Attribution
 
-Il match sul nome autore è **esatto**. `git log --author=<nome>` fa invece un match per
-sottostringa: con due autori "Luca" e "Luca Bianchi", i commit di quest'ultimo venivano
-contati **anche** per "Luca". Conseguenze pratiche:
+The match on the author name is **exact**. `git log --author=<name>`, by contrast, matches by
+substring: with two authors "Luca" and "Luca Bianchi", the latter's commits were
+counted **also** for "Luca". Practical consequences:
 
-- Il parametro `autore` richiede il nome completo esatto; se non trova corrispondenze, lo
-  script elenca gli autori disponibili nel periodo
-- I nomi con caratteri speciali (parentesi, punti) non vengono più interpretati come regex
+- The `author` parameter requires the exact full name; if it finds no matches, the
+  script lists the authors available in the period
+- Names with special characters (parentheses, dots) are no longer interpreted as regex
 
-### Gestione Date
+### Date Handling
 
-- Formato richiesto: `YYYY-MM-DD`, range inclusivo su entrambi gli estremi
-- I giorni sono attribuiti in base alla **author-date**, non alla committer-date.
-  `--since`/`--until` di git filtrano sulla committer-date: un rebase o un cherry-pick
-  riscrive quella data, quindi settimane di lavoro potevano finire attribuite al giorno del
-  rebase. Il filtro esatto sul periodo è applicato dopo la lettura del log (git non sa
-  filtrare per author-date), motivo per cui `--since` viene esteso di 31 giorni indietro.
+- Required format: `YYYY-MM-DD`, range inclusive at both ends
+- Days are attributed based on the **author-date**, not the committer-date.
+  git's `--since`/`--until` filter on the committer-date: a rebase or cherry-pick
+  rewrites that date, so weeks of work could end up attributed to the day of the
+  rebase. The exact filter on the period is applied after reading the log (git cannot
+  filter by author-date), which is why `--since` is extended 31 days back.
 
-### File Considerati
+### Files Considered
 
-**Tutti i file, senza esclusioni** — `node_modules`, lock file, client generati e
-librerie vendorizzate contano come qualsiasi altro file nel churn. Non è una svista:
-vedi [Perché non escludiamo codice generato/vendorizzato](#perché-non-escludiamo-codice-generatovendorizzato-e-prima-lo-facevamo)
-per il perché (in breve: qualunque esclusione per directory può rompere il
-rilevamento dei rename di git). Se un repository specifico ha questo tipo di rumore,
-tienilo presente leggendo il churn — è la ragione per cui è la meno indicativa delle
-tre metriche del report.
+**All files, no exclusions** — `node_modules`, lock files, generated clients and
+vendored libraries count like any other file in the churn. This is not an oversight:
+see [Why we don't exclude generated/vendored code (and used to)](#why-we-dont-exclude-generatedvendored-code-and-used-to)
+for the reason (in short: any directory-based exclusion can break git's
+rename detection). If a specific repository has this kind of noise,
+keep it in mind when reading the churn — it is the reason why it is the least indicative
+of the three metrics in the report.
 
-### Ownership del Codice (git blame)
+### Code Ownership (git blame)
 
-Solo per il formato `json` di `git_stats_collector.sh`, disattivabile con
-`--no-ownership`. Risponde a una domanda diversa dal resto del report: non "chi ha
-lavorato nel periodo" (serie temporale) ma "di chi è il codice presente nell'albero",
-secondo `git blame`, all'**ultimo commit ≤ data fine** (non l'HEAD corrente — rende il
-risultato riproducibile rieseguendo lo stesso report in futuro). Nessuna esclusione
-automatica di file generati/vendorizzati, stessa scelta fatta per il churn e coerente
-con il comportamento di default di git-fame.
+Only for the `json` format of `git_stats_collector.sh`, can be disabled with
+`--no-ownership`. It answers a different question from the rest of the report: not "who
+worked during the period" (time series) but "who owns the code present in the tree",
+according to `git blame`, at the **last commit ≤ end date** (not the current HEAD — this makes the
+result reproducible when re-running the same report in the future). No automatic
+exclusion of generated/vendored files, the same choice made for the churn and consistent
+with git-fame's default behavior.
 
-Un `git blame` per file è inevitabile (git non offre un comando equivalente per l'intero
-albero in una sola invocazione): il collector parallelizza le chiamate con `xargs -P`
-(fino a `nproc` processi), misurato ~6x più rapido di un'esecuzione sequenziale su un
-repository reale da oltre 3000 file. Su repository molto grandi il costo può restare
-significativo: usa `--no-ownership` per saltarlo.
+One `git blame` per file is unavoidable (git offers no equivalent command for the whole
+tree in a single invocation): the collector parallelizes the calls with `xargs -P`
+(up to `nproc` processes), measured ~6x faster than a sequential run on a
+real repository of over 3000 files. On very large repositories the cost can remain
+significant: use `--no-ownership` to skip it.
 
-### Gestione Date
+### Date Handling
 
-- Formato richiesto: `YYYY-MM-DD`
-- Range inclusivo: include sia la data di inizio che quella di fine
-- Orari considerati: `00:00:00` (inizio) - `23:59:59` (fine)
+- Required format: `YYYY-MM-DD`
+- Inclusive range: includes both the start and the end date
+- Times considered: `00:00:00` (start) - `23:59:59` (end)
 
 ### Performance
 
-Per repository molto grandi (>10K commits), l'analisi può richiedere alcuni minuti. Considera di:
+For very large repositories (>10K commits), the analysis can take a few minutes. Consider:
 
-- Ridurre l'intervallo temporale
-- Analizzare i repository in batch separati
+- Reducing the time range
+- Analyzing repositories in separate batches
 
-### Aggiornamento Repository
+### Repository Updates
 
-Di default, i repository **non vengono aggiornati** automaticamente con git fetch. Per abilitare l'aggiornamento esplicito, usa l'opzione `--fetch`:
+By default, repositories are **not updated** automatically with git fetch. To enable an explicit update, use the `--fetch` option:
 
 **Multi-repository:**
 
@@ -967,7 +995,7 @@ Di default, i repository **non vengono aggiornati** automaticamente con git fetc
 ./git_multiproject_stats_collector.sh --fetch --file repos.txt 2025-11-01 2025-11-30
 ```
 
-**Singolo repository:**
+**Single repository:**
 
 ```bash
 ./git_stats_collector.sh --fetch 2025-11-01 2025-11-30 json
@@ -977,19 +1005,19 @@ Di default, i repository **non vengono aggiornati** automaticamente con git fetc
 
 ## 🚨 Troubleshooting
 
-### Problemi Comuni - Installazione
+### Common Problems - Installation
 
-#### I grafici sembrano identici a prima dopo un aggiornamento
+#### Charts look identical to before after an update
 
-**Causa:** in `/usr/local/bin` ci sono **copie** di una versione precedente (installate a
-mano o dal pacchetto `.deb`), e il `PATH` le trova prima del repository. Succede tipicamente
-con `gitstats`/`gitstats-multi`, che risolvono collector e plotter dal `PATH`.
+**Cause:** `/usr/local/bin` contains **copies** of a previous version (installed by
+hand or from the `.deb` package), and the `PATH` finds them before the repository. This typically happens
+with `gitstats`/`gitstats-multi`, which resolve collector and plotter from the `PATH`.
 
-**Diagnosi e soluzione:**
+**Diagnosis and solution:**
 
 ```bash
-command -v plot_git.py          # se stampa /usr/local/bin/..., stai usando la copia
-grep -c DELETED_WEIGHT "$(command -v plot_git.py)"   # 0 = versione vecchia
+command -v plot_git.py          # if it prints /usr/local/bin/..., you are using the copy
+grep -c DELETED_WEIGHT "$(command -v plot_git.py)"   # 0 = old version
 
 cd ~/git-activity-reports
 sudo install -m 755 git_stats_collector.sh git_multiproject_stats_collector.sh \
@@ -998,132 +1026,132 @@ sudo install -m 755 gitstat.sh /usr/local/bin/gitstats
 sudo install -m 755 gitstat-multi.sh /usr/local/bin/gitstats-multi
 ```
 
-Aggiorna **tutti** i file insieme: il JSON è un contratto tra collector e plotter.
+Update **all** files together: the JSON is a contract between collector and plotter.
 
 #### `SyntaxWarning: 'return' in a 'finally' block`
 
-**Causa:** avviso emesso da `pyparsing`, una dipendenza di matplotlib, durante l'import.
-Non riguarda questi script.
+**Cause:** warning emitted by `pyparsing`, a matplotlib dependency, during import.
+It does not concern these scripts.
 
-**Soluzione:** nessuna, è innocuo. Se il messaggio dà fastidio, `python3 -W ignore::SyntaxWarning`.
-Il comando è andato a buon fine se stampa `Grafico generato con successo: ...`.
+**Solution:** none, it is harmless. If the message is annoying, use `python3 -W ignore::SyntaxWarning`.
+The command succeeded if it prints `Grafico generato con successo: ...` ("chart generated successfully").
 
-### Problemi Comuni - Singolo Repository
+### Common Problems - Single Repository
 
-#### "Nessun dato per l'autore ... (il match è esatto)"
+#### "Nessun dato per l'autore ... (il match è esatto)" ("No data for the author ... (the match is exact)")
 
-**Causa:** dalla versione 2.0 il filtro autore richiede il nome **completo ed esatto**; prima
-era un match per sottostringa (che però causava doppi conteggi tra nomi annidati).
+**Cause:** since version 2.0 the author filter requires the **full, exact** name; previously
+it was a substring match (which however caused double counting between nested names).
 
-**Soluzione:** lo script elenca da sé gli autori disponibili nel periodo — copia il nome da
-quella lista. Se usi gli alias funziona sia il nome Git originale sia quello visualizzato: il nome
-richiesto viene prima risolto attraverso la mappa alias (lo script te lo segnala, es.
-`Autore "Michele Innocenti" risolto in "minnogit" tramite gli alias`).
+**Solution:** the script itself lists the authors available in the period — copy the name from
+that list. If you use aliases, both the original Git name and the display name work: the
+requested name is first resolved through the alias map (the script tells you, e.g.
+`Autore "Michele Innocenti" risolto in "minnogit" tramite gli alias`, meaning: author "Michele Innocenti" resolved to "minnogit" via aliases).
 
-#### "Non sei in un repository Git"
+#### "Non sei in un repository Git" ("You are not in a Git repository")
 
-**Causa:** Script eseguito fuori da una cartella Git  
-**Soluzione:**
+**Cause:** Script run outside a Git folder  
+**Solution:**
 
 ```bash
 cd /path/to/your/repo
 ./git_stats_collector.sh 2025-11-01 2025-11-30
 ```
 
-#### "L'input non sembra un JSON valido"
+#### "L'input non sembra un JSON valido" ("The input does not look like valid JSON")
 
-**Causa:** Hai usato formato `text` invece di `json` con plot_git.py  
-**Soluzione:**
+**Cause:** You used the `text` format instead of `json` with plot_git.py  
+**Solution:**
 
 ```bash
-# ✗ Errato
+# ✗ Wrong
 ./git_stats_collector.sh 2025-11-01 2025-11-30 text | python3 plot_git.py
 
-# ✓ Corretto
+# ✓ Correct
 ./git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py
 ```
 
-#### Autore con spazi non funziona
+#### Author with spaces does not work
 
-**Causa:** Nome autore non quotato  
-**Soluzione:**
+**Cause:** Author name not quoted  
+**Solution:**
 
 ```bash
-# ✗ Errato
+# ✗ Wrong
 ./git_stats_collector.sh 2025-11-01 2025-11-30 text Mario Rossi
 
-# ✓ Corretto
+# ✓ Correct
 ./git_stats_collector.sh 2025-11-01 2025-11-30 text "Mario Rossi"
 ```
 
-#### "Nessun dato trovato per generare il grafico"
+#### "Nessun dato trovato per generare il grafico" ("No data found to generate the chart")
 
-**Causa:** JSON contiene solo entry "TOTALE" oppure nessuna attività nel periodo  
-**Soluzione:**
+**Cause:** JSON contains only "TOTALE" (total) entries or there is no activity in the period  
+**Solution:**
 
 ```bash
-# Verifica ci siano commit nel periodo
+# Check that there are commits in the period
 git log --since="2025-11-01" --until="2025-11-30" --oneline
 
-# Se ci sono commit ma solo totale, rimuovi il filtro autore
+# If there are commits but only the total, remove the author filter
 ./git_stats_collector.sh 2025-11-01 2025-11-30 json
 ```
 
-### Problemi Comuni - Multi-Repository
+### Common Problems - Multi-Repository
 
-#### "Non è una cartella valida o un repository Git"
+#### "Non è una cartella valida o un repository Git" ("Not a valid folder or Git repository")
 
-**Causa:** Il percorso non esiste o non contiene `.git`  
-**Soluzione:** Verifica il percorso con `ls -la <percorso>/.git`
+**Cause:** The path does not exist or does not contain `.git`  
+**Solution:** Check the path with `ls -la <path>/.git`
 
-#### "Nessun dato ricevuto in input"
+#### "Nessun dato ricevuto in input" ("No data received in input")
 
-**Causa:** Lo script bash non ha prodotto output o la pipe è fallita  
-**Soluzione:**
+**Cause:** The bash script produced no output or the pipe failed  
+**Solution:**
 
 ```bash
-# Testa lo script bash separatamente
+# Test the bash script separately
 ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/repo1
-# Deve stampare JSON valido
+# It must print valid JSON
 ```
 
-#### "Errore nel parsing del JSON"
+#### "Errore nel parsing del JSON" ("Error parsing the JSON")
 
-**Causa:** Output JSON malformato (rare ma possibili con nomi autori strani)  
-**Soluzione:** Salva l'output e ispezionalo:
+**Cause:** Malformed JSON output (rare but possible with unusual author names)  
+**Solution:** Save the output and inspect it:
 
 ```bash
 ./git_multiproject_stats_collector.sh [...] > debug.json
-cat debug.json  # Cerca caratteri speciali o virgole mancanti
+cat debug.json  # Look for special characters or missing commas
 ```
 
-#### Percorsi con spazi non funzionano
+#### Paths with spaces do not work
 
-**Causa:** File di percorsi con split errato  
-**Soluzione:** Assicurati che ogni percorso sia su una riga separata nel file:
+**Cause:** Paths file split incorrectly  
+**Solution:** Make sure each path is on a separate line in the file:
 
 ```txt
-# ✓ Corretto
+# ✓ Correct
 /home/user/My Projects/repo
 
-# ✗ Errato (spazi interpretati come separatori)
+# ✗ Wrong (spaces interpreted as separators)
 /home/user/My Projects/repo1 /home/user/repo2
 ```
 
-### Problemi con le Date
+### Date Problems
 
-#### Date non riconosciute
+#### Dates not recognized
 
-**Causa:** Formato data errato  
-**Soluzione:**
+**Cause:** Wrong date format  
+**Solution:**
 
 ```bash
-# ✓ Corretto
+# ✓ Correct
 ./git_stats_collector.sh 2025-11-01 2025-11-30
 
-# ✗ Errato
-./git_stats_collector.sh 01-11-2025 30-11-2025  # Formato europeo
-./git_stats_collector.sh 11/01/2025 11/30/2025  # Con slash
+# ✗ Wrong
+./git_stats_collector.sh 01-11-2025 30-11-2025  # European format
+./git_stats_collector.sh 11/01/2025 11/30/2025  # With slashes
 ```
 
 ---
@@ -1132,18 +1160,18 @@ cat debug.json  # Cerca caratteri speciali o virgole mancanti
 
 ### Performance
 
-**Singolo Repository:**
+**Single Repository:**
 
-- Per periodi lunghi (>3 mesi), considera di suddividere in chunk mensili
-- I giorni senza attività vengono omessi nel report text (performance migliorata)
+- For long periods (>3 months), consider splitting into monthly chunks
+- Days without activity are omitted in the text report (improved performance)
 
 **Multi-Repository:**
 
-- Repository molto grandi (>10K commits) possono richiedere minuti
-- Usa il formato `--file` per repository list riutilizzabili
-- Considera di eseguire analisi in parallelo su macchine diverse
+- Very large repositories (>10K commits) can take minutes
+- Use the `--file` format for reusable repository lists
+- Consider running analyses in parallel on different machines
 
-### Organizzazione File
+### File Organization
 
 ```txt
 git-stats-tools/
@@ -1164,24 +1192,24 @@ git-stats-tools/
     └── 2025-12/
 ```
 
-### Automazione con Cron
+### Automation with Cron
 
-**Report settimanale automatico (ogni lunedì):**
+**Automatic weekly report (every Monday):**
 
 ```cron
-# /etc/crontab o crontab -e
+# /etc/crontab or crontab -e
 0 9 * * 1 cd /home/user/progetti/backend && /path/to/git_stats_collector.sh "$(date -d 'last monday' +\%Y-\%m-\%d)" "$(date -d 'yesterday' +\%Y-\%m-\%d)" json | python3 /path/to/plot_git.py && mv git_stats.png ~/reports/week_$(date +\%U).png
 ```
 
-**Report mensile multi-repo (primo del mese):**
+**Monthly multi-repo report (first of the month):**
 
 ```cron
 0 8 1 * * /path/to/git_multiproject_stats_collector.sh --file ~/configs/all-repos.txt "$(date -d 'last month' +\%Y-\%m-01)" "$(date -d 'yesterday' +\%Y-\%m-\%d)" | python3 /path/to/plot_multiproject.py && mv git_activity_multi_project_report_*.png ~/reports/month_$(date -d 'last month' +\%Y-\%m).png
 ```
 
-### Analisi Avanzate con jq
+### Advanced Analysis with jq
 
-**Trovare l'autore più produttivo:**
+**Find the most productive author:**
 
 ```bash
 ./git_stats_collector.sh 2025-11-01 2025-11-30 json | \
@@ -1189,7 +1217,7 @@ git-stats-tools/
   sort -rn | head -1
 ```
 
-**Giorni con più attività:**
+**Days with the most activity:**
 
 ```bash
 ./git_stats_collector.sh 2025-11-01 2025-11-30 json | \
@@ -1197,7 +1225,7 @@ git-stats-tools/
   sort -rn | head -5
 ```
 
-**Estrai solo i commit totali per autore (multi-repo):**
+**Extract only total commits per author (multi-repo):**
 
 ```bash
 ./git_multiproject_stats_collector.sh --file repos.txt 2025-11-01 2025-11-30 | \
@@ -1206,117 +1234,117 @@ git-stats-tools/
 
 ---
 
-## 🔧 Personalizzazione
+## 🔧 Customization
 
-### Perché non escludiamo codice generato/vendorizzato (e prima lo facevamo)
+### Why we don't exclude generated/vendored code (and used to)
 
-Fino alla v2.x i collector escludevano codice generato/vendorizzato via `.gitattributes`
-(`linguist-generated`/`linguist-vendored`) più una lista di default (`node_modules/`,
-`dist/`, `vendor/`, `old/`, lock file...). **Rimosso**, dopo aver misurato un difetto
-strutturale, non un bug di una singola regola: **qualunque pathspec di esclusione basato
-su directory, applicato a `git log --numstat`, rompe il rilevamento dei rename di git**
-quando il lato *sorgente* di un file rinominato-con-modifiche cade sotto il pathspec e la
-destinazione no. Git non trova più il "prima" nel diff filtrato e conta l'intera
-destinazione come aggiunta pura, invece del solo diff reale.
+Up to v2.x the collectors excluded generated/vendored code via `.gitattributes`
+(`linguist-generated`/`linguist-vendored`) plus a default list (`node_modules/`,
+`dist/`, `vendor/`, `old/`, lock files...). **Removed**, after measuring a structural
+defect, not a bug in a single rule: **any directory-based exclusion pathspec,
+applied to `git log --numstat`, breaks git's rename detection**
+when the *source* side of a renamed-with-modifications file falls under the pathspec and the
+destination does not. Git no longer finds the "before" in the filtered diff and counts the entire
+destination as a pure addition, instead of just the real diff.
 
-Misurato su un caso concreto: un file con 431 righe di modifica reale veniva riportato
-come 6.001 (14×), e un'intera giornata di lavoro passava da 2.066 a 19.973 di churn
-(9,7×). Il trigger era `**/old/*`, un'esclusione di default presente da sempre — non solo
-le esclusioni "su misura" per Prisma/OpenAPI/TCPDF costruite in questo stesso progetto,
-che pure ne soffrivano.
+Measured on a concrete case: a file with 431 lines of real change was reported
+as 6,001 (14×), and an entire day of work went from 2,066 to 19,973 of churn
+(9.7×). The trigger was `**/old/*`, a default exclusion that had always been there — not just
+the "tailor-made" exclusions for Prisma/OpenAPI/TCPDF built in this same project,
+which also suffered from it.
 
-Prima di decidere come correggerlo, abbiamo verificato cosa fanno altri strumenti dello
-stesso tipo:
+Before deciding how to fix it, we checked what other tools of the
+same kind do:
 
-- **I grafici "Code frequency"/"Contributors" di GitHub** non escludono affatto codice
-  generato o vendorizzato dalle additions/deletions, e non li presentano come metrica
-  principale — sono una pagina di insight secondaria.
-- **[git-fame](https://github.com/casperdcl/git-fame)** non fa rilevamento automatico:
-  offre solo un `--excl` manuale opzionale, e il suo stesso README avverte che le
-  metriche insertions/deletions vanno usate con cautela perché contano anche codice
-  storico non più esistente.
-- **GitStats** (lo strumento storico) ha ricevuto la stessa richiesta di funzionalità che
-  ci siamo posti noi; la risposta del maintainer è stata che l'esclusione automatica
-  "non è banale da implementare" e ha un costo in performance.
-- **[GitClear](https://www.gitclear.com/count_lines_of_code_but_dont_be_naive)** (un'azienda
-  che vende analytics su questo) stima che circa il 95% delle righe di codice contate da
-  un diff sia "rumore" di vario tipo — di cui codice non applicativo (generato, test,
-  vendor) è solo una delle categorie, insieme a whitespace/convenzioni (54%) e codice
-  spostato (30%). La loro conclusione non è "escludi il generato e sei a posto": è che il
-  problema è troppo ampio per un filtro di esclusioni.
+- **GitHub's "Code frequency"/"Contributors" charts** do not exclude generated
+  or vendored code from additions/deletions at all, and do not present them as the
+  main metric — they are a secondary insights page.
+- **[git-fame](https://github.com/casperdcl/git-fame)** does no automatic detection:
+  it only offers an optional manual `--excl`, and its own README warns that the
+  insertions/deletions metrics should be used with caution because they also count
+  historical code that no longer exists.
+- **GitStats** (the historic tool) received the same feature request that
+  we asked ourselves; the maintainer's answer was that automatic exclusion
+  is "not trivial to implement" and has a performance cost.
+- **[GitClear](https://www.gitclear.com/count_lines_of_code_but_dont_be_naive)** (a company
+  that sells analytics on this) estimates that about 95% of the lines of code counted from
+  a diff are "noise" of various kinds — of which non-application code (generated, tests,
+  vendor) is only one category, alongside whitespace/conventions (54%) and moved
+  code (30%). Their conclusion is not "exclude the generated code and you're done": it is that the
+  problem is too broad for an exclusion filter.
 
-Nessuno risolve il caso specifico che abbiamo trovato (pathspec che rompe i rename), e
-tutti trattano il churn/LOC come segnale rumoroso e secondario, non come dato da
-ripulire chirurgicamente. Coerentemente, la scelta qui è **contare tutto, senza
-pathspec**: elimina il bug per costruzione (nessuna directory esclusa, quindi nessun
-rename può romperla), al prezzo di includere anche codice generato/vendorizzato/lock file
-nel churn. Per questo:
+No one solves the specific case we found (a pathspec that breaks renames), and
+all treat churn/LOC as a noisy, secondary signal, not as data to
+clean up surgically. Consistently, the choice here is to **count everything, with no
+pathspec**: it eliminates the bug by construction (no directory excluded, so no
+rename can break it), at the price of also including generated/vendored code and lock files
+in the churn. For this reason:
 
-- **`churn` è trattato come la meno indicativa delle tre metriche** (vedi
-  [Metriche Calcolate](#-metriche-calcolate)) e non è più il primo pannello dei report.
-- **`DAILY_CHURN_CAP`** (vedi [Pesi delle metriche](#pesi-delle-metriche)) resta l'unica
-  protezione contro un outlier estremo, es. un `node_modules` committato per errore — più
-  importante di prima, non meno.
-- Se un repository specifico ha bisogno di escludere qualcosa (un `node_modules`
-  committato per errore, un dump SQL enorme), fallo con `git filter-repo`/BFG **sulla
-  storia analizzata** o accetta il rumore su quel repository — non nel tool.
+- **`churn` is treated as the least indicative of the three metrics** (see
+  [Calculated Metrics](#-calculated-metrics)) and is no longer the first panel of the reports.
+- **`DAILY_CHURN_CAP`** (see [Metric weights](#metric-weights)) remains the only
+  protection against an extreme outlier, e.g. a `node_modules` committed by mistake — more
+  important than before, not less.
+- If a specific repository needs to exclude something (a `node_modules`
+  committed by mistake, a huge SQL dump), do it with `git filter-repo`/BFG **on the
+  analyzed history** or accept the noise on that repository — not in the tool.
 
-### `find_generated_candidates.sh` resta, per un altro scopo
+### `find_generated_candidates.sh` remains, for a different purpose
 
-Lo script (analizza churn per percorso, verifica generatori Prisma, trova posizioni
-storiche) **non pilota più le statistiche di questo tool** — resta utile in modo
-indipendente per chi vuole popolare `.gitattributes` a beneficio di **GitHub stesso**
-(che usa `linguist-generated`/`linguist-vendored` per collassare i diff nelle PR e per
-i grafici di percentuale-linguaggio del repository, indipendentemente da questo tool):
+The script (analyzes churn by path, checks Prisma generators, finds historical
+locations) **no longer drives this tool's statistics** — it remains useful independently
+for those who want to populate `.gitattributes` for the benefit of **GitHub itself**
+(which uses `linguist-generated`/`linguist-vendored` to collapse diffs in PRs and for
+the repository's language-percentage charts, independently of this tool):
 
 ```bash
-./find_generated_candidates.sh [--since <data>] [--threshold <pct>] [--depth <n>] [percorso-repo]
+./find_generated_candidates.sh [--since <date>] [--threshold <pct>] [--depth <n>] [repo-path]
 ```
 
-**Non scrive `.gitattributes`, non modifica nulla**: la classificazione
-generato/vendorizzato/scritto-a-mano richiede giudizio umano, come dimostra il fatto che
-in sviluppo una cartella di codice archiviato (`old/`) è stata etichettata come "generata"
-per errore prima di essere corretta a mano — lo stesso genere di errore che, applicato
-automaticamente, avrebbe anche innescato il bug dei rename descritto sopra.
+**It does not write `.gitattributes`, it modifies nothing**: classifying as
+generated/vendored/hand-written requires human judgment, as shown by the fact that
+during development an archived-code folder (`old/`) was labeled "generated"
+by mistake before being corrected by hand — the same kind of error that, applied
+automatically, would also have triggered the rename bug described above.
 
-Per ogni percorso sopra soglia riporta un livello di evidenza (FORTE/MEDIA/DEBOLE); i
-dettagli sono nell'help dello script (`--help`).
+For each path above the threshold it reports an evidence level (FORTE/MEDIA/DEBOLE, i.e. strong/medium/weak); details
+are in the script's help (`--help`).
 
-### Un limite che nessuna esclusione risolve comunque
+### A limit that no exclusion solves anyway
 
-I commit prodotti da **squash o rebase merge** hanno un solo genitore, quindi sono
-strutturalmente commit normali e `--no-merges` non può escluderli: riportano il lavoro di
-altri sotto il nome di chi ha fatto il merge. In un caso reale un singolo commit di questo
-tipo pesava 139.719 righe. Nessun filtro per percorso lo intercetta — va tenuto presente
-quando si legge un picco isolato.
+Commits produced by **squash or rebase merge** have a single parent, so they are
+structurally normal commits and `--no-merges` cannot exclude them: they report other people's work
+under the name of whoever did the merge. In one real case a single commit of this
+type weighed 139,719 lines. No path filter intercepts it — keep it in mind
+when reading an isolated spike.
 
-### Pesi delle metriche
+### Metric weights
 
-In testa a `plot_git.py` e `plot_multiproject.py` (i due valori vanno tenuti allineati):
+At the top of `plot_git.py` and `plot_multiproject.py` (the two values must be kept aligned):
 
 ```python
-DELETED_WEIGHT = 0.4      # quanto pesa una riga rimossa rispetto a una aggiunta
-DAILY_CHURN_CAP = 15000   # tetto anti-outlier, PER GIORNO per autore
-W_CHURN = 1.0             # peso del volume nell'indice composito
-W_FILES = 0.5             # peso della dispersione su file
+DELETED_WEIGHT = 0.4      # how much a removed line weighs relative to an added one
+DAILY_CHURN_CAP = 15000   # anti-outlier cap, PER DAY per author
+W_CHURN = 1.0             # weight of volume in the composite index
+W_FILES = 0.5             # weight of spread across files
 ```
 
-Alzare `W_FILES` premia chi tocca molti file (attenzione: è ciò che rendeva la vecchia
-formula favorevole ai find/replace). Abbassare `DAILY_CHURN_CAP` appiattisce le giornate
-di alto volume.
+Raising `W_FILES` rewards those who touch many files (note: this is what made the old
+formula favor find/replace). Lowering `DAILY_CHURN_CAP` flattens high-volume
+days.
 
-**`DAILY_CHURN_CAP` non è un valore arbitrario: è calibrato sulla distribuzione osservata,
-e va ricalibrato se il modello di sviluppo cambia.** Fissato originariamente a 1000 il
-9 gennaio 2026, misurando la distribuzione reale su più repository ad agosto 2026 quel
-valore era sceso al **90° percentile** (giornate normali, non anomale) invece del
-p95-p99 previsto: il 72% del churn dei due mesi precedenti veniva scartato dal tetto,
-contro il 44% del periodo gennaio-maggio. Causa plausibile: uso di agenti di coding AI,
-che rendono comuni giornate di scaffolding ampio (es. un commit reale da 336 file/22.180
-churn per generare CRUD su decine di tabelle in una sessione) — non outlier da attenuare,
-ma il nuovo ordine di grandezza del lavoro normale. Il nuovo valore (15000) corrisponde al
-p99 osservato: attenua ancora gli outlier estremi, non le giornate ora comuni. Se il tuo
-flusso di lavoro cambia ancora, ricontrolla la distribuzione invece di supporre che il
-valore attuale resti valido:
+**`DAILY_CHURN_CAP` is not an arbitrary value: it is calibrated on the observed distribution,
+and must be recalibrated if the development model changes.** Originally set to 1000 on
+9 January 2026, when measuring the real distribution across several repositories in August 2026 that
+value had dropped to the **90th percentile** (normal days, not anomalous) instead of the
+expected p95-p99: 72% of the churn of the previous two months was discarded by the cap,
+against 44% for the January-May period. Plausible cause: use of AI coding agents,
+which make days of broad scaffolding common (e.g. a real commit of 336 files/22,180
+churn generating CRUD for dozens of tables in a single session) — not outliers to dampen,
+but the new order of magnitude of normal work. The new value (15000) corresponds to the
+observed p99: it still dampens extreme outliers, not the days that are now common. If your
+workflow changes again, recheck the distribution instead of assuming the
+current value remains valid:
 
 ```bash
 git_stats_collector.sh 2026-01-01 "$(date +%F)" json | python3 -c "
@@ -1334,197 +1362,197 @@ print(f'n={n}  p90={pct(90):.0f}  p95={pct(95):.0f}  p99={pct(99):.0f}  max={pct
 "
 ```
 
-### Granularità temporale del report singolo
+### Time granularity of the single report
 
-In `plot_git.py`, funzione `choose_bucket()`: le soglie 45 / 250 giorni decidono quando
-passare da giornaliero a settimanale a mensile.
+In `plot_git.py`, function `choose_bucket()`: the 45 / 250 day thresholds decide when
+to switch from daily to weekly to monthly.
 
-### Colori
+### Colors
 
-In entrambi i plotter, lista `SERIES`. L'ordine **non è cosmetico**: è verificato per
-separazione tra colori adiacenti anche in caso di deficit di visione dei colori. Se la
-sostituisci con una palette tua, validala invece di scegliere a occhio, e mantieni la
-regola di accorpare in "Altro" oltre l'ottava serie anziché generare tinte nuove.
+In both plotters, the `SERIES` list. The order is **not cosmetic**: it is verified for
+separation between adjacent colors even in the case of color vision deficiency. If you
+replace it with a palette of your own, validate it instead of choosing by eye, and keep the
+rule of grouping into "Other" beyond the eighth series instead of generating new hues.
 
-### Escludere/includere i merge commit
+### Excluding/including merge commits
 
-I merge sono esclusi con `--no-merges`, presente ora in un solo punto per script (la
-singola invocazione di `git log`).
+Merges are excluded with `--no-merges`, now present in a single place per script (the
+single `git log` invocation).
 
 ---
 
-## 📈 Metriche Calcolate
+## 📈 Calculated Metrics
 
-Non esiste un singolo numero che misuri il valore del lavoro di sviluppo. Per questo i
-report mostrano **tre metriche affiancate** invece di un punteggio unico, e relegano
-l'indice composito a metrica secondaria (visibile solo nella tabella di riepilogo).
-Sono presentate **in ordine di quanto sono attendibili**, non di quanto sono
-impressionanti — è anche l'ordine dei pannelli nei report.
+There is no single number that measures the value of development work. For this reason the
+reports show **three metrics side by side** instead of a single score, and relegate
+the composite index to a secondary metric (visible only in the summary table).
+They are presented **in order of how reliable they are**, not of how
+impressive they are — which is also the order of the panels in the reports.
 
-### 1. Giorni attivi — la metrica più robusta
+### 1. Active days — the most robust metric
 
-Numero di giorni distinti con almeno un commit. È l'indicatore più difficile da
-distorcere: non è gonfiabile né da un singolo commit enorme né da tanti micro-commit,
-cattura la continuità del contributo meglio del volume, e non risente in alcun modo di
-codice generato o file voluminosi.
+Number of distinct days with at least one commit. It is the hardest indicator to
+distort: it cannot be inflated either by a single huge commit or by many micro-commits,
+it captures the continuity of contribution better than volume, and it is not affected in any way by
+generated code or bulky files.
 
-### 2. Commit
+### 2. Commits
 
-- Ogni commit unico nel periodo, **esclusi i merge commit**
-- Attribuiti all'autore con **match esatto** sul nome
+- Every unique commit in the period, **excluding merge commits**
+- Attributed to the author with an **exact match** on the name
 
-### 3. Churn — volume di cambiamento (la meno indicativa delle tre)
+### 3. Churn — volume of change (the least indicative of the three)
 
 ```txt
-churn = righe_aggiunte + 0.4 × righe_rimosse
+churn = lines_added + 0.4 × lines_removed
 ```
 
-Le rimozioni **contano**: cancellare codice morto è lavoro reale. Il peso `0.4 < 1`
-riflette il fatto che rimuovere costa in genere meno che scrivere.
+Removals **count**: deleting dead code is real work. The weight `0.4 < 1`
+reflects the fact that removing generally costs less than writing.
 
-**Non viene applicata alcuna esclusione** (codice generato, vendorizzato, lock file, o
-altro — vedi [Perché non escludiamo codice generato/vendorizzato](#perché-non-escludiamo-codice-generatovendorizzato-e-prima-lo-facevamo)):
-un repository con client generati o lock file molto voluminosi lo mostrerà nel churn. È
-la ragione per cui questa metrica non è più la prima del report, e per cui va sempre
-letta insieme alle altre due, non da sola.
+**No exclusion is applied** (generated code, vendored code, lock files, or
+anything else — see [Perché non escludiamo codice generato/vendorizzato](#why-we-dont-exclude-generatedvendored-code-and-used-to)):
+a repository with very large generated clients or lock files will show it in the churn. This is
+the reason this metric is no longer the first in the report, and why it must always be
+read together with the other two, not on its own.
 
-Il campo `lines = aggiunte + rimosse` resta nel JSON per retrocompatibilità.
+The `lines = added + removed` field remains in the JSON for backward compatibility.
 
-### Indice composito (metrica secondaria)
+### Composite index (secondary metric)
 
 ```txt
-indice = Σ giorni [ 1.0 × ln(1 + min(churn_giorno, 15000)) + 0.5 × ln(1 + file_distinti_giorno) ]
+index = Σ days [ 1.0 × ln(1 + min(daily_churn, 15000)) + 0.5 × ln(1 + daily_distinct_files) ]
 ```
 
-Tre proprietà sono deliberate e non vanno cambiate senza capirne l'effetto:
+Three properties are deliberate and must not be changed without understanding their effect:
 
-1. **Additivo, non moltiplicativo.** Nella forma a prodotto `ln(added) × ln(files)` un
-   fattore a zero azzerava tutto, e i due termini si amplificavano a vicenda: un
-   find/replace su 100 file valeva ~6.7x un fix algoritmico profondo in un solo file.
-   Con la forma additiva quel rapporto scende a ~1.4x, e i pesi (`1.0` / `0.5`) rendono
-   esplicito quanto conta la dispersione su file.
-2. **Il tetto (15000 righe) è PER GIORNO, e va ricalibrato nel tempo.** Applicato a un
-   aggregato di periodo (come faceva la versione precedente nel report multiprogetto) si
-   saturava: su qualsiasi intervallo più lungo di pochi giorni diventava una costante per
-   tutti, e l'indice finiva per misurare solo il numero di file toccati. Il valore stesso
-   non è fisso per sempre: era 1000 da gennaio 2026, ma misurato ad agosto 2026 su
-   repository che usano assistenti di coding AI, quel valore troncava il 72% del churn di
-   giornate normali (90° percentile, non un outlier) — sintomo di un cambio nel modello di
-   sviluppo, non di un bug. Vedi [Pesi delle metriche](#pesi-delle-metriche) per come
-   ricontrollare la distribuzione.
-3. **`file_distinti` sono file, non modifiche.** Lo stesso file modificato in 3 commit
-   conta 1, non 3. Prima si contavano le righe di `--numstat`, cioè gli eventi di
-   modifica, il che rendeva la metrica in buona parte un proxy del numero di commit.
+1. **Additive, not multiplicative.** In the product form `ln(added) × ln(files)` a
+   factor of zero wiped out everything, and the two terms amplified each other: a
+   find/replace across 100 files was worth ~6.7x a deep algorithmic fix in a single file.
+   With the additive form that ratio drops to ~1.4x, and the weights (`1.0` / `0.5`) make
+   explicit how much spread across files matters.
+2. **The cap (15000 lines) is PER DAY, and must be recalibrated over time.** Applied to an
+   aggregate over the period (as the previous version did in the multi-project report) it
+   saturated: over any interval longer than a few days it became a constant for
+   everyone, and the index ended up measuring only the number of files touched. The value itself
+   is not fixed forever: it was 1000 from January 2026, but measured in August 2026 on
+   repositories that use AI coding assistants, that value truncated 72% of the churn of
+   normal days (90th percentile, not an outlier) — a symptom of a change in the development
+   model, not of a bug. See [Pesi delle metriche](#metric-weights) for how to
+   re-check the distribution.
+3. **`distinct_files` are files, not modifications.** The same file modified in 3 commits
+   counts as 1, not 3. Previously the lines of `--numstat` were counted, that is the modification
+   events, which made the metric largely a proxy for the number of commits.
 
-### Note Importanti
+### Important Notes
 
-- **Whitespace changes** sono inclusi
-- **File rinominati senza modifiche di contenuto contano 0 righe**: git rileva i rename
-  di default in `git log --numstat` quando non gli si passa nessun pathspec di esclusione
-  (vedi sopra) — verificato, uno spostamento puro non gonfia più il churn. Se il rename
-  porta anche modifiche di contenuto, conta solo il vero diff, non il file per intero
-- **File binari** contano come file toccati ma non contribuiscono alle righe
-- **Refactoring massicci** possono gonfiare le metriche
-- **Nessuna esclusione**: codice generato, vendorizzato, lock file e dipendenze committate
-  per errore contano come qualsiasi altro file — è la ragione per cui churn è la meno
-  indicativa delle tre metriche (vedi sopra)
-- Le metriche sono **indicatori**, non misure assolute di produttività
-
----
-
-## 🎯 Interpretazione dei Dati
-
-### ⚠️ Cosa NON Fare
-
-❌ **Non usare come KPI per valutazione performance**
-
-- Nessuna di queste metriche misura qualità o valore
-- Il refactoring appare come alta produttività
-- Code review, design, mentoring e debugging difficile sono **strutturalmente invisibili**:
-  un fix da 3 righe dopo due giorni di indagine conta come 3 righe
-
-❌ **Non confrontare autori direttamente**
-
-- Complessità delle task varia enormemente
-- Bug fix piccoli ≠ feature grandi
-
-❌ **Non trattare l'indice composito come un punteggio oggettivo**
-
-- È un'indicazione **relativa**, con pesi scelti a mano (`1.0` churn / `0.5` file):
-  cambiando i pesi cambia la classifica
-- Non tiene conto della difficoltà tecnica delle modifiche
-- Per questo è relegato alla tabella e non ha un grafico dedicato: se ti serve un solo
-  numero, "giorni attivi" è più difficile da distorcere
-
-❌ **Non confrontare valori tra periodi analizzati con versioni diverse dello strumento**
-
-- Le formule sono cambiate (forma additiva, cancellazioni pesate, tetto per giorno):
-  i punteggi dei report generati prima non sono confrontabili con quelli nuovi
-
-### ✅ Cosa Fare
-
-✓ **Usa per identificare trend**
-
-- Picchi di attività prima di release
-- Periodi di inattività inspiegati
-- Distribuzione del carico nel tempo
-
-✓ **Usa per retrospective di team**
-
-- "Perché questo progetto ha richiesto così tanto effort?"
-- "Chi ha lavorato su cosa e possiamo bilanciare meglio?"
-- "Ci sono colli di bottiglia?"
-
-✓ **Confronta le metriche tra loro, non guardarne una sola**
-
-- Molto churn e pochi commit → cambiamenti grossi e rari
-- Molti commit e poco churn → iterazione a piccoli passi
-- Molti giorni attivi e churn modesto → contributo continuo (spesso il più prezioso, e
-  quello che un punteggio basato sul volume nasconde)
-
-✓ **Usa per planning**
-
-- Velocity storica su progetti simili
-- Stima di effort per nuove feature
-- Allocazione risorse tra progetti
+- **Whitespace changes** are included
+- **Renamed files without content changes count as 0 lines**: git detects renames
+  by default in `git log --numstat` when no exclusion pathspec is passed to it
+  (see above) — verified, a pure move no longer inflates the churn. If the rename
+  also carries content changes, only the real diff counts, not the whole file
+- **Binary files** count as files touched but do not contribute to lines
+- **Massive refactorings** can inflate the metrics
+- **No exclusion**: generated code, vendored code, lock files and dependencies committed
+  by mistake count like any other file — this is the reason churn is the least
+  indicative of the three metrics (see above)
+- The metrics are **indicators**, not absolute measures of productivity
 
 ---
 
-## 🚀 Estensioni Future
+## 🎯 Interpreting the Data
 
-### Roadmap Possibili
+### ⚠️ What NOT to Do
 
-- [ ] Export in formato CSV per Excel/Google Sheets
-- [ ] Supporto per branch specifici (analizza feature branch)
-- [ ] Filtri per tipo di file (solo backend, solo test, etc.)
-- [ ] Dashboard interattiva HTML/JS
-- [ ] Integrazione Slack/Discord per report automatici
-- [ ] Analisi linguaggi di programmazione (LoC per linguaggio)
-- [ ] Heatmap calendario stile GitHub
-- [ ] Confronto velocity tra sprint
-- [ ] API REST per query dati storici
-- [ ] Support per GitLab/Bitbucket API (oltre a git locale)
+❌ **Do not use as a KPI for performance evaluation**
+
+- None of these metrics measures quality or value
+- Refactoring shows up as high productivity
+- Code review, design, mentoring and hard debugging are **structurally invisible**:
+  a 3-line fix after two days of investigation counts as 3 lines
+
+❌ **Do not compare authors directly**
+
+- Task complexity varies enormously
+- Small bug fixes ≠ large features
+
+❌ **Do not treat the composite index as an objective score**
+
+- It is a **relative** indication, with hand-picked weights (`1.0` churn / `0.5` files):
+  changing the weights changes the ranking
+- It does not account for the technical difficulty of the changes
+- For this reason it is relegated to the table and has no dedicated chart: if you need a single
+  number, "active days" is harder to distort
+
+❌ **Do not compare values across periods analyzed with different versions of the tool**
+
+- The formulas have changed (additive form, weighted deletions, daily cap):
+  the scores of previously generated reports are not comparable with the new ones
+
+### ✅ What to Do
+
+✓ **Use it to identify trends**
+
+- Activity peaks before releases
+- Unexplained periods of inactivity
+- Distribution of workload over time
+
+✓ **Use it for team retrospectives**
+
+- "Why did this project require so much effort?"
+- "Who worked on what, and can we balance better?"
+- "Are there bottlenecks?"
+
+✓ **Compare the metrics with each other, do not look at just one**
+
+- Lots of churn and few commits → large, infrequent changes
+- Many commits and little churn → iteration in small steps
+- Many active days and modest churn → continuous contribution (often the most valuable, and
+  the one that a volume-based score hides)
+
+✓ **Use it for planning**
+
+- Historical velocity on similar projects
+- Effort estimation for new features
+- Resource allocation across projects
 
 ---
 
-## 📚 Shortcuts Utili
+## 🚀 Future Extensions
 
-> I comandi più comuni sono già in cima al documento nella [🚀 Guida Rapida](#-guida-rapida). Qui trovi
-> solo alias/funzioni bash opzionali per velocizzare l'uso quotidiano.
+### Possible Roadmap
+
+- [ ] Export to CSV format for Excel/Google Sheets
+- [ ] Support for specific branches (analyze feature branches)
+- [ ] Filters by file type (backend only, tests only, etc.)
+- [ ] Interactive HTML/JS dashboard
+- [ ] Slack/Discord integration for automated reports
+- [ ] Programming language analysis (LoC per language)
+- [ ] GitHub-style calendar heatmap
+- [ ] Velocity comparison between sprints
+- [ ] REST API to query historical data
+- [ ] Support for GitLab/Bitbucket API (beyond local git)
+
+---
+
+## 📚 Useful Shortcuts
+
+> The most common commands are already at the top of the document in the [🚀 Guida Rapida](#-quick-start). Here you will find
+> only optional bash aliases/functions to speed up everyday use.
 
 ```bash
-# Alias nel .bashrc
+# Alias in .bashrc
 alias gitstats='~/tools/git_stats_collector.sh'
 alias gitstats-multi='~/tools/git_multiproject_stats_collector.sh'
 
-# Funzione per ultimo mese
+# Function for last month
 last_month_report() {
   local start=$(date -d "$(date +%Y-%m-01) -1 month" +%Y-%m-%d)
   local end=$(date -d "$(date +%Y-%m-01) -1 day" +%Y-%m-%d)
   ./git_stats_collector.sh "$start" "$end" json | python3 plot_git.py
 }
 
-# Funzione per ultima settimana
+# Function for last week
 last_week_report() {
   local start=$(date -d "last monday -7 days" +%Y-%m-%d)
   local end=$(date -d "last sunday" +%Y-%m-%d)
@@ -1536,64 +1564,64 @@ last_week_report() {
 
 ## ❓ FAQ
 
-### Posso usare lo script su Windows?
+### Can I use the script on Windows?
 
-Gli script bash richiedono un ambiente Unix-like. Opzioni:
+The bash scripts require a Unix-like environment. Options:
 
-- WSL (Windows Subsystem for Linux) ✅ Raccomandato
-- Git Bash (limitato, potrebbe non funzionare `date -d`)
+- WSL (Windows Subsystem for Linux) ✅ Recommended
+- Git Bash (limited, `date -d` may not work)
 - Cygwin
 
-### Gli script funzionano con Git LFS?
+### Do the scripts work with Git LFS?
 
-Sì, gli script analizzano la storia Git standard. File LFS appaiono come modifiche normali.
+Yes, the scripts analyze the standard Git history. LFS files appear as normal changes.
 
-### Posso analizzare repository remoti?
+### Can I analyze remote repositories?
 
-No direttamente. Devi prima clonare localmente:
+Not directly. You must first clone locally:
 
 ```bash
 git clone https://github.com/user/repo.git /tmp/repo
 ./git_stats_collector.sh 2025-11-01 2025-11-30 json
 ```
 
-### Come gestire autori con email diverse?
+### How do I handle authors with different emails?
 
-Git usa il nome da `git config user.name`. Se un autore ha commit con nomi diversi, appariranno separati. Soluzione:
+Git uses the name from `git config user.name`. If an author has commits under different names, they will appear separately. Solution:
 
 ```bash
-# Unifica con .mailmap nel repository
-# File .mailmap:
+# Unify with .mailmap in the repository
+# .mailmap file:
 # Preferred Name <preferred@email.com> Old Name <old@email.com>
 ```
 
-### Gli script influenzano il repository?
+### Do the scripts affect the repository?
 
-No, sono **read-only**. Eseguono solo `git log`, non modificano nulla.
+No, they are **read-only**. They only run `git log` and do not modify anything.
 
 ---
 
-## 🚀 Comandi Semplificati (gitstats / gitstats-multi)
+## 🚀 Simplified Commands (gitstats / gitstats-multi)
 
-`gitstats` e `gitstats-multi` sono i comandi pensati per l'uso quotidiano — quelli suggeriti nella
-[Guida Rapida](#-guida-rapida) in cima a questo documento. Sono wrapper già pronti nel repository
-(`gitstat.sh` e `gitstat-multi.sh`) che fanno da soli la pipe collector → plot, così non devi ricordare
-la sintassi completa dei due script principali né il simbolo `|`:
+`gitstats` and `gitstats-multi` are the commands intended for everyday use — the ones suggested in the
+[Guida Rapida](#-quick-start) at the top of this document. They are ready-made wrappers in the repository
+(`gitstat.sh` and `gitstat-multi.sh`) that do the collector → plot pipe on their own, so you don't have to remember
+the full syntax of the two main scripts or the `|` symbol:
 
-- `gitstats <INIZIO> <FINE> [autore]` → equivale a `git_stats_collector.sh ... json | plot_git.py`
-- `gitstats-multi <INIZIO> <FINE> [opzioni] [percorsi...]` → equivale a `git_multiproject_stats_collector.sh ... | plot_multiproject.py`
+- `gitstats <START> <END> [author]` → equivalent to `git_stats_collector.sh ... json | plot_git.py`
+- `gitstats-multi <START> <END> [options] [paths...]` → equivalent to `git_multiproject_stats_collector.sh ... | plot_multiproject.py`
 
-Entrambi supportano `--fetch`; `gitstats` supporta anche `--repo <path|url>` e `gitstats-multi` accetta
-URL Git direttamente come percorso (stesse opzioni dei rispettivi script principali — vedi
-[Versione Singolo Repository](#-versione-singolo-repository) e [Versione Multi-Repository](#-versione-multi-repository)
-per l'elenco completo).
+Both support `--fetch`; `gitstats` also supports `--repo <path|url>` and `gitstats-multi` accepts
+Git URLs directly as a path (same options as the respective main scripts — see
+[Versione Singolo Repository](#-single-repository-version) and [Versione Multi-Repository](#-multi-repository-version)
+for the full list).
 
-### Installazione
+### Installation
 
-Se hai installato il **pacchetto Debian** (vedi la sezione Release del repository), `gitstats` e
-`gitstats-multi` sono già disponibili: salta questa sezione.
+If you installed the **Debian package** (see the Releases section of the repository), `gitstats` and
+`gitstats-multi` are already available: skip this section.
 
-Altrimenti, dalla cartella dove hai clonato questo repository:
+Otherwise, from the folder where you cloned this repository:
 
 ```bash
 sudo ln -sf "$(pwd)/git_stats_collector.sh" /usr/local/bin/git_stats_collector.sh
@@ -1606,31 +1634,31 @@ sudo ln -sf "$(pwd)/gitstat-multi.sh" /usr/local/bin/gitstats-multi
 chmod +x git_stats_collector.sh git_multiproject_stats_collector.sh plot_git.py plot_multiproject.py gitstat.sh gitstat-multi.sh
 ```
 
-(i link puntano ai file del repository: aggiornare il repository — `git pull` — aggiorna anche i comandi installati, senza bisogno di reinstallare nulla)
+(the links point to the files in the repository: updating the repository — `git pull` — also updates the installed commands, with no need to reinstall anything)
 
-### Utilizzo
+### Usage
 
 ```bash
-# Singolo repository, nella sua cartella
+# Single repository, in its folder
 gitstats 2025-12-01 2025-12-31
-gitstats 2025-12-01 2025-12-31 "Mario Rossi"          # filtro autore
-gitstats --repo https://github.com/org/repo.git 2025-12-01 2025-12-31  # repository remoto
+gitstats 2025-12-01 2025-12-31 "Mario Rossi"          # author filter
+gitstats --repo https://github.com/org/repo.git 2025-12-01 2025-12-31  # remote repository
 
-# Multi-repository, da qualsiasi posizione
+# Multi-repository, from any location
 gitstats-multi 2025-12-01 2025-12-31 ~/repo1 ~/repo2
 gitstats-multi --file repos.txt 2025-12-01 2025-12-31
 ```
 
 ---
 
-## 🧩 Estensione VS Code
+## 🧩 VS Code Extension
 
-Nella cartella [`vscode-extension/`](vscode-extension/) c'è un'estensione che richiama gli stessi
-collector e plotter da Visual Studio Code, senza aprire un terminale: dalla Command Palette
-(`Ctrl+Shift+P`) si sceglie **Git Activity: Analizza Progetto Corrente** o **Analizza Tutto il
-Workspace (Multi-Repo)** e il grafico si apre in un pannello. L'estensione non contiene logica di
-analisi propria: usa gli script di questo repository, già inclusi nel suo pacchetto `.vsix`.
+The [`vscode-extension/`](vscode-extension/) folder contains an extension that calls the same
+collectors and plotters from Visual Studio Code, without opening a terminal: from the Command Palette
+(`Ctrl+Shift+P`) you choose **Git Activity: Analizza Progetto Corrente** (Analyze Current Project) or **Analizza Tutto il
+Workspace (Multi-Repo)** (Analyze Entire Workspace) and the chart opens in a panel. The extension contains no analysis logic
+of its own: it uses the scripts of this repository, already included in its `.vsix` package.
 
-Richiede gli stessi prerequisiti degli script (Linux/macOS con bash e GNU `date`, Git, Python 3
-con `pandas` e `matplotlib`). Installazione, impostazioni (intervallo di date, cartella di
-output) e uso sono nel [README dell'estensione](vscode-extension/README.md).
+It requires the same prerequisites as the scripts (Linux/macOS with bash and GNU `date`, Git, Python 3
+with `pandas` and `matplotlib`). Installation, settings (date range, output
+folder) and usage are in the [extension README](vscode-extension/README.md).
