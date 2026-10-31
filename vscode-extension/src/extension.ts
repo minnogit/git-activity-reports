@@ -292,9 +292,12 @@ async function runAnalysis(context: vscode.ExtensionContext, paths: string[]) {
             return;
         }
 
+        // Il collector singolo ha 'text' come formato di default, ma il plotter legge solo
+        // JSON: va chiesto esplicitamente (lo faceva gitstat.sh, che ora non è più in mezzo).
+        // Il multi-repo produce sempre JSON, senza argomento di formato.
         const collectorArgs = isMulti
             ? [...scripts.collector.args, startDate, endDate, ...paths]
-            : [...scripts.collector.args, startDate, endDate];
+            : [...scripts.collector.args, startDate, endDate, 'json'];
 
         try {
             const { stdout, stderr } = await runPipeline(
