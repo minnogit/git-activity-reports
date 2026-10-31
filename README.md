@@ -13,6 +13,7 @@ Sistema completo per analizzare e visualizzare statistiche Git, disponibile in d
 - [🚨 Troubleshooting](#-troubleshooting) · [💡 Tips & Best Practices](#-tips--best-practices)
 - [🔧 Personalizzazione](#-personalizzazione) · [📈 Metriche Calcolate](#-metriche-calcolate) · [🎯 Interpretazione dei Dati](#-interpretazione-dei-dati)
 - [❓ FAQ](#-faq) · [🚀 Comandi Semplificati (gitstats/gitstats-multi)](#-comandi-semplificati-gitstats--gitstats-multi)
+- [🧩 Estensione VS Code](#-estensione-vs-code)
 
 ---
 
@@ -1619,3 +1620,17 @@ gitstats --repo https://github.com/org/repo.git 2025-12-01 2025-12-31  # reposit
 gitstats-multi 2025-12-01 2025-12-31 ~/repo1 ~/repo2
 gitstats-multi --file repos.txt 2025-12-01 2025-12-31
 ```
+
+---
+
+## 🧩 Estensione VS Code
+
+Nella cartella [`vscode-extension/`](vscode-extension/) c'è un'estensione che richiama gli stessi
+collector e plotter da Visual Studio Code, senza aprire un terminale: dalla Command Palette
+(`Ctrl+Shift+P`) si sceglie **Git Activity: Analizza Progetto Corrente** o **Analizza Tutto il
+Workspace (Multi-Repo)** e il grafico si apre in un pannello. L'estensione non contiene logica di
+analisi propria: usa gli script di questo repository, già inclusi nel suo pacchetto `.vsix`.
+
+Richiede gli stessi prerequisiti degli script (Linux/macOS con bash e GNU `date`, Git, Python 3
+con `pandas` e `matplotlib`). Installazione, impostazioni (intervallo di date, cartella di
+output) e uso sono nel [README dell'estensione](vscode-extension/README.md).

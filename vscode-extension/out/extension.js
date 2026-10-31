@@ -39,12 +39,16 @@ const vscode = __importStar(require("vscode"));
 const cp = __importStar(require("child_process"));
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
+const os = __importStar(require("os"));
+// Messaggi in inglese come lingua sorgente, tradotti tramite l10n/bundle.l10n.<lingua>.json
+// (vedi "l10n" in package.json): la chiave del bundle è la stringa inglese esatta.
+const t = vscode.l10n.t;
 function activate(context) {
     console.log('L\'estensione "git-activity-reports" è attiva!');
     let disposableProject = vscode.commands.registerCommand('git-activity.analyzeProject', async () => {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders) {
-            vscode.window.showErrorMessage('Nessun workspace aperto.');
+            vscode.window.showErrorMessage(t('No workspace is open.'));
             return;
         }
         // Tenta di trovare il repo git nella cartella corrente o genitrice
@@ -58,18 +62,18 @@ function activate(context) {
             runAnalysis(context, [repoPath]);
         }
         else {
-            vscode.window.showErrorMessage('Non è stato possibile trovare un repository Git nel contesto attuale.');
+            vscode.window.showErrorMessage(t('Could not find a Git repository in the current context.'));
         }
     });
     let disposableWorkspace = vscode.commands.registerCommand('git-activity.analyzeWorkspace', async () => {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders) {
-            vscode.window.showErrorMessage('Nessun workspace aperto.');
+            vscode.window.showErrorMessage(t('No workspace is open.'));
             return;
         }
         vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
-            title: "Ricerca repository Git nel workspace...",
+            title: t('Searching for Git repositories in the workspace...'),
             cancellable: false
         }, async () => {
             const allRepos = [];
@@ -78,7 +82,7 @@ function activate(context) {
                 allRepos.push(...reposInFolder);
             }
             if (allRepos.length === 0) {
-                vscode.window.showErrorMessage('Nessun repository Git trovato nel workspace.');
+                vscode.window.showErrorMessage(t('No Git repository found in the workspace.'));
                 return;
             }
             if (allRepos.length === 1) {
@@ -201,15 +205,15 @@ function resolveScriptPaths(context, isMulti) {
 // stderr di entrambi i processi (mai reindirizzato in una pipe di shell reale) è combinato
 // nell'ordine collector-poi-plotter, per restare compatibile con l'unico consumatore dei
 // messaggi "Avviso:" più sotto in runAnalysis.
-function runPipeline(collector, plotter, cwd) {
+function runPipeline(collector, plotter, collectorCwd, plotterCwd) {
     return new Promise((resolve, reject) => {
         const collectorArgs = [...collector.args];
         const plotterArgs = [...plotter.args];
         let p1;
         let p2;
         try {
-            p1 = cp.spawn(collector.cmd, collectorArgs, { cwd });
-            p2 = cp.spawn(plotter.cmd, plotterArgs, { cwd });
+            p1 = cp.spawn(collector.cmd, collectorArgs, { cwd: collectorCwd });
+            p2 = cp.spawn(plotter.cmd, plotterArgs, { cwd: plotterCwd });
         }
         catch (err) {
             reject(err);
@@ -234,8 +238,8 @@ function runPipeline(collector, plotter, cwd) {
         p1.stderr.on('data', (d) => { stderrCollector += d.toString(); });
         p2.stderr.on('data', (d) => { stderrPlotter += d.toString(); });
         p2.stdout.on('data', (d) => { stdoutPlotter += d.toString(); });
-        p1.on('error', (err) => fail(new Error(`Impossibile avviare ${collector.cmd}: ${err.message}`)));
-        p2.on('error', (err) => fail(new Error(`Impossibile avviare ${plotter.cmd}: ${err.message}`)));
+        p1.on('error', (err) => fail(new Error(t('Could not start {0}: {1}', collector.cmd, err.message))));
+        p2.on('error', (err) => fail(new Error(t('Could not start {0}: {1}', plotter.cmd, err.message))));
         // Se il collector fallisce, p2 riceve EPIPE/stdin chiuso e uscirà anch'esso con
         // errore: è p2 (l'ultimo anello della pipe, come per una pipe di shell) a decidere
         // esito e messaggio, con lo stderr del collector anteposto per non perderlo.
@@ -250,7 +254,7 @@ function runPipeline(collector, plotter, cwd) {
             settled = true;
             if (plotterCode !== 0 || collectorCode !== 0) {
                 reject(new Error(stderrCollector + stderrPlotter ||
-                    `Processo terminato con codice ${plotterCode !== 0 ? plotterCode : collectorCode}`));
+                    t('Process exited with code {0}', String(plotterCode !== 0 ? plotterCode : collectorCode))));
                 return;
             }
             resolve({ stdout: stdoutPlotter, stderr: stderrCollector + stderrPlotter });
@@ -267,13 +271,12 @@ async function runAnalysis(context, paths) {
     const endDate = resolveDate(endDateRaw);
     if (!startDate || !endDate) {
         const invalid = !startDate ? startDateRaw : endDateRaw;
-        vscode.window.showErrorMessage(`Data non valida nelle impostazioni: "${invalid}". Usa un formato che ` +
-            `"date -d" riconosce (es. "2025-11-01", "30 days ago", "now").`);
+        vscode.window.showErrorMessage(t('Invalid date in settings: "{0}". Use a format that "date -d" understands (e.g. "2025-11-01", "30 days ago", "now").', invalid));
         return;
     }
     vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
-        title: paths.length > 1 ? `Analisi di ${paths.length} repository...` : "Generazione grafico attività Git...",
+        title: paths.length > 1 ? t('Analyzing {0} repositories...', paths.length) : t('Generating Git activity chart...'),
         cancellable: false
     }, async (progress) => {
         const isMulti = paths.length > 1;
@@ -281,19 +284,32 @@ async function runAnalysis(context, paths) {
         if (!scripts) {
             const collectorName = isMulti ? 'git_multiproject_stats_collector.sh' : 'git_stats_collector.sh';
             const plotterName = isMulti ? 'plot_multiproject.py' : 'plot_git.py';
-            vscode.window.showErrorMessage(`Script non trovati: né in bundled/ (pacchetto .vsix), né accanto all'estensione ` +
-                `(modalità sviluppo), né "${collectorName}"/"${plotterName}" nel PATH (pacchetto .deb). ` +
-                `Vedi i Prerequisiti nel README.`);
+            vscode.window.showErrorMessage(t('Scripts not found: neither in bundled/ (.vsix package), next to the extension (development mode), nor "{0}"/"{1}" on the PATH (.deb package). See the Requirements in the README.', collectorName, plotterName));
             return;
         }
         // Il collector singolo ha 'text' come formato di default, ma il plotter legge solo
         // JSON: va chiesto esplicitamente (lo faceva gitstat.sh, che ora non è più in mezzo).
         // Il multi-repo produce sempre JSON, senza argomento di formato.
+        let outputDir;
+        try {
+            outputDir = resolveOutputDir(context, isMulti);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(t('Execution error: {0}', message));
+            return;
+        }
         const collectorArgs = isMulti
             ? [...scripts.collector.args, startDate, endDate, ...paths]
             : [...scripts.collector.args, startDate, endDate, 'json'];
         try {
-            const { stdout, stderr } = await runPipeline({ cmd: scripts.collector.cmd, args: collectorArgs }, scripts.plotter, paths[0]);
+            const { stdout, stderr } = await runPipeline({ cmd: scripts.collector.cmd, args: collectorArgs }, scripts.plotter, 
+            // Il collector singolo analizza "il repo nella cartella corrente": cwd = repo (e
+            // così trova anche un ./git-activity-aliases.json al suo interno). Il multi-repo
+            // riceve percorsi assoluti: cwd = cartella di output (workspace).
+            isMulti ? outputDir : paths[0], 
+            // Il plotter scrive il PNG nella propria cwd: mai dentro un repo analizzato.
+            outputDir);
             // Anche in caso di successo, stderr può contenere avvisi utili (es. "nessun
             // commit trovato prima di...", ownership non calcolata, autore non trovato).
             // stderr non è mai vuoto su una run normale (skip fetch, alias caricati, i
@@ -312,16 +328,57 @@ async function runAnalysis(context, paths) {
                 stdout.match(/Report multi-progetto .* generato con successo: (.*\.png)/);
             if (outputMatch && outputMatch[1]) {
                 const pngName = outputMatch[1].trim();
-                const pngPath = path.isAbsolute(pngName) ? pngName : path.join(paths[0], pngName);
+                const pngPath = path.isAbsolute(pngName) ? pngName : path.join(outputDir, pngName);
                 showImageInWebview(context, pngPath);
+                notifySavedReport(pngPath);
             }
             else {
-                vscode.window.showInformationMessage('Analisi completata, ma il file immagine non è stato individuato nel log.');
+                vscode.window.showInformationMessage(t('Analysis completed, but the image file was not found in the log.'));
             }
         }
         catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            vscode.window.showErrorMessage(`Errore nell'esecuzione: ${message}`);
+            vscode.window.showErrorMessage(t('Execution error: {0}', message));
+        }
+    });
+}
+// Cartella dove il plotter scrive il PNG. In ordine: impostazione `git-activity.outputDir`
+// (supporta `~`); altrimenti, per il multi-repo, la prima cartella del workspace (di norma
+// quella che CONTIENE i repo, non un repo scelto a caso); per il singolo repo la cartella di
+// storage dell'estensione, perché la cartella del workspace coinciderebbe col repo stesso e
+// il PNG comparirebbe come file non tracciato in `git status`.
+function resolveOutputDir(context, isMulti) {
+    const configured = (vscode.workspace.getConfiguration('git-activity').get('outputDir') || '').trim();
+    let dir;
+    if (configured) {
+        dir = configured.startsWith('~') ? path.join(os.homedir(), configured.slice(1)) : configured;
+    }
+    else if (isMulti && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+        dir = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    }
+    else {
+        dir = path.join(context.globalStorageUri.fsPath, 'reports');
+    }
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+}
+// Il PNG può stare in una cartella nascosta (storage dell'estensione): dice dove e permette di
+// salvarne una copia con un nome a scelta (il nome del file è sempre lo stesso a ogni run).
+function notifySavedReport(pngPath) {
+    const saveAs = t('Save as…');
+    const reveal = t('Show in folder');
+    vscode.window.showInformationMessage(t('Report saved to {0}', pngPath), saveAs, reveal).then(async (choice) => {
+        if (choice === saveAs) {
+            const target = await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file(path.join(os.homedir(), path.basename(pngPath))),
+                filters: { [t('PNG image')]: ['png'] }
+            });
+            if (target) {
+                fs.copyFileSync(pngPath, target.fsPath);
+            }
+        }
+        else if (choice === reveal) {
+            vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(pngPath));
         }
     });
 }
@@ -346,7 +403,7 @@ function showImageInWebview(context, imagePath) {
     const csp = `default-src 'none'; img-src ${panel.webview.cspSource}; style-src 'unsafe-inline';`;
     panel.webview.html = `
         <!DOCTYPE html>
-        <html lang="it">
+        <html lang="en">
         <head>
             <meta charset="UTF-8">
             <meta http-equiv="Content-Security-Policy" content="${csp}">

@@ -1,7 +1,7 @@
 {
   "name": "git-activity-reports",
   "displayName": "Git Activity Reports",
-  "description": "Visualizza statistiche e grafici di attività Git per i tuoi progetti.",
+  "description": "%description%",
   "version": "0.1.0",
   "publisher": "minnoit",
   "repository": {
@@ -20,12 +20,12 @@
     "commands": [
       {
         "command": "git-activity.analyzeProject",
-        "title": "Git Activity: Analizza Progetto Corrente",
+        "title": "%command.analyzeProject.title%",
         "category": "Git Activity"
       },
       {
         "command": "git-activity.analyzeWorkspace",
-        "title": "Git Activity: Analizza Tutto il Workspace (Multi-Repo)",
+        "title": "%command.analyzeWorkspace.title%",
         "category": "Git Activity"
       }
     ],
@@ -35,12 +35,17 @@
         "git-activity.startDate": {
           "type": "string",
           "default": "30 days ago",
-          "description": "Data di inizio per l'analisi (es. YYYY-MM-DD o '30 days ago')"
+          "description": "%config.startDate%"
         },
         "git-activity.endDate": {
           "type": "string",
           "default": "now",
-          "description": "Data di fine per l'analisi (es. YYYY-MM-DD o 'now')"
+          "description": "%config.endDate%"
+        },
+        "git-activity.outputDir": {
+          "type": "string",
+          "default": "",
+          "description": "%config.outputDir%"
         }
       }
     }
@@ -64,5 +69,35 @@
     "eslint": "^8.41.0",
     "mocha": "^10.8.2",
     "typescript": "^5.1.3"
+  },
+  "l10n": "./l10n",
+  "keywords": [
+    "git",
+    "statistics",
+    "commits",
+    "activity",
+    "report",
+    "chart",
+    "contributors",
+    "analytics"
+  ],
+  "bugs": {
+    "url": "https://github.com/minnogit/git-activity-reports/issues"
+  },
+  "homepage": "https://github.com/minnogit/git-activity-reports#readme",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "%capabilities.untrusted%"
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "%capabilities.virtual%"
+    }
   }
 }

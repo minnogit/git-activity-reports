@@ -1,0 +1,10 @@
+{
+  "description": "Grafici e statistiche dell'attività Git (commit, churn, giorni attivi, autori) per un repository o un intero workspace.",
+  "command.analyzeProject.title": "Analizza Progetto Corrente",
+  "command.analyzeWorkspace.title": "Analizza Tutto il Workspace (Multi-Repo)",
+  "config.startDate": "Data di inizio per l'analisi (es. YYYY-MM-DD o '30 days ago'; qualunque cosa riconosca `date -d` di GNU).",
+  "config.endDate": "Data di fine per l'analisi (es. YYYY-MM-DD o 'now').",
+  "config.outputDir": "Cartella dove viene scritto il PNG generato. Vuota: la cartella del workspace per l'analisi multi-repo, la cartella di storage dell'estensione per un singolo repository (così il report non compare mai come file non tracciato nel repo analizzato). Supporta `~` iniziale.",
+  "capabilities.untrusted": "L'estensione esegue script bash e Python sui repository del workspace, quindi richiede un workspace attendibile.",
+  "capabilities.virtual": "L'estensione richiede un filesystem reale: esegue git e script locali."
+}
