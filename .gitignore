@@ -19,3 +19,8 @@ project_list.txt
 node_modules/
 *.vsix
 __pycache__/
+
+# Copia degli script collector/plotter generata da vscode-extension/scripts/copy-bundled.js
+# (vedi "vscode:prepublish" in vscode-extension/package.json) per finire nel .vsix — artefatto
+# di build rigenerato ad ogni packaging, non va committato.
+vscode-extension/bundled/

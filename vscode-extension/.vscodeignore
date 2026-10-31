@@ -2,6 +2,7 @@
 .vscode-test/**
 src/**
 out/test/**
+scripts/**
 .eslintrc.json
 tsconfig.json
 **/*.map
