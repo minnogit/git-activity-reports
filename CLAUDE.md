@@ -331,21 +331,32 @@ modifica, va cambiata in tutti i posti.
 ### Estensione VS Code (`vscode-extension/src/extension.ts`)
 
 Wrapper GUI che non duplica la logica di analisi: risolve i repo Git nel workspace e invoca
-`gitstat.sh`/`gitstat-multi.sh` (o i loro equivalenti da PATH) come processo figlio, poi mostra
-il PNG risultante in una webview. Punti chiave:
+collector e plotter (mai i wrapper `gitstat(-multi).sh`, che restano solo per l'uso a riga di
+comando) come una pipe di due processi figli collegati direttamente via stdout/stdin (mai
+`bash -c` con una stringa: evita di dover quotare percorsi/date/nomi progetto), poi mostra il
+PNG risultante in una webview. Punti chiave:
 
 - `findClosestGitRepo`/`findAllGitRepos` risalgono/scansionano il filesystem per trovare `.git`
   (comando "Analizza Progetto Corrente" vs "Analizza Tutto il Workspace (Multi-Repo)").
-- Sceglie `gitstat.sh`/`gitstat-multi.sh` (o `gitstats`/`gitstats-multi`) in base al numero di
-  repo trovati (1 vs N).
-- `resolveRunner()` risolve lo script eseguibile in due modi, in ordine: (1) `gitstat(-multi).sh`
-  accanto a `context.extensionPath` (modalità sviluppo/checkout del repo), (2) fallback su
-  `gitstats`/`gitstats-multi` risolti dal `PATH` (`which`) — necessario perché un'estensione
-  installata da `.vsix` finisce in `~/.vscode/extensions/...`, scollegata dal checkout: senza
-  questo fallback l'installazione da VSIX/Marketplace non può funzionare (verificato: `vsce
-  package` impacchetta solo i file dentro `vscode-extension/`, mai script della cartella
-  genitrice). Se nessuno dei due è risolvibile, messaggio d'errore esplicito invece di un path
-  non trovato silenzioso.
+- Sceglie la coppia collector+plotter per singolo repo o multi-repo in base al numero di repo
+  trovati (1 vs N).
+- `resolveScriptPaths()` risolve i percorsi di collector e plotter in tre modi, in ordine: (1)
+  `bundled/` dentro l'estensione stessa, popolata da `npm run copy-bundled`
+  (`scripts/copy-bundled.js`) durante `vscode:prepublish` e quindi già presente in ogni `.vsix`
+  impacchettato — è ciò che rende un'installazione da VSIX/Marketplace autosufficiente, senza
+  bisogno del pacchetto `.deb` sul sistema (prima di questo fix l'estensione dipendeva SEMPRE
+  da `gitstats`/`gitstats-multi` nel `PATH`, perché `vsce package` impacchetta solo i file
+  dentro `vscode-extension/`, mai script della cartella genitrice — `bundled/` risolve questo
+  copiandoli DENTRO `vscode-extension/` a build-time, non cambiando cosa `vsce` impacchetta);
+  (2) la cartella genitrice di `context.extensionPath` (modalità sviluppo/checkout del repo,
+  quando `bundled/` non è ancora stata popolata); (3) fallback sugli stessi nomi di script
+  risolti dal `PATH` (`which`) — come installati dal pacchetto `.deb`. Se nessuno dei tre è
+  risolvibile, messaggio d'errore esplicito invece di un path non trovato silenzioso.
+  `runPipeline()` fa da `bash -c 'collector | plotter'` senza shell: `spawn` sui due processi,
+  `p1.stdout.pipe(p2.stdin)`, stderr di entrambi concatenato nell'ordine collector-poi-plotter
+  (stesso ordine che avrebbe una pipe di shell reale, dove nessuno dei due stderr è
+  rediretto) — l'esito/errore finale segue quello del plotter (ultimo anello della pipe), con
+  lo stderr del collector anteposto per non perderlo se è il collector a fallire.
 - Trova il PNG generato facendo match via regex sull'output testuale dei collector
   (`"Grafico generato con successo: ..."` / `"Report multi-progetto ... generato con successo: ..."`):
   se si cambia il messaggio di successo negli script bash, aggiornare anche queste regex.

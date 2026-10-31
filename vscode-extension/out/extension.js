@@ -126,7 +126,7 @@ function findAllGitRepos(basePath, maxDepth = 3, currentDepth = 0) {
     }
     return repos;
 }
-// Verifica se un comando è risolvibile dal PATH (es. `gitstats`/`gitstats-multi`
+// Verifica se un comando è risolvibile dal PATH (es. `git_stats_collector.sh`/`plot_git.py`
 // installati dal pacchetto .deb in /usr/local/bin) senza invocare una shell.
 function commandExistsOnPath(cmd) {
     try {
@@ -157,25 +157,107 @@ function resolveDate(value) {
         return null;
     }
 }
-// Risolve come lanciare l'analisi in due modi, in ordine di preferenza:
-//   1. Modalità sviluppo: gitstat(-multi).sh accanto alla cartella dell'estensione
-//      (l'estensione eseguita da dentro il checkout del repo, o accanto agli script).
-//   2. Modalità installata: gitstats/gitstats-multi risolti dal PATH, come installati
-//      dal pacchetto .deb (.github/workflows/build-deb.yml) — necessario perché
-//      un'estensione installata da .vsix NON ha gli script bash del repo accanto a sé
-//      (context.extensionPath punta a ~/.vscode/extensions/..., non al checkout): senza
-//      questo fallback l'installazione da .vsix/Marketplace non può funzionare.
-function resolveRunner(context, isMulti) {
-    const devScriptName = isMulti ? 'gitstat-multi.sh' : 'gitstat.sh';
-    const devScriptPath = path.join(context.extensionPath, '..', devScriptName);
-    if (fs.existsSync(devScriptPath)) {
-        return { cmd: 'bash', baseArgs: [devScriptPath] };
+// Risolve i percorsi di collector e plotter (mai i wrapper gitstat(-multi).sh: l'estensione
+// costruisce la pipe da sé in runPipeline, così evita un secondo processo di shell in mezzo
+// e i suoi stessi problemi di risoluzione — vedi sotto) in tre modi, in ordine di preferenza:
+//   1. Bundled: vscode-extension/bundled/, popolata da "npm run copy-bundled" durante
+//      "vscode:prepublish" (scripts/copy-bundled.js) — è ciò che finisce nel .vsix, quindi è
+//      l'unico modo che funziona per un'installazione da Marketplace/VSIX senza richiedere
+//      anche il pacchetto .deb sul sistema.
+//   2. Modalità sviluppo: gli script nella cartella genitrice di vscode-extension/ (il
+//      checkout del repo, quando l'estensione gira da lì via F5 e "npm run copy-bundled" non
+//      è ancora stato eseguito).
+//   3. PATH: gli stessi nomi installati dal pacchetto .deb in /usr/local/bin
+//      (.github/workflows/build-deb.yml) — ultimo fallback per chi ha installato il .deb
+//      ma non il .vsix ricompilato con gli script più recenti.
+function resolveScriptPaths(context, isMulti) {
+    const collectorName = isMulti ? 'git_multiproject_stats_collector.sh' : 'git_stats_collector.sh';
+    const plotterName = isMulti ? 'plot_multiproject.py' : 'plot_git.py';
+    const candidateDirs = [
+        path.join(context.extensionPath, 'bundled'),
+        path.join(context.extensionPath, '..'),
+    ];
+    for (const dir of candidateDirs) {
+        const collectorPath = path.join(dir, collectorName);
+        const plotterPath = path.join(dir, plotterName);
+        if (fs.existsSync(collectorPath) && fs.existsSync(plotterPath)) {
+            return {
+                collector: { cmd: 'bash', args: [collectorPath] },
+                plotter: { cmd: 'python3', args: [plotterPath] },
+            };
+        }
     }
-    const pathCommand = isMulti ? 'gitstats-multi' : 'gitstats';
-    if (commandExistsOnPath(pathCommand)) {
-        return { cmd: pathCommand, baseArgs: [] };
+    if (commandExistsOnPath(collectorName) && commandExistsOnPath(plotterName)) {
+        return {
+            collector: { cmd: collectorName, args: [] },
+            plotter: { cmd: plotterName, args: [] },
+        };
     }
     return null;
+}
+// Esegue collector e plotter come farebbe una pipe di shell (`collector ... | plotter`), ma
+// collegando i processi direttamente via stdout/stdin invece di invocare bash -c: evita di
+// dover quotare argomenti (percorsi, date, nomi progetto) dentro una stringa di shell.
+// stderr di entrambi i processi (mai reindirizzato in una pipe di shell reale) è combinato
+// nell'ordine collector-poi-plotter, per restare compatibile con l'unico consumatore dei
+// messaggi "Avviso:" più sotto in runAnalysis.
+function runPipeline(collector, plotter, cwd) {
+    return new Promise((resolve, reject) => {
+        const collectorArgs = [...collector.args];
+        const plotterArgs = [...plotter.args];
+        let p1;
+        let p2;
+        try {
+            p1 = cp.spawn(collector.cmd, collectorArgs, { cwd });
+            p2 = cp.spawn(plotter.cmd, plotterArgs, { cwd });
+        }
+        catch (err) {
+            reject(err);
+            return;
+        }
+        let stderrCollector = '';
+        let stderrPlotter = '';
+        let stdoutPlotter = '';
+        let settled = false;
+        const fail = (err) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            reject(err);
+        };
+        // Se il plotter termina prima di aver letto tutto (es. dipendenze Python mancanti),
+        // la scrittura su p2.stdin genera EPIPE: senza handler sarebbe un errore non gestito
+        // nell'extension host. L'esito lo decide comunque p2 al 'close'.
+        p2.stdin.on('error', () => { });
+        p1.stdout.pipe(p2.stdin);
+        p1.stderr.on('data', (d) => { stderrCollector += d.toString(); });
+        p2.stderr.on('data', (d) => { stderrPlotter += d.toString(); });
+        p2.stdout.on('data', (d) => { stdoutPlotter += d.toString(); });
+        p1.on('error', (err) => fail(new Error(`Impossibile avviare ${collector.cmd}: ${err.message}`)));
+        p2.on('error', (err) => fail(new Error(`Impossibile avviare ${plotter.cmd}: ${err.message}`)));
+        // Se il collector fallisce, p2 riceve EPIPE/stdin chiuso e uscirà anch'esso con
+        // errore: è p2 (l'ultimo anello della pipe, come per una pipe di shell) a decidere
+        // esito e messaggio, con lo stderr del collector anteposto per non perderlo.
+        // Si attende la chiusura di ENTRAMBI i processi: l'ordine dei due 'close' non è
+        // garantito, e l'esito dipende da tutti e due i codici di uscita.
+        let collectorCode;
+        let plotterCode;
+        const finish = () => {
+            if (collectorCode === undefined || plotterCode === undefined || settled) {
+                return;
+            }
+            settled = true;
+            if (plotterCode !== 0 || collectorCode !== 0) {
+                reject(new Error(stderrCollector + stderrPlotter ||
+                    `Processo terminato con codice ${plotterCode !== 0 ? plotterCode : collectorCode}`));
+                return;
+            }
+            resolve({ stdout: stdoutPlotter, stderr: stderrCollector + stderrPlotter });
+        };
+        p1.on('close', (code) => { collectorCode = code; finish(); });
+        p2.on('close', (code) => { plotterCode = code; finish(); });
+    });
 }
 async function runAnalysis(context, paths) {
     const config = vscode.workspace.getConfiguration('git-activity');
@@ -194,51 +276,50 @@ async function runAnalysis(context, paths) {
         title: paths.length > 1 ? `Analisi di ${paths.length} repository...` : "Generazione grafico attività Git...",
         cancellable: false
     }, async (progress) => {
-        return new Promise((resolve, reject) => {
-            const isMulti = paths.length > 1;
-            const runner = resolveRunner(context, isMulti);
-            if (!runner) {
-                const devScriptName = isMulti ? 'gitstat-multi.sh' : 'gitstat.sh';
-                const pathCommand = isMulti ? 'gitstats-multi' : 'gitstats';
-                vscode.window.showErrorMessage(`Script non trovato: né ${devScriptName} accanto all'estensione (modalità sviluppo), ` +
-                    `né "${pathCommand}" nel PATH (installazione da pacchetto .deb). Vedi i Prerequisiti nel README.`);
-                resolve();
-                return;
+        const isMulti = paths.length > 1;
+        const scripts = resolveScriptPaths(context, isMulti);
+        if (!scripts) {
+            const collectorName = isMulti ? 'git_multiproject_stats_collector.sh' : 'git_stats_collector.sh';
+            const plotterName = isMulti ? 'plot_multiproject.py' : 'plot_git.py';
+            vscode.window.showErrorMessage(`Script non trovati: né in bundled/ (pacchetto .vsix), né accanto all'estensione ` +
+                `(modalità sviluppo), né "${collectorName}"/"${plotterName}" nel PATH (pacchetto .deb). ` +
+                `Vedi i Prerequisiti nel README.`);
+            return;
+        }
+        const collectorArgs = isMulti
+            ? [...scripts.collector.args, startDate, endDate, ...paths]
+            : [...scripts.collector.args, startDate, endDate];
+        try {
+            const { stdout, stderr } = await runPipeline({ cmd: scripts.collector.cmd, args: collectorArgs }, scripts.plotter, paths[0]);
+            // Anche in caso di successo, stderr può contenere avvisi utili (es. "nessun
+            // commit trovato prima di...", ownership non calcolata, autore non trovato).
+            // stderr non è mai vuoto su una run normale (skip fetch, alias caricati, i
+            // warning di libreria di Python) — mostrare tutto ad ogni run sarebbe rumore
+            // che nasconde l'avviso vero: i collector prefissano SEMPRE con "Avviso:" ciò
+            // che è pensato per l'utente (vedi git_stats_collector.sh e
+            // git_multiproject_stats_collector.sh), quindi si filtra su quel prefisso.
+            const avvisi = stderr
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line.startsWith('Avviso:'));
+            if (avvisi.length > 0) {
+                vscode.window.showWarningMessage(avvisi.join(' '));
             }
-            const args = isMulti ? [startDate, endDate, ...paths] : [startDate, endDate];
-            cp.execFile(runner.cmd, [...runner.baseArgs, ...args], { cwd: paths[0] }, (error, stdout, stderr) => {
-                if (error) {
-                    vscode.window.showErrorMessage(`Errore nell'esecuzione: ${stderr || error.message}`);
-                    resolve();
-                    return;
-                }
-                // Anche in caso di successo, stderr può contenere avvisi utili (es. "nessun
-                // commit trovato prima di...", ownership non calcolata, autore non trovato).
-                // stderr non è mai vuoto su una run normale (skip fetch, alias caricati, i
-                // warning di libreria di Python) — mostrare tutto ad ogni run sarebbe rumore
-                // che nasconde l'avviso vero: i collector prefissano SEMPRE con "Avviso:" ciò
-                // che è pensato per l'utente (vedi git_stats_collector.sh e
-                // git_multiproject_stats_collector.sh), quindi si filtra su quel prefisso.
-                const avvisi = stderr
-                    .split('\n')
-                    .map(line => line.trim())
-                    .filter(line => line.startsWith('Avviso:'));
-                if (avvisi.length > 0) {
-                    vscode.window.showWarningMessage(avvisi.join(' '));
-                }
-                const outputMatch = stdout.match(/Grafico generato con successo: (.*\.png)/) ||
-                    stdout.match(/Report multi-progetto .* generato con successo: (.*\.png)/);
-                if (outputMatch && outputMatch[1]) {
-                    const pngName = outputMatch[1].trim();
-                    const pngPath = path.isAbsolute(pngName) ? pngName : path.join(paths[0], pngName);
-                    showImageInWebview(context, pngPath);
-                }
-                else {
-                    vscode.window.showInformationMessage('Analisi completata, ma il file immagine non è stato individuato nel log.');
-                }
-                resolve();
-            });
-        });
+            const outputMatch = stdout.match(/Grafico generato con successo: (.*\.png)/) ||
+                stdout.match(/Report multi-progetto .* generato con successo: (.*\.png)/);
+            if (outputMatch && outputMatch[1]) {
+                const pngName = outputMatch[1].trim();
+                const pngPath = path.isAbsolute(pngName) ? pngName : path.join(paths[0], pngName);
+                showImageInWebview(context, pngPath);
+            }
+            else {
+                vscode.window.showInformationMessage('Analisi completata, ma il file immagine non è stato individuato nel log.');
+            }
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Errore nell'esecuzione: ${message}`);
+        }
     });
 }
 function showImageInWebview(context, imagePath) {

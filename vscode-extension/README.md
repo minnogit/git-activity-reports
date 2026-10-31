@@ -14,61 +14,61 @@ Questa estensione per Visual Studio Code genera report visivi sull'attività Git
 ## Installazione
 
 L'estensione non contiene la logica di analisi: al momento di eseguire un comando invoca
-gli script bash/Python del repository come processo figlio. Non basta installare
-l'estensione da sola — serve anche che questi script siano raggiungibili, in uno dei due
-modi descritti sotto. Il codice li cerca in quest'ordine (`resolveRunner` in
-`src/extension.ts`): prima accanto alla cartella dell'estensione (modalità sviluppo),
-poi `gitstats`/`gitstats-multi` nel `PATH` (modalità installata via pacchetto).
+direttamente il collector e il plotter (`git_stats_collector.sh`/`plot_git.py` o le loro
+varianti multi-repo) come una pipe di due processi figli, MAI i wrapper `gitstat(-multi).sh`
+— quelli restano solo per l'uso a riga di comando. Il codice risolve i loro percorsi in
+questo ordine (`resolveScriptPaths` in `src/extension.ts`):
 
-### Prerequisiti (in entrambi i casi)
+1. `bundled/` dentro l'estensione stessa — popolata da `npm run copy-bundled` durante
+   `vscode:prepublish` e quindi già presente in ogni `.vsix` impacchettato: è ciò che rende
+   un'installazione da VSIX/Marketplace autosufficiente, senza bisogno del pacchetto `.deb`.
+2. La cartella genitrice di `vscode-extension/` (il checkout del repo) — modalità sviluppo,
+   quando l'estensione gira da lì senza che `copy-bundled` sia mai stato eseguito.
+3. Gli stessi nomi di script nel `PATH` — come installati dal pacchetto `.deb`, per chi ha
+   installato quello ma un `.vsix` non ricompilato con gli script più recenti.
+
+### Prerequisiti (in tutti i casi)
 
 - [Visual Studio Code](https://code.visualstudio.com/) versione 1.80.0 o superiore.
 - Git installato sul sistema.
-- **Python 3 con `pandas` e `matplotlib`** — i comandi `gitstat(-multi).sh`/
-  `gitstats(-multi)` sono una pipe verso `plot_git.py`/`plot_multiproject.py`: senza
-  queste dipendenze la generazione del grafico fallisce anche se il resto funziona.
+- **Python 3 con `pandas` e `matplotlib`** — la pipe verso `plot_git.py`/
+  `plot_multiproject.py` fallisce senza queste dipendenze anche se il resto funziona.
 - [Node.js](https://nodejs.org/) solo se compili l'estensione da sorgente.
 
-### Opzione A — Pacchetto CLI installato sul sistema + estensione da VSIX
+### Opzione A — Installazione da VSIX (autosufficiente)
 
-Questa è l'opzione per un utilizzo "normale" (non da sviluppatore dell'estensione):
+Questa è l'opzione per un utilizzo "normale" (non da sviluppatore dell'estensione): il
+`.vsix` include già gli script necessari (`bundled/`, vedi sopra), non serve installare
+nient'altro sul sistema oltre a Python e le sue librerie.
 
-1. Installa gli script sul sistema con il pacchetto `.deb` del repository principale
-   (workflow `.github/workflows/build-deb.yml`, si attiva sui tag `v*`), oppure copiando
-   a mano `git_stats_collector.sh`, `git_multiproject_stats_collector.sh`, `plot_git.py`,
-   `plot_multiproject.py` in una cartella nel `PATH` e rinominando `gitstat.sh`/
-   `gitstat-multi.sh` in `gitstats`/`gitstats-multi` nella stessa cartella.
-2. Verifica che siano raggiungibili: `command -v gitstats && command -v gitstats-multi`.
-3. Impacchetta e installa l'estensione:
+```bash
+cd vscode-extension
+npm install -g vsce   # se non l'hai già
+npm install
+vsce package          # esegue copy-bundled + compile, genera git-activity-reports-<versione>.vsix
+code --install-extension git-activity-reports-<versione>.vsix
+```
 
-   ```bash
-   cd vscode-extension
-   npm install -g vsce   # se non l'hai già
-   npm install
-   npm run compile
-   vsce package          # genera git-activity-reports-<versione>.vsix
-   code --install-extension git-activity-reports-<versione>.vsix
-   ```
+In alternativa, da VS Code: Extensions (Ctrl+Shift+X) → icona ingranaggio →
+"Install from VSIX..." → seleziona il file generato.
 
-   In alternativa, da VS Code: Extensions (Ctrl+Shift+X) → icona ingranaggio →
-   "Install from VSIX..." → seleziona il file generato.
-
-**Nota importante:** il file `.vsix` contiene SOLO i file dell'estensione stessa — `vsce
-package` non può includere script che vivono nella cartella genitrice del repository, e
-un'estensione installata da VSIX finisce in `~/.vscode/extensions/...`, scollegata dal
-checkout. Per questo il passo 1 (script raggiungibili dal `PATH`) è necessario, non
-opzionale: senza di esso l'estensione mostra l'errore "Script non trovato" al primo
-utilizzo.
+Chi preferisce comunque gli strumenti da riga di comando (`gitstats`/`gitstats-multi`) può
+installare anche il pacchetto `.deb` del repository principale (workflow
+`.github/workflows/build-deb.yml`) — l'estensione non ne ha più bisogno, ma resta un
+fallback valido (punto 3 sopra) se un giorno un `.vsix` più vecchio non avesse ancora gli
+script più recenti in `bundled/`.
 
 ### Opzione B — Modalità sviluppo (esecuzione da dentro il checkout del repo)
 
 Utile se stai modificando l'estensione o non vuoi installare nulla stabilmente:
 
 1. Clona il repository (l'estensione deve restare nella sua posizione, `vscode-extension/`,
-   accanto a `gitstat.sh`/`gitstat-multi.sh`).
+   accanto a `git_stats_collector.sh`/`git_multiproject_stats_collector.sh`/`plot_git.py`/
+   `plot_multiproject.py`).
 2. `cd vscode-extension && npm install && npm run compile`.
 3. Premi `F5` in VS Code: si apre una finestra "Extension Development Host" con
-   l'estensione già attiva, che userà gli script del checkout senza bisogno del `PATH`.
+   l'estensione già attiva, che userà gli script del checkout (punto 2 della risoluzione
+   sopra) senza bisogno di `bundled/` né del `PATH`.
 
 ### Marketplace
 
@@ -108,9 +108,15 @@ l'estensione mostra un errore invece di passarlo comunque agli script sottostant
 - `src/extension.ts`: Codice principale dell'estensione in TypeScript.
 - `package.json`: Metadati e configurazione dell'estensione.
 - `out/`: File JavaScript compilati (generati da TypeScript).
-- Script bash: `gitstat.sh` e `gitstat-multi.sh`, nella directory genitore dell'estensione
-  — usati in modalità sviluppo (vedi Opzione B sopra); in produzione si usa invece il
-  fallback su `gitstats`/`gitstats-multi` nel `PATH` (`resolveRunner` in `extension.ts`).
+- `scripts/copy-bundled.js`: copia i 4 script collector/plotter dalla root del repo dentro
+  `bundled/` (invocato da `npm run copy-bundled`, parte di `vscode:prepublish`) — non fa
+  parte del pacchetto (`.vscodeignore`), è solo un passo di build.
+- `bundled/`: script collector/plotter copiati da `copy-bundled.js`, inclusi nel `.vsix` —
+  artefatto di build, non committato (vedi `.gitignore` nella root).
+- Script bash nella directory genitrice dell'estensione (`git_stats_collector.sh`,
+  `git_multiproject_stats_collector.sh`, `plot_git.py`, `plot_multiproject.py`) — usati in
+  modalità sviluppo se `bundled/` non è ancora stata popolata (`resolveScriptPaths` in
+  `extension.ts`, vedi "Installazione" sopra per l'ordine di risoluzione completo).
 
 ### Come Contribuire
 
