@@ -1,15 +1,30 @@
 # Git Activity Reports
 
-## Descrizione
-
-Questa estensione per Visual Studio Code genera report visivi sull'attività Git dei tuoi progetti. Permette di visualizzare grafici di commit, contributi e statistiche in base a date personalizzabili, utilizzando script bash per l'analisi.
+Genera da VS Code grafici e statistiche sull'attività Git (commit, righe modificate, giorni
+attivi, autori) di un repository o di un intero workspace, a partire da un intervallo di date.
 
 ## Funzionalità
 
-- **Analizza Progetto Corrente**: Genera un grafico di attività per il progetto attualmente aperto in VSCode.
-- **Analizza Tutto il Workspace**: Supporta l'analisi multi-repository per progetti complessi.
-- **Configurazione Personalizzata**: Imposta date di inizio e fine per l'analisi tramite le impostazioni di VSCode.
-- **Visualizzazione Integrata**: I grafici vengono mostrati direttamente in un Webview all'interno di VSCode.
+- **Analizza Progetto Corrente**: grafico di attività del repository in cui stai lavorando.
+- **Analizza Tutto il Workspace (Multi-Repo)**: report comparativo di tutti i repository Git
+  trovati nel workspace (fino a 3 livelli di profondità).
+- **Intervallo di date configurabile**, anche relativo (`30 days ago`, `last monday`).
+- **Grafico integrato** in un pannello, salvato come PNG; dalla notifica finale puoi
+  salvarne una copia o mostrarlo nella cartella.
+- Gli autori con più identità Git si raggruppano con `git-activity-aliases.json` (vedi il
+  [README del progetto](../README.md)).
+
+I numeri sono indicatori, non misure assolute: la lettura dei grafici è spiegata nel
+[README del progetto](../README.md).
+
+## Requisiti
+
+- **Linux o macOS con bash e GNU `date`** (su macOS serve GNU coreutils: `date -d` di BSD non
+  funziona). Windows nativo non è supportato: usa WSL.
+- **Git** nel `PATH`.
+- **Python 3 con `pandas` e `matplotlib`**: senza, il grafico non viene generato.
+- VS Code 1.80 o superiore, con un **workspace attendibile** e su filesystem reale
+  (l'estensione esegue script locali: non funziona in workspace virtuali).
 
 ## Installazione
 
@@ -72,7 +87,7 @@ Utile se stai modificando l'estensione o non vuoi installare nulla stabilmente:
 
 ### Marketplace
 
-L'estensione non è pubblicata su VS Code Marketplace.
+L'estensione non è (ancora) pubblicata su VS Code Marketplace.
 
 ## Uso
 
@@ -80,9 +95,25 @@ L'estensione non è pubblicata su VS Code Marketplace.
 2. Premi `Ctrl+Shift+P` per aprire la Command Palette.
 3. Cerca e seleziona:
    - **Git Activity: Analizza Progetto Corrente** per analizzare il progetto singolo.
-   - **Git Activity: Analizza Tutto il Workspace** per analizzare multi-repository.
+   - **Git Activity: Analizza Tutto il Workspace (Multi-Repo)** per analizzare multi-repository.
 4. L'estensione mostrerà una barra di progresso durante l'elaborazione.
-5. Una volta completato, si aprirà un pannello Webview con il grafico PNG generato.
+5. Una volta completato, si aprirà un pannello con il grafico e una notifica col percorso del
+   file, da cui puoi **salvarne una copia** o **mostrarlo nella cartella**.
+
+I titoli dei comandi seguono la lingua di VS Code (inglese o italiano).
+
+### Dove viene salvato il PNG
+
+Il nome del file è sempre lo stesso a ogni analisi (`git_stats.png` per il singolo repo): una
+nuova analisi sovrascrive la precedente, quindi salvane una copia se vuoi conservarla. La
+cartella è, in ordine:
+
+1. l'impostazione `git-activity.outputDir`, se valorizzata;
+2. per il multi-repo, la prima cartella del workspace (di norma quella che contiene i repo);
+3. per il singolo repo, la cartella di storage dell'estensione — non quella del repo, per
+   non far comparire il PNG come file non tracciato in `git status`.
+
+Il report multi-repo si chiama `git_activity_multi_project_report_<inizio>_<fine>.png`.
 
 ### Configurazione
 
@@ -93,6 +124,7 @@ Puoi personalizzare le date di analisi nelle impostazioni di VSCode:
 - Modifica:
   - `Start Date`: Data di inizio (es. "2023-01-01" o "30 days ago").
   - `End Date`: Data di fine (es. "now" o "2023-12-31").
+  - `Output Dir`: cartella del PNG generato (vuota = vedi sopra; supporta `~`).
 
 Il valore può essere sia una data assoluta (`YYYY-MM-DD`) sia un'espressione relativa —
 qualunque cosa capisca `date -d` (GNU date): "yesterday", "2 weeks ago", "last monday",
@@ -106,7 +138,10 @@ l'estensione mostra un errore invece di passarlo comunque agli script sottostant
 ### Struttura del Progetto
 
 - `src/extension.ts`: Codice principale dell'estensione in TypeScript.
-- `package.json`: Metadati e configurazione dell'estensione.
+- `package.json`: Metadati e configurazione dell'estensione. Testi visibili all'utente in
+  `package.nls.json` (inglese) e `package.nls.it.json`; messaggi a runtime in
+  `l10n/bundle.l10n.it.json` (la chiave è la stringa inglese passata a `vscode.l10n.t`).
+- `images/icon.png`: icona (128×128, segnaposto). `CHANGELOG.md`: modifiche per versione.
 - `out/`: File JavaScript compilati (generati da TypeScript).
 - `scripts/copy-bundled.js`: copia i 4 script collector/plotter dalla root del repo dentro
   `bundled/` (invocato da `npm run copy-bundled`, parte di `vscode:prepublish`) — non fa
@@ -153,7 +188,7 @@ l'estensione mostra un errore invece di passarlo comunque agli script sottostant
 
 ## Licenza
 
-[Specifica la licenza, es. MIT]
+MIT, vedi [LICENSE](LICENSE).
 
 ## Contatti
 

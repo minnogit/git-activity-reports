@@ -357,6 +357,21 @@ PNG risultante in una webview. Punti chiave:
   (stesso ordine che avrebbe una pipe di shell reale, dove nessuno dei due stderr è
   rediretto) — l'esito/errore finale segue quello del plotter (ultimo anello della pipe), con
   lo stderr del collector anteposto per non perderlo se è il collector a fallire.
+- **Cartella di output e cwd** (`resolveOutputDir`/`runPipeline`): il plotter scrive il PNG nella
+  PROPRIA cwd, quindi collector e plotter hanno cwd diverse. Plotter: sempre la cartella di output
+  (impostazione `git-activity.outputDir`; altrimenti workspace per il multi-repo, `globalStorageUri`
+  per il singolo — mai il repo analizzato, dove il PNG finirebbe come file non tracciato). Collector
+  singolo: cwd = il repo (analizza "il repo nella cartella corrente" e trova un eventuale
+  `./git-activity-aliases.json` al suo interno); multi-repo: cwd = cartella di output (riceve percorsi
+  assoluti). Il collector singolo va invocato con `json` ESPLICITO (default `text`, il plotter rifiuta
+  testo): lo faceva `gitstat.sh`, bypassato dall'estensione — regressione già avvenuta una volta.
+- **Localizzazione**: i messaggi a runtime usano `vscode.l10n.t()` con l'inglese come chiave; le
+  traduzioni sono in `l10n/bundle.l10n.it.json` (chiave = stringa inglese esatta, vanno tenute
+  allineate a mano). Titoli comandi/impostazioni stanno in `package.nls*.json`. Gli avvisi "Avviso:" dei
+  collector restano in italiano (vengono dallo script bash, non dall'estensione).
+- `package.json` dichiara `capabilities` (workspace non attendibili/virtuali non supportati): l'estensione
+  esegue script bash/Python sui repo del workspace. `images/icon.png` è un segnaposto e l'unico PNG
+  tracciato (eccezione in `.gitignore`, che altrimenti esclude `*.png`).
 - Trova il PNG generato facendo match via regex sull'output testuale dei collector
   (`"Grafico generato con successo: ..."` / `"Report multi-progetto ... generato con successo: ..."`):
   se si cambia il messaggio di successo negli script bash, aggiornare anche queste regex.

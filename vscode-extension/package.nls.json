@@ -1,0 +1,10 @@
+{
+  "description": "Charts and statistics of Git activity (commits, churn, active days, authors) for one repository or a whole workspace.",
+  "command.analyzeProject.title": "Analyze Current Project",
+  "command.analyzeWorkspace.title": "Analyze Whole Workspace (Multi-Repo)",
+  "config.startDate": "Start date of the analysis (e.g. YYYY-MM-DD or '30 days ago'; anything GNU `date -d` understands).",
+  "config.endDate": "End date of the analysis (e.g. YYYY-MM-DD or 'now').",
+  "config.outputDir": "Folder where the generated PNG is written. Empty: the workspace folder for multi-repo analysis, the extension's storage folder for a single repository (so the report never appears as an untracked file in the analyzed repo). Supports a leading `~`.",
+  "capabilities.untrusted": "The extension runs bash and Python scripts on the repositories of the workspace, so it needs a trusted workspace.",
+  "capabilities.virtual": "The extension needs a real filesystem: it runs git and local scripts."
+}

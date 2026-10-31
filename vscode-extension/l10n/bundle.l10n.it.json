@@ -1,0 +1,18 @@
+{
+  "No workspace is open.": "Nessun workspace aperto.",
+  "Could not find a Git repository in the current context.": "Non è stato possibile trovare un repository Git nel contesto attuale.",
+  "Searching for Git repositories in the workspace...": "Ricerca repository Git nel workspace...",
+  "No Git repository found in the workspace.": "Nessun repository Git trovato nel workspace.",
+  "Could not start {0}: {1}": "Impossibile avviare {0}: {1}",
+  "Process exited with code {0}": "Processo terminato con codice {0}",
+  "Invalid date in settings: \"{0}\". Use a format that \"date -d\" understands (e.g. \"2025-11-01\", \"30 days ago\", \"now\").": "Data non valida nelle impostazioni: \"{0}\". Usa un formato che \"date -d\" riconosce (es. \"2025-11-01\", \"30 days ago\", \"now\").",
+  "Analyzing {0} repositories...": "Analisi di {0} repository...",
+  "Generating Git activity chart...": "Generazione grafico attività Git...",
+  "Scripts not found: neither in bundled/ (.vsix package), next to the extension (development mode), nor \"{0}\"/\"{1}\" on the PATH (.deb package). See the Requirements in the README.": "Script non trovati: né in bundled/ (pacchetto .vsix), né accanto all'estensione (modalità sviluppo), né \"{0}\"/\"{1}\" nel PATH (pacchetto .deb). Vedi i Prerequisiti nel README.",
+  "Analysis completed, but the image file was not found in the log.": "Analisi completata, ma il file immagine non è stato individuato nel log.",
+  "Execution error: {0}": "Errore nell'esecuzione: {0}",
+  "Save as…": "Salva con nome…",
+  "Show in folder": "Mostra nella cartella",
+  "Report saved to {0}": "Report salvato in {0}",
+  "PNG image": "Immagine PNG"
+}
