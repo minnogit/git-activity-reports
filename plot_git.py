@@ -69,6 +69,7 @@ import json
 import os
 import subprocess
 import sys
+import textwrap
 from datetime import date, timedelta
 
 import matplotlib
@@ -135,6 +136,7 @@ STRINGS = {
         "own_caption": "Istantanea al commit {ref} del {date} · {total} righe totali "
                        "(git blame, nessuna esclusione) · non è una somma sul periodo: può "
                        "includere autori non attivi in questo report",
+        "limits_note": "Questi grafici contano commit e righe modificate: misurano la quantità, non la qualità né la difficoltà del lavoro. Il lavoro che non passa da commit git (per esempio attivare servizi a un cliente o migrare database), le assenze e le ferie qui non si vedono.",
         "thousands_sep": ".",
     },
     "en": {
@@ -164,6 +166,7 @@ STRINGS = {
         "own_caption": "Snapshot at commit {ref} of {date} · {total} total lines "
                        "(git blame, no exclusions) · not a sum over the period: it may "
                        "include authors not active in this report",
+        "limits_note": "These charts count commits and changed lines: they measure quantity, not the quality or difficulty of the work. Work that doesn't go through git commits (for example activating services for a customer or migrating databases), absences and holidays are not visible here.",
         "thousands_sep": ",",
     },
 }
@@ -247,6 +250,10 @@ LEGEND_ROW1_INCHES = 0.230
 LEGEND_EXTRA_ROW_INCHES = 0.1925
 LEGEND_BOTTOM_PAD_INCHES = 0.08   # distanza tra il bordo inferiore della figura e la legenda
 NOTE_INCHES = 0.30                # spazio per la nota sotto la tabella, sopra la legenda
+# Riquadro «cosa non misura» (fra la legenda e il resto): testo da 8 pt a capo automatico.
+LIMITS_WRAP_CHARS = 190           # caratteri per riga (la figura è larga 17": ne servono ~13)
+LIMITS_LINE_INCHES = 0.155        # una riga a 8 pt con linespacing 1.3
+LIMITS_GAP_INCHES = 0.06          # fra la cima della legenda e il riquadro
 
 
 # -----------------------------------------------------------------------------
@@ -752,23 +759,28 @@ def ownership_caption(ownership):
 FOOTER_GAP_INCHES = 0.12   # aria minima fra il fondo dell'ultimo pannello e la legenda
 
 
-def fit_footer(fig, last_ax, legend, footer_inches, suptitle):
+def fit_footer(fig, last_ax, anchored, footer_inches, suptitle):
     """Allunga la figura se il fondo dell'ultimo pannello (etichetta dell'asse e
-    didascalia comprese) scende sotto la cima della legenda.
+    didascalie comprese) scende sotto la cima del footer.
+
+    `anchored` = elementi del footer (legenda, riquadro dei limiti) con la loro distanza in
+    POLLICI dal bordo inferiore: `[(artista, pollici), ...]` (i None si ignorano).
 
     Il footer è dimensionato per la nota della tabella (NOTE_INCHES), ma quando l'ultima
     riga è la punch card o l'ownership sotto l'asse ci sono anche un'etichetta x e una
     didascalia: misurato, con l'ownership in fondo "Righe (git blame)" finiva sotto la
     legenda. Invece di un'altra costante per ogni combinazione di pannelli, si misura il
     contenuto EFFETTIVAMENTE disegnato (bbox reali dopo draw()) e si aggiunge solo lo spazio
-    mancante. Header, righe e legenda restano alla stessa distanza in POLLICI dai bordi
-    (stessa logica delle costanti in testa): cresce solo il footer.
+    mancante. Header, righe e footer restano alla stessa distanza in POLLICI dai bordi
+    (stessa logica delle costanti in testa): cresce solo lo spazio fra l'ultimo pannello e
+    il footer, e ogni elemento del footer viene ri-ancorato alla nuova altezza.
     """
+    anchored = [(a, y) for a, y in anchored if a is not None]
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     content_bottom = last_ax.get_tightbbox(renderer).y0           # pixel dal basso
-    legend_top = legend.get_window_extent(renderer).y1 if legend else 0.0
-    overlap_px = legend_top + FOOTER_GAP_INCHES * fig.dpi - content_bottom
+    footer_top = max((a.get_window_extent(renderer).y1 for a, _ in anchored), default=0.0)
+    overlap_px = footer_top + FOOTER_GAP_INCHES * fig.dpi - content_bottom
     if overlap_px <= 0:
         return
     extra = overlap_px / fig.dpi
@@ -778,9 +790,11 @@ def fit_footer(fig, last_ax, legend, footer_inches, suptitle):
     fig.subplots_adjust(top=1 - HEADER_INCHES / new_height,
                         bottom=(footer_inches + extra) / new_height)
     suptitle.set_y(1 - SUPTITLE_INCHES / new_height)
-    if legend:
-        legend.set_bbox_to_anchor((0.5, LEGEND_BOTTOM_PAD_INCHES / new_height),
-                                  transform=fig.transFigure)
+    for artist, inches in anchored:
+        if hasattr(artist, "set_bbox_to_anchor"):        # legenda
+            artist.set_bbox_to_anchor((0.5, inches / new_height), transform=fig.transFigure)
+        else:                                            # testo
+            artist.set_y(inches / new_height)
 
 
 # -----------------------------------------------------------------------------
@@ -886,7 +900,9 @@ def main():
     legend_ncol = min(n_legend_labels, 6) or 1
     legend_rows = -(-n_legend_labels // legend_ncol)  # ceiling division
     legend_height = LEGEND_ROW1_INCHES + max(0, legend_rows - 1) * LEGEND_EXTRA_ROW_INCHES
-    footer_inches = LEGEND_BOTTOM_PAD_INCHES + legend_height + NOTE_INCHES
+    limits_text = textwrap.fill(T["limits_note"], width=LIMITS_WRAP_CHARS)
+    limits_height = LIMITS_GAP_INCHES + LIMITS_LINE_INCHES * (limits_text.count("\n") + 1)
+    footer_inches = LEGEND_BOTTOM_PAD_INCHES + legend_height + limits_height + NOTE_INCHES
 
     fig_height = rows_height + HEADER_INCHES + footer_inches
     fig_top = 1 - HEADER_INCHES / fig_height
@@ -959,6 +975,12 @@ def main():
                         fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
                         bbox_to_anchor=(0.5, LEGEND_BOTTOM_PAD_INCHES / fig_height))
 
+    # Riquadro «cosa non misura»: sopra la legenda, ancorato in pollici dal bordo inferiore
+    # come la legenda (fit_footer() li ri-ancora insieme se la figura si allunga).
+    limits_y = LEGEND_BOTTOM_PAD_INCHES + legend_height + LIMITS_GAP_INCHES
+    limits_artist = fig.text(0.02, limits_y / fig_height, limits_text, fontsize=8,
+                             color=INK_MUTED, va="bottom", ha="left", linespacing=1.3)
+
     # tight_layout() qui NON funziona: con un gridspec a >2 righe di altezze disomogenee
     # (già vero per il layout base ora, non solo con punch card/ownership) e/o un asse
     # aggiuntivo "incompatibile" (la colorbar del punch card, la legenda a livello di
@@ -986,7 +1008,8 @@ def main():
     label_span = current_left - min_x0   # larghezza dell'etichetta più lunga, in frazione di figura
     left_margin = max(0.035, label_span + 0.015)   # + un piccolo margine di sicurezza
     fig.subplots_adjust(left=left_margin)
-    fit_footer(fig, last_ax, legend, footer_inches, suptitle)
+    fit_footer(fig, last_ax, [(legend, LEGEND_BOTTOM_PAD_INCHES), (limits_artist, limits_y)],
+               footer_inches, suptitle)
     fig.savefig(OUTPUT_FILENAME, dpi=200)
     # Messaggio invariato: l'estensione VS Code lo intercetta via regex.
     print(f"Grafico generato con successo: {OUTPUT_FILENAME}")
