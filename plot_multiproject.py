@@ -15,7 +15,11 @@ di quanto sono attendibili — non di quanto sono impressionanti:
                  Primo pannello, a piena larghezza, come MATRICE DI PRESENZA (autori in
                  ordine alfabetico × periodi, cella = giorni attivi su tutti i progetti):
                  CHI ha lavorato QUANDO, senza ordinare né sommare per persona.
-  commit         Numero di commit (esclusi i merge). RIGA 2, interamente sua: barre
+                 Secondo pannello, anch'esso a piena larghezza: matrice PROGETTI × periodi (cella =
+                 giorni con attività nel progetto, su tutti gli autori): DOVE va il lavoro nel
+                 tempo, a livello di progetto (righe per attività decrescente: sono progetti,
+                 non persone). Saltati entrambi se il JSON non ha date né dettaglio giornaliero.
+  commit         Numero di commit (esclusi i merge). RIGA 3, interamente sua: barre
                  impilate per progetto e autore, più la ciambella di distribuzione per
                  progetto affiancata (la stessa cosa a due livelli di dettaglio).
   churn          = aggiunte + 0.4 * rimozioni
@@ -25,7 +29,7 @@ di quanto sono attendibili — non di quanto sono impressionanti:
                    commento in testa a quello script per il perché — in breve, qualunque
                    esclusione basata su directory può rompere il rilevamento dei rename
                    di git, misurato fino a 9.7x di inflazione su una singola giornata).
-                   RIGA 3, stesso trattamento del commit (barre impilate + ciambella
+                   RIGA 4, stesso trattamento del commit (barre impilate + ciambella
                    affiancate) ma sotto, non sopra: coerenza fra "quanto è attendibile" e
                    "quanto è in evidenza" era assente nelle versioni precedenti, dove il
                    churn occupava DUE pannelli e il commit zero, nascosto nella sola
@@ -111,6 +115,7 @@ ROW_UNIT_INCHES = 3.427   # altezza in pollici di UNA unità di height_ratio: ma
                           # costante lascia le prime tre righe della stessa dimensione
                           # assoluta qualunque sia l'altezza della tabella
 TABLE_RATIO_MIN = 0.30    # una tabella con una riga sola non deve collassare
+MAX_PROJECT_ROWS = 20        # righe massime della matrice progetti × tempo (oltre: nota)
 MAX_MATRIX_ROWS = 30         # righe massime di una matrice di presenza (oltre: nota, mai taglio muto)
 MATRIX_CELL_INCHES = 0.30    # altezza di una riga di cella: abbastanza per una cifra da 8 pt
 MATRIX_MIN_AXES_INCHES = 0.60
@@ -147,6 +152,8 @@ STRINGS = {
         "presence_title": "Presenza per autore, tutti i progetti (giorni attivi per {bucket})",
         "presence_caption": "Più scuro = più giorni attivi",
         "presence_hidden": "mostrati {shown} autori su {total} (i più attivi)",
+        "projects_title": "Attività per progetto nel tempo (giorni attivi per {bucket})",
+        "projects_hidden": "mostrati {shown} progetti su {total} (i più attivi)",
         "commits_title": "Commit per progetto e autore",
         "commits_ylabel": "Commit",
         "commits_donut": "Distribuzione dei commit per progetto",
@@ -170,6 +177,8 @@ STRINGS = {
         "presence_title": "Presence by author, all projects (active days per {bucket})",
         "presence_caption": "Darker = more active days",
         "presence_hidden": "showing {shown} of {total} authors (most active)",
+        "projects_title": "Activity by project over time (active days per {bucket})",
+        "projects_hidden": "showing {shown} of {total} projects (most active)",
         "commits_title": "Commits by project and author",
         "commits_ylabel": "Commits",
         "commits_donut": "Commit distribution by project",
@@ -762,6 +771,7 @@ def main():
     # con JSON legacy il pannello viene saltato (non lasciato vuoto).
     has_matrix = (not days_df.empty and start not in ("N/A", "") and end not in ("N/A", ""))
     pres_matrix = pres_authors = pres_caption = col_labels = None
+    proj_matrix = proj_names = proj_caption = None
     bucket_name = ""
     freq = "D"
     if has_matrix:
@@ -775,10 +785,20 @@ def main():
         if pres_hidden:
             pres_caption += " · " + T["presence_hidden"].format(
                 shown=len(pres_authors), total=len(pres_authors) + pres_hidden)
+        # Asse del tempo a livello di PROGETTO (non di persona): giorni distinti con attività
+        # nel progetto, su tutti gli autori. Righe per attività totale decrescente: sono
+        # progetti, quindi l'ordinamento è lecito (e fa leggere subito dove va il lavoro).
+        proj_matrix, proj_names, proj_hidden, _ = matrix_inputs(
+            days_df, "project", full, freq, MAX_PROJECT_ROWS)
+        proj_caption = T["presence_caption"]
+        if proj_hidden:
+            proj_caption += " · " + T["projects_hidden"].format(
+                shown=len(proj_names), total=len(proj_names) + proj_hidden)
 
     apply_style()
-    # 4 righe: giorni attivi da solo (il più affidabile, in cima), poi UNA RIGA PER
-    # METRICA — commit (riga 2), churn (riga 3) — con dentro barre impilate e ciambella
+    # 5 righe: due matrici nel tempo in cima (presenza per autore, attività per progetto;
+    # assenti con JSON legacy), poi UNA RIGA PER METRICA — commit, churn — con dentro barre
+    # impilate e ciambella
     # della stessa metrica affiancate. Due ragioni, entrambe misurate:
     #
     #   1. Barre e ciambella della stessa metrica raccontano la stessa cosa a due livelli
@@ -816,7 +836,9 @@ def main():
     if has_matrix:
         matrix_ratio = max(MATRIX_MIN_AXES_INCHES,
                            MATRIX_CELL_INCHES * len(pres_authors)) / ROW_UNIT_INCHES
-        ratios = [matrix_ratio] + ratios
+        proj_ratio = max(MATRIX_MIN_AXES_INCHES,
+                         MATRIX_CELL_INCHES * len(proj_names)) / ROW_UNIT_INCHES
+        ratios = [matrix_ratio, proj_ratio] + ratios
     # Altezza figura che rende ROW_UNIT_INCHES l'altezza di un'unità di ratio: le righe
     # occupano sum(ratios) unità, più un gap fra righe pari a hspace × altezza media,
     # più header e footer (assoluti, vedi le costanti in testa).
@@ -848,6 +870,11 @@ def main():
         ax1 = fig.add_subplot(gs[row, :])
         panel_matrix(ax1, pres_matrix, pres_authors, col_labels,
                      T["presence_title"].format(bucket=bucket_name), pres_caption,
+                     show_numbers=(freq != "D"))
+        row += 1
+        ax1b = fig.add_subplot(gs[row, :])
+        panel_matrix(ax1b, proj_matrix, proj_names, col_labels,
+                     T["projects_title"].format(bucket=bucket_name), proj_caption,
                      show_numbers=(freq != "D"))
         row += 1
 
