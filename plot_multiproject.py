@@ -44,7 +44,7 @@ confrontare progetti diversi. Un confronto commit-vs-churn onesto richiede un pa
 dedicato (es. churn per commit per progetto), non due pannelli affiancati; per ora la
 tabella di riepilogo resta il posto dove leggere le due metriche sullo stesso progetto.
 
-Nota storica: fino alla v3 il report aveva anche un INDICE composito (somma sui giorni di
+Nota storica: le versioni precedenti del report avevano anche un INDICE composito (somma sui giorni di
 ln(1 + churn_giorno con tetto) e ln(1 + file distinti)), relegato alla tabella. È stato
 rimosso: era la parte più simile a un punteggio e invitava a leggere la tabella come una
 classifica. Due lezioni misurate restano utili anche senza di lui: una forma moltiplicativa

@@ -632,14 +632,20 @@ dell'interfaccia di VS Code.
 
 I pannelli sono ordinati per quanto sono attendibili, non per quanto sono
 impressionanti — churn è per ultimo, non per primo (vedi
-[Metriche Calcolate](#-metriche-calcolate) sul perché):
+[Metriche Calcolate](#-metriche-calcolate) sul perché). Il report **non valuta le
+persone**: nessun punteggio, nessun totale per autore, autori in ordine alfabetico. Per
+vedere il lavoro di una persona si filtra per autore al collector.
 
 | Pannello | Cosa mostra |
 |---|---|
-| 1. Giorni attivi per autore | Piena larghezza, in cima: la metrica più robusta, continuità del contributo |
-| 2. Commit nel tempo, per autore | Barre impilate. Frequenza di consegna, indipendente dalla dimensione |
+| 1. Presenza per autore | Piena larghezza, in cima: matrice autori (in ordine alfabetico) × periodi, ogni cella è il numero di giorni attivi (più scuro = più giorni). Dice **chi** ha lavorato **quando**, non quanto. Numeri dentro le celle con periodi settimanali o mensili; oltre 30 autori si mostrano i più attivi, con una nota |
+| 2. Commit nel tempo, per autore | Barre impilate (autori in ordine alfabetico). Frequenza di consegna, indipendente dalla dimensione |
 | 3. Churn nel tempo, per autore | Barre impilate + linea di trend (media mobile). Volume di cambiamento, **senza esclusioni**. Affiancato al pannello 2 per il confronto diretto |
-| 4. Riepilogo per autore | Tabella con churn, commit, giorni attivi, file, indice |
+| 4. Riepilogo del periodo | Una riga di totali del repository (commit, churn, file, giorni attivi, autori): nessun totale per persona |
+
+In fondo al report, sopra la legenda, un riquadro ricorda cosa i grafici **non** misurano:
+la qualità e la difficoltà del lavoro, il lavoro che non passa da commit git (per esempio
+attivare servizi a un cliente o migrare database), le assenze e le ferie.
 
 **Granularità adattiva:** l'asse temporale si adatta automaticamente al periodo, perché
 una barra al giorno diventa illeggibile su intervalli lunghi:
@@ -682,25 +688,31 @@ inevitabile) e può essere costoso su repository molto grandi — `--no-ownershi
 
 ### Report Multi-Repository
 
-Stesso principio dell'ordine di attendibilità, organizzato **una riga per metrica**: la
-riga 2 è tutta sul commit, la riga 3 tutta sul churn. Dentro ciascuna riga, barre e
-ciambella raccontano la stessa cosa a due livelli di dettaglio — dove si concentra
-l'attività, e la quota sul totale.
+Stesso principio dell'ordine di attendibilità. In cima due matrici nel tempo (presenza
+per autore e attività per progetto); sotto, **una riga per metrica**: la riga dei commit e
+quella del churn. Dentro ciascuna riga, barre e ciambella raccontano la stessa cosa a due
+livelli di dettaglio — dove si concentra l'attività, e la quota sul totale. Come nel
+report singolo, nessun punteggio né totale per persona.
 
 | Pannello | Cosa mostra |
 |---|---|
-| 1. Giorni attivi per autore | Continuità del contributo, sommata sui progetti. Il più affidabile, da solo in cima |
-| 2. Commit per progetto e autore | Barre impilate. Più affidabile del churn (vedi sotto) |
-| 3. Distribuzione dei commit | Quota per progetto (ciambella; barra 100% se i progetti sono < 3) |
-| 4. Churn per progetto e autore | Barre impilate, **senza esclusioni**. Sotto il commit, non accanto: è la metrica meno indicativa |
-| 5. Distribuzione del churn | Stesso trattamento del pannello 3, per il churn |
-| 6. Riepilogo per progetto | Tabella con churn, commit, giorni attivi, file, autori, indice |
+| 1. Presenza per autore, tutti i progetti | Matrice autori (ordine alfabetico) × periodi: giorni attivi su tutti i progetti, più scuro = più giorni |
+| 2. Attività per progetto nel tempo | Matrice progetti × periodi: giorni con attività nel progetto, su tutti gli autori. Dove va il lavoro e come si sposta. Righe per attività decrescente (sono progetti, non persone); oltre 20 progetti si mostrano i più attivi, con una nota |
+| 3. Commit per progetto e autore | Barre impilate. Più affidabile del churn (vedi sotto) |
+| 4. Distribuzione dei commit | Quota per progetto (ciambella; barra 100% se i progetti sono < 3) |
+| 5. Churn per progetto e autore | Barre impilate, **senza esclusioni**. Sotto il commit, non accanto: è la metrica meno indicativa |
+| 6. Distribuzione del churn | Stesso trattamento del pannello 4, per il churn |
+| 7. Riepilogo per progetto | Tabella per progetto con churn, commit, giorni attivi, file, numero di autori |
 
-Un progetto può avere churn alto e indice basso (pochi commit molto grossi, o un client
-generato molto voluminoso) o il contrario (attività distribuita su molti giorni): è la
-differenza che un punteggio unico nasconderebbe. Per leggere le due metriche **sullo
+Le due matrici si saltano se il JSON non ha le date o il dettaglio giornaliero (formato
+precedente dei collector). Un riquadro in fondo ricorda cosa i grafici non misurano (vedi
+il report singolo).
+
+Un progetto può avere churn alto e pochi giorni attivi (pochi commit molto grossi, o un
+client generato molto voluminoso) o il contrario (attività distribuita su molti giorni): è
+la differenza che un punteggio unico nasconderebbe. Per leggere le due metriche **sullo
 stesso progetto** usa la tabella di riepilogo, non il confronto a occhio fra i pannelli
-2 e 4: ogni pannello ordina i progetti per il proprio totale, quindi la stessa posizione
+3 e 5: ogni pannello ordina i progetti per il proprio totale, quindi la stessa posizione
 sull'asse X può corrispondere a progetti diversi nei due grafici (ed è esattamente quello
 che accade quando un progetto ha pochi commit ma churn enorme — il caso che più
 interesserebbe confrontare). Un confronto onesto richiederebbe un pannello dedicato,
@@ -709,7 +721,9 @@ per esempio il churn per commit di ciascun progetto: non è ancora presente nel 
 **Colori:** ogni autore ha un colore fisso, coerente tra tutti i pannelli e assegnato in
 ordine di palette, non per rango. Oltre 8 autori la coda viene accorpata in "Altro" ("Other" nei grafici in inglese)
 invece di generare tinte nuove (indistinguibili per chi ha deficit di visione dei colori).
-La palette è verificata per separazione CVD e contrasto.
+La palette è verificata per separazione CVD e contrasto. L'ordine di visualizzazione degli
+autori (legenda, impilamento delle barre, righe delle matrici) è alfabetico; i colori seguono
+invece il rango per churn, perché serve a decidere chi finisce in "Altro".
 
 ---
 
@@ -817,9 +831,9 @@ periodo richiesto. `ref_commit`/`ref_date` identificano il commit di riferimento
 | `daily_data` | Dettaglio giornaliero, con `files` distinti **per giorno** |
 | `date_basis` | `"author"`: i giorni sono attribuiti per author-date |
 
-`daily_data` è necessario, non decorativo: senza di esso il tetto anti-outlier
-dell'indice si applicherebbe all'aggregato di periodo e saturerebbe (vedi
-[Metriche Calcolate](#-metriche-calcolate)).
+`daily_data` è necessario, non decorativo: alimenta le matrici di presenza (autori e
+progetti nel tempo) del report multi-repository. Senza (formato precedente dei collector)
+quei pannelli vengono saltati.
 
 ---
 
@@ -844,7 +858,7 @@ Il file specificato con `--file` deve seguire queste regole:
 ```
 
 **Nota:** i dati raccolti da questi percorsi vengono elaborati da `plot_multiproject.py`, che calcola
-churn, commit e giorni attivi più un indice composito secondario (vedi
+churn, commit e giorni attivi (vedi
 [Metriche Calcolate](#-metriche-calcolate)).
 
 Il file `git-activity-aliases.json` permette di raggruppare diversi nomi di autori Git sotto un unico nome comune, utile quando lo stesso sviluppatore ha contribuito con nomi diversi. È letto dai **collector**, che applicano gli alias prima di aggregare. Esempio:
@@ -1282,9 +1296,9 @@ nel churn. Per questo:
 
 - **`churn` è trattato come la meno indicativa delle tre metriche** (vedi
   [Metriche Calcolate](#-metriche-calcolate)) e non è più il primo pannello dei report.
-- **`DAILY_CHURN_CAP`** (vedi [Pesi delle metriche](#pesi-delle-metriche)) resta l'unica
-  protezione contro un outlier estremo, es. un `node_modules` committato per errore — più
-  importante di prima, non meno.
+- **Non c'è nessun tetto sul churn**: i grafici usano il valore grezzo
+  `aggiunte + 0.4 × rimozioni`, quindi un `node_modules` committato per errore compare per
+  intero (vedi l'ultimo punto).
 - Se un repository specifico ha bisogno di escludere qualcosa (un `node_modules`
   committato per errore, un dump SQL enorme), fallo con `git filter-repo`/BFG **sulla
   storia analizzata** o accetta il rumore su quel repository — non nel tool.
@@ -1320,31 +1334,27 @@ quando si legge un picco isolato.
 
 ### Pesi delle metriche
 
-In testa a `plot_git.py` e `plot_multiproject.py` (i due valori vanno tenuti allineati):
+In testa a `plot_git.py` e `plot_multiproject.py` (il valore va tenuto allineato) resta un
+solo parametro:
 
 ```python
 DELETED_WEIGHT = 0.4      # quanto pesa una riga rimossa rispetto a una aggiunta
-DAILY_CHURN_CAP = 15000   # tetto anti-outlier, PER GIORNO per autore
-W_CHURN = 1.0             # peso del volume nell'indice composito
-W_FILES = 0.5             # peso della dispersione su file
 ```
 
-Alzare `W_FILES` premia chi tocca molti file (attenzione: è ciò che rendeva la vecchia
-formula favorevole ai find/replace). Abbassare `DAILY_CHURN_CAP` appiattisce le giornate
-di alto volume.
+Cambiarlo cambia il churn di tutti i grafici. `DAILY_CHURN_CAP`, `W_CHURN` e `W_FILES`
+non esistono più: appartenevano all'indice composito, che è stato rimosso (vedi
+[Indice composito (rimosso)](#indice-composito-rimosso)).
 
-**`DAILY_CHURN_CAP` non è un valore arbitrario: è calibrato sulla distribuzione osservata,
-e va ricalibrato se il modello di sviluppo cambia.** Fissato originariamente a 1000 il
-9 gennaio 2026, misurando la distribuzione reale su più repository ad agosto 2026 quel
-valore era sceso al **90° percentile** (giornate normali, non anomale) invece del
-p95-p99 previsto: il 72% del churn dei due mesi precedenti veniva scartato dal tetto,
-contro il 44% del periodo gennaio-maggio. Causa plausibile: uso di agenti di coding AI,
-che rendono comuni giornate di scaffolding ampio (es. un commit reale da 336 file/22.180
-churn per generare CRUD su decine di tabelle in una sessione) — non outlier da attenuare,
-ma il nuovo ordine di grandezza del lavoro normale. Il nuovo valore (15000) corrisponde al
-p99 osservato: attenua ancora gli outlier estremi, non le giornate ora comuni. Se il tuo
-flusso di lavoro cambia ancora, ricontrolla la distribuzione invece di supporre che il
-valore attuale resti valido:
+**Nota storica: una soglia va calibrata sui dati, e ricalibrata se il modo di lavorare
+cambia.** Il tetto giornaliero del churn, quando c'era, era fissato a 1000 il 9 gennaio
+2026. Misurando la distribuzione reale su più repository ad agosto 2026 quel valore era
+sceso al **90° percentile** (giornate normali, non anomale) invece del p95-p99 previsto:
+il 72% del churn dei due mesi precedenti veniva scartato dal tetto, contro il 44% del
+periodo gennaio-maggio. Causa plausibile: uso di agenti di coding AI, che rendono comuni
+giornate di scaffolding ampio (es. un commit reale da 336 file/22.180 churn per generare
+CRUD su decine di tabelle in una sessione) — non outlier da attenuare, ma il nuovo ordine
+di grandezza del lavoro normale. Lo si era alzato a 15000, il p99 osservato. Per misurare
+la distribuzione del churn giornaliero di un periodo:
 
 ```bash
 git_stats_collector.sh 2026-01-01 "$(date +%F)" json | python3 -c "
@@ -1384,8 +1394,8 @@ singola invocazione di `git log`).
 ## 📈 Metriche Calcolate
 
 Non esiste un singolo numero che misuri il valore del lavoro di sviluppo. Per questo i
-report mostrano **tre metriche affiancate** invece di un punteggio unico, e relegano
-l'indice composito a metrica secondaria (visibile solo nella tabella di riepilogo).
+report mostrano **tre metriche affiancate** invece di un punteggio unico (un indice composito c'era nelle versioni precedenti: vedi
+[Indice composito (rimosso)](#indice-composito-rimosso)).
 Sono presentate **in ordine di quanto sono attendibili**, non di quanto sono
 impressionanti — è anche l'ordine dei pannelli nei report.
 
@@ -1418,31 +1428,34 @@ letta insieme alle altre due, non da sola.
 
 Il campo `lines = aggiunte + rimosse` resta nel JSON per retrocompatibilità.
 
-### Indice composito (metrica secondaria)
+### Indice composito (rimosso)
+
+Le versioni precedenti dei report avevano anche un indice composito, mostrato solo nella tabella di
+riepilogo:
 
 ```txt
 indice = Σ giorni [ 1.0 × ln(1 + min(churn_giorno, 15000)) + 0.5 × ln(1 + file_distinti_giorno) ]
 ```
 
-Tre proprietà sono deliberate e non vanno cambiate senza capirne l'effetto:
+È stato **rimosso**: era la parte più simile a un punteggio per persona, e un numero per
+ogni autore, anche relegato in fondo, si legge come una classifica. I pesi (`1.0` / `0.5`)
+erano scelti a mano, e cambiandoli cambiava l'ordine. Restano tre lezioni misurate, utili
+per qualunque metrica composita:
 
 1. **Additivo, non moltiplicativo.** Nella forma a prodotto `ln(added) × ln(files)` un
-   fattore a zero azzerava tutto, e i due termini si amplificavano a vicenda: un
-   find/replace su 100 file valeva ~6.7x un fix algoritmico profondo in un solo file.
-   Con la forma additiva quel rapporto scende a ~1.4x, e i pesi (`1.0` / `0.5`) rendono
-   esplicito quanto conta la dispersione su file.
-2. **Il tetto (15000 righe) è PER GIORNO, e va ricalibrato nel tempo.** Applicato a un
-   aggregato di periodo (come faceva la versione precedente nel report multiprogetto) si
-   saturava: su qualsiasi intervallo più lungo di pochi giorni diventava una costante per
-   tutti, e l'indice finiva per misurare solo il numero di file toccati. Il valore stesso
-   non è fisso per sempre: era 1000 da gennaio 2026, ma misurato ad agosto 2026 su
-   repository che usano assistenti di coding AI, quel valore troncava il 72% del churn di
-   giornate normali (90° percentile, non un outlier) — sintomo di un cambio nel modello di
-   sviluppo, non di un bug. Vedi [Pesi delle metriche](#pesi-delle-metriche) per come
-   ricontrollare la distribuzione.
+   fattore a zero azzerava tutto (una giornata di sole cancellazioni valeva 0), e i due
+   termini si amplificavano a vicenda: un find/replace su 100 file valeva ~6.7x un fix
+   algoritmico profondo in un solo file. Con la forma additiva quel rapporto scendeva a
+   ~1.4x.
+2. **Un tetto va applicato PER GIORNO.** Applicato a un aggregato di periodo si saturava:
+   su qualsiasi intervallo più lungo di pochi giorni diventava una costante per tutti, e
+   l'indice finiva per misurare solo il numero di file toccati. Vedi [Pesi delle
+   metriche](#pesi-delle-metriche) per come il valore stesso del tetto si è rivelato
+   dipendente dal modello di sviluppo.
 3. **`file_distinti` sono file, non modifiche.** Lo stesso file modificato in 3 commit
    conta 1, non 3. Prima si contavano le righe di `--numstat`, cioè gli eventi di
-   modifica, il che rendeva la metrica in buona parte un proxy del numero di commit.
+   modifica, il che rendeva la metrica in buona parte un proxy del numero di commit. La
+   colonna «File» del riepilogo segue ancora questa regola.
 
 ### Note Importanti
 
@@ -1476,18 +1489,18 @@ Tre proprietà sono deliberate e non vanno cambiate senza capirne l'effetto:
 - Complessità delle task varia enormemente
 - Bug fix piccoli ≠ feature grandi
 
-❌ **Non trattare l'indice composito come un punteggio oggettivo**
+❌ **Non cercare in questi grafici una classifica delle persone**
 
-- È un'indicazione **relativa**, con pesi scelti a mano (`1.0` churn / `0.5` file):
-  cambiando i pesi cambia la classifica
-- Non tiene conto della difficoltà tecnica delle modifiche
-- Per questo è relegato alla tabella e non ha un grafico dedicato: se ti serve un solo
-  numero, "giorni attivi" è più difficile da distorcere
+- Il report non ha punteggi né totali per persona: gli autori compaiono in ordine
+  alfabetico e come presenza (matrice). Un indice composito che c'era nelle versioni
+  precedenti è stato tolto proprio per questo
+- Per vedere il lavoro di una persona si filtra per autore al collector; i numeri restano
+  indicatori di quantità, non di valore
 
 ❌ **Non confrontare valori tra periodi analizzati con versioni diverse dello strumento**
 
-- Le formule sono cambiate (forma additiva, cancellazioni pesate, tetto per giorno):
-  i punteggi dei report generati prima non sono confrontabili con quelli nuovi
+- Le formule sono cambiate (cancellazioni pesate, indice composito rimosso):
+  i valori dei report generati prima non sono confrontabili con quelli nuovi
 
 ### ✅ Cosa Fare
 

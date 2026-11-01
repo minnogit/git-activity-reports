@@ -632,14 +632,21 @@ VS Code display language.
 
 Panels are ordered by how reliable they are, not by how
 impressive they look: churn comes last, not first (see
-[Metriche Calcolate](#-calculated-metrics) for why):
+[Calculated Metrics](#-calculated-metrics) for why). The report **does not evaluate
+people**: no score, no per-author totals, authors in alphabetical order. To see one
+person's work, filter by author at the collector.
 
 | Panel | What it shows |
 |---|---|
-| 1. Active days by author | Full width, at the top: the most robust metric, continuity of contribution |
-| 2. Commits over time, per author | Stacked bars. Delivery frequency, independent of size |
+| 1. Presence by author | Full width, at the top: matrix of authors (alphabetical) × periods, each cell is the number of active days (darker = more days). It says **who** worked **when**, not how much. Numbers inside the cells with weekly or monthly periods; beyond 30 authors the most active are shown, with a note |
+| 2. Commits over time, per author | Stacked bars (authors in alphabetical order). Delivery frequency, independent of size |
 | 3. Churn over time, per author | Stacked bars + trend line (moving average). Volume of change, **with no exclusions**. Placed next to panel 2 for direct comparison |
-| 4. Summary per author | Table with churn, commits, active days, files, index |
+| 4. Period summary | One row of repository totals (commits, churn, files, active days, authors): no per-person totals |
+
+At the bottom of the report, above the legend, a box reminds what the charts do **not**
+measure: the quality and difficulty of the work, work that doesn't go through git commits
+(for example activating services for a customer or migrating databases), absences and
+holidays.
 
 **Adaptive granularity:** the time axis adapts automatically to the period, because
 one bar per day becomes unreadable over long intervals:
@@ -682,25 +689,31 @@ unavoidable) and can be expensive on very large repositories — `--no-ownership
 
 ### Multi-Repository Report
 
-Same principle of the order of reliability, organized **one row per metric**: row
-2 is all about commits, row 3 all about churn. Within each row, bars and
-donut tell the same story at two levels of detail — where activity
-is concentrated, and the share of the total.
+Same principle of the order of reliability. At the top, two matrices over time (presence
+by author and activity by project); below, **one row per metric**: the commits row and the
+churn row. Within each row, bars and donut tell the same story at two levels of detail —
+where activity is concentrated, and the share of the total. As in the single-repository
+report, no score and no per-person totals.
 
 | Panel | What it shows |
 |---|---|
-| 1. Active days by author | Continuity of contribution, summed across projects. The most reliable, alone at the top |
-| 2. Commits per project and author | Stacked bars. More reliable than churn (see below) |
-| 3. Commit distribution | Share per project (donut; 100% bar if projects are < 3) |
-| 4. Churn per project and author | Stacked bars, **with no exclusions**. Below commits, not next to them: it is the least indicative metric |
-| 5. Churn distribution | Same treatment as panel 3, for churn |
-| 6. Summary per project | Table with churn, commits, active days, files, authors, index |
+| 1. Presence by author, all projects | Matrix of authors (alphabetical) × periods: active days across all projects, darker = more days |
+| 2. Activity by project over time | Matrix of projects × periods: days with activity in the project, across all authors. Where the work goes and how it shifts. Rows by decreasing activity (they are projects, not people); beyond 20 projects the most active are shown, with a note |
+| 3. Commits per project and author | Stacked bars. More reliable than churn (see below) |
+| 4. Commit distribution | Share per project (donut; 100% bar if projects are < 3) |
+| 5. Churn per project and author | Stacked bars, **with no exclusions**. Below commits, not next to them: it is the least indicative metric |
+| 6. Churn distribution | Same treatment as panel 4, for churn |
+| 7. Summary per project | Per-project table with churn, commits, active days, files, number of authors |
 
-A project can have high churn and a low index (few very large commits, or a very
+Both matrices are skipped if the JSON has no dates or daily detail (the collectors'
+previous format). A box at the bottom reminds what the charts do not measure (see the
+single-repository report).
+
+A project can have high churn and few active days (few very large commits, or a very
 large generated client) or the opposite (activity spread over many days): that is the
 difference a single score would hide. To read the two metrics **on the
 same project** use the summary table, not an eyeball comparison between panels
-2 and 4: each panel sorts projects by its own total, so the same position
+3 and 5: each panel sorts projects by its own total, so the same position
 on the X axis can correspond to different projects in the two charts (and that is exactly
 what happens when a project has few commits but huge churn — the case you would
 most want to compare). An honest comparison would require a dedicated panel,
@@ -709,7 +722,9 @@ for example churn per commit of each project: it is not yet present in the repor
 **Colors:** each author has a fixed color, consistent across all panels and assigned in
 palette order, not by rank. Beyond 8 authors the tail is merged into "Other"
 instead of generating new hues (indistinguishable for people with color vision deficiency).
-The palette is verified for CVD separation and contrast.
+The palette is verified for CVD separation and contrast. The display order of authors
+(legend, bar stacking, matrix rows) is alphabetical; colors instead follow the churn
+rank, because it decides who ends up in "Other".
 
 ---
 
@@ -817,9 +832,9 @@ requested period. `ref_commit`/`ref_date` identify the reference commit;
 | `daily_data` | Daily detail, with distinct `files` **per day** |
 | `date_basis` | `"author"`: days are attributed by author-date |
 
-`daily_data` is necessary, not decorative: without it the index's anti-outlier
-cap would be applied to the period aggregate and would saturate (see
-[Metriche Calcolate](#-calculated-metrics)).
+`daily_data` is necessary, not decorative: it feeds the presence matrices (authors and
+projects over time) of the multi-repository report. Without it (the collectors' previous
+format) those panels are skipped.
 
 ---
 
@@ -844,8 +859,8 @@ The file specified with `--file` must follow these rules:
 ```
 
 **Note:** the data collected from these paths is processed by `plot_multiproject.py`, which computes
-churn, commits and active days plus a secondary composite index (see
-[Metriche Calcolate](#-calculated-metrics)).
+churn, commits and active days (see
+[Calculated Metrics](#-calculated-metrics)).
 
 The `git-activity-aliases.json` file lets you group different Git author names under a single common name, useful when the same developer has contributed under different names. It is read by the **collectors**, which apply the aliases before aggregating. Example:
 
@@ -1282,9 +1297,9 @@ in the churn. For this reason:
 
 - **`churn` is treated as the least indicative of the three metrics** (see
   [Calculated Metrics](#-calculated-metrics)) and is no longer the first panel of the reports.
-- **`DAILY_CHURN_CAP`** (see [Metric weights](#metric-weights)) remains the only
-  protection against an extreme outlier, e.g. a `node_modules` committed by mistake — more
-  important than before, not less.
+- **There is no cap on churn**: the charts use the raw value
+  `added + 0.4 × deleted`, so a `node_modules` committed by mistake shows up in full (see
+  the last point).
 - If a specific repository needs to exclude something (a `node_modules`
   committed by mistake, a huge SQL dump), do it with `git filter-repo`/BFG **on the
   analyzed history** or accept the noise on that repository — not in the tool.
@@ -1320,31 +1335,27 @@ when reading an isolated spike.
 
 ### Metric weights
 
-At the top of `plot_git.py` and `plot_multiproject.py` (the two values must be kept aligned):
+At the top of `plot_git.py` and `plot_multiproject.py` (the value must be kept aligned)
+a single parameter remains:
 
 ```python
 DELETED_WEIGHT = 0.4      # how much a removed line weighs relative to an added one
-DAILY_CHURN_CAP = 15000   # anti-outlier cap, PER DAY per author
-W_CHURN = 1.0             # weight of volume in the composite index
-W_FILES = 0.5             # weight of spread across files
 ```
 
-Raising `W_FILES` rewards those who touch many files (note: this is what made the old
-formula favor find/replace). Lowering `DAILY_CHURN_CAP` flattens high-volume
-days.
+Changing it changes the churn of every chart. `DAILY_CHURN_CAP`, `W_CHURN` and `W_FILES`
+no longer exist: they belonged to the composite index, which has been removed (see
+[Composite index (removed)](#composite-index-removed)).
 
-**`DAILY_CHURN_CAP` is not an arbitrary value: it is calibrated on the observed distribution,
-and must be recalibrated if the development model changes.** Originally set to 1000 on
-9 January 2026, when measuring the real distribution across several repositories in August 2026 that
-value had dropped to the **90th percentile** (normal days, not anomalous) instead of the
-expected p95-p99: 72% of the churn of the previous two months was discarded by the cap,
-against 44% for the January-May period. Plausible cause: use of AI coding agents,
-which make days of broad scaffolding common (e.g. a real commit of 336 files/22,180
-churn generating CRUD for dozens of tables in a single session) — not outliers to dampen,
-but the new order of magnitude of normal work. The new value (15000) corresponds to the
-observed p99: it still dampens extreme outliers, not the days that are now common. If your
-workflow changes again, recheck the distribution instead of assuming the
-current value remains valid:
+**Historical note: a threshold must be calibrated on data, and recalibrated when the way
+of working changes.** The daily churn cap, when it existed, was set to 1000 on 9 January
+2026. Measuring the real distribution across several repositories in August 2026, that
+value had dropped to the **90th percentile** (normal days, not anomalous ones) instead of
+the expected p95-p99: 72% of the churn of the previous two months was being discarded by
+the cap, against 44% in the January-May period. A plausible cause: the use of AI coding
+agents, which make days of broad scaffolding common (e.g. a real commit of 336 files /
+22,180 churn to generate CRUD for dozens of tables in a single session) — not outliers to
+dampen, but the new order of magnitude of normal work. It had been raised to 15000, the
+observed p99. To measure the distribution of daily churn over a period:
 
 ```bash
 git_stats_collector.sh 2026-01-01 "$(date +%F)" json | python3 -c "
@@ -1384,8 +1395,8 @@ single `git log` invocation).
 ## 📈 Calculated Metrics
 
 There is no single number that measures the value of development work. For this reason the
-reports show **three metrics side by side** instead of a single score, and relegate
-the composite index to a secondary metric (visible only in the summary table).
+reports show **three metrics side by side** instead of a single score (earlier versions had a composite index: see
+[Composite index (removed)](#composite-index-removed)).
 They are presented **in order of how reliable they are**, not of how
 impressive they are — which is also the order of the panels in the reports.
 
@@ -1418,31 +1429,32 @@ read together with the other two, not on its own.
 
 The `lines = added + removed` field remains in the JSON for backward compatibility.
 
-### Composite index (secondary metric)
+### Composite index (removed)
+
+Earlier versions of the reports also had a composite index, shown only in the summary table:
 
 ```txt
 index = Σ days [ 1.0 × ln(1 + min(daily_churn, 15000)) + 0.5 × ln(1 + daily_distinct_files) ]
 ```
 
-Three properties are deliberate and must not be changed without understanding their effect:
+It has been **removed**: it was the part most like a per-person score, and a number for
+each author, even demoted to the bottom, reads like a ranking. The weights (`1.0` / `0.5`)
+were hand-picked, and changing them changed the order. Three measured lessons remain,
+useful for any composite metric:
 
-1. **Additive, not multiplicative.** In the product form `ln(added) × ln(files)` a
-   factor of zero wiped out everything, and the two terms amplified each other: a
-   find/replace across 100 files was worth ~6.7x a deep algorithmic fix in a single file.
-   With the additive form that ratio drops to ~1.4x, and the weights (`1.0` / `0.5`) make
-   explicit how much spread across files matters.
-2. **The cap (15000 lines) is PER DAY, and must be recalibrated over time.** Applied to an
-   aggregate over the period (as the previous version did in the multi-project report) it
-   saturated: over any interval longer than a few days it became a constant for
-   everyone, and the index ended up measuring only the number of files touched. The value itself
-   is not fixed forever: it was 1000 from January 2026, but measured in August 2026 on
-   repositories that use AI coding assistants, that value truncated 72% of the churn of
-   normal days (90th percentile, not an outlier) — a symptom of a change in the development
-   model, not of a bug. See [Pesi delle metriche](#metric-weights) for how to
-   re-check the distribution.
+1. **Additive, not multiplicative.** In the product form `ln(added) × ln(files)` a factor
+   at zero wiped out everything (a day of pure deletions was worth 0), and the two terms
+   amplified each other: a find/replace across 100 files was worth ~6.7x a deep
+   algorithmic fix in a single file. With the additive form that ratio dropped to ~1.4x.
+2. **A cap must be applied PER DAY.** Applied to a period aggregate it saturated: over
+   any interval longer than a few days it became a constant for everyone, and the index
+   ended up measuring only the number of files touched. See [Metric
+   weights](#metric-weights) for how the cap value itself turned out to depend on the
+   development model.
 3. **`distinct_files` are files, not modifications.** The same file modified in 3 commits
-   counts as 1, not 3. Previously the lines of `--numstat` were counted, that is the modification
-   events, which made the metric largely a proxy for the number of commits.
+   counts 1, not 3. Earlier the lines of `--numstat` were counted, i.e. modification
+   events, which made the metric largely a proxy for the number of commits. The "Files"
+   column of the summary still follows this rule.
 
 ### Important Notes
 
@@ -1476,18 +1488,18 @@ Three properties are deliberate and must not be changed without understanding th
 - Task complexity varies enormously
 - Small bug fixes ≠ large features
 
-❌ **Do not treat the composite index as an objective score**
+❌ **Do not look for a ranking of people in these charts**
 
-- It is a **relative** indication, with hand-picked weights (`1.0` churn / `0.5` files):
-  changing the weights changes the ranking
-- It does not account for the technical difficulty of the changes
-- For this reason it is relegated to the table and has no dedicated chart: if you need a single
-  number, "active days" is harder to distort
+- The report has no scores and no per-person totals: authors appear in alphabetical order
+  and as presence (matrix). A composite index that existed in earlier versions was removed
+  precisely for this reason
+- To see one person's work, filter by author at the collector; the numbers remain
+  indicators of quantity, not of value
 
 ❌ **Do not compare values across periods analyzed with different versions of the tool**
 
-- The formulas have changed (additive form, weighted deletions, daily cap):
-  the scores of previously generated reports are not comparable with the new ones
+- The formulas have changed (weighted deletions, composite index removed):
+  the values of previously generated reports are not comparable with the new ones
 
 ### ✅ What to Do
 

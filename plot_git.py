@@ -26,7 +26,7 @@ di quanto sono attendibili — non di quanto sono impressionanti:
                    fino a 9.7x di inflazione su una singola giornata). Terzo pannello
                    (a destra, affiancato al commit per il confronto diretto).
 
-Nota storica: fino alla v3 il report aveva anche un INDICE composito (somma sui giorni di
+Nota storica: le versioni precedenti del report avevano anche un INDICE composito (somma sui giorni di
 ln(1 + churn_giorno con tetto) e ln(1 + file distinti)), relegato alla tabella. È stato
 rimosso: era la parte più simile a un punteggio e invitava a leggere la tabella come una
 classifica. Due lezioni misurate restano utili anche senza di lui: una forma moltiplicativa
