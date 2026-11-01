@@ -12,8 +12,14 @@ di quanto sono attendibili — non di quanto sono impressionanti:
   giorni attivi  Giorni distinti con almeno un commit. È la metrica più robusta:
                  non è gonfiabile né da un singolo commit enorme né da tanti micro-commit,
                  e non risente in alcun modo di codice generato o file voluminosi.
-                 Primo pannello (da solo, a piena larghezza).
-  commit         Numero di commit (esclusi i merge). RIGA 2, interamente sua: barre
+                 Primo pannello, a piena larghezza, come MATRICE DI PRESENZA (autori in
+                 ordine alfabetico × periodi, cella = giorni attivi su tutti i progetti):
+                 CHI ha lavorato QUANDO, senza ordinare né sommare per persona.
+                 Secondo pannello, anch'esso a piena larghezza: matrice PROGETTI × periodi (cella =
+                 giorni con attività nel progetto, su tutti gli autori): DOVE va il lavoro nel
+                 tempo, a livello di progetto (righe per attività decrescente: sono progetti,
+                 non persone). Saltati entrambi se il JSON non ha date né dettaglio giornaliero.
+  commit         Numero di commit (esclusi i merge). RIGA 3, interamente sua: barre
                  impilate per progetto e autore, più la ciambella di distribuzione per
                  progetto affiancata (la stessa cosa a due livelli di dettaglio).
   churn          = aggiunte + 0.4 * rimozioni
@@ -23,7 +29,7 @@ di quanto sono attendibili — non di quanto sono impressionanti:
                    commento in testa a quello script per il perché — in breve, qualunque
                    esclusione basata su directory può rompere il rilevamento dei rename
                    di git, misurato fino a 9.7x di inflazione su una singola giornata).
-                   RIGA 3, stesso trattamento del commit (barre impilate + ciambella
+                   RIGA 4, stesso trattamento del commit (barre impilate + ciambella
                    affiancate) ma sotto, non sopra: coerenza fra "quanto è attendibile" e
                    "quanto è in evidenza" era assente nelle versioni precedenti, dove il
                    churn occupava DUE pannelli e il commit zero, nascosto nella sola
@@ -38,17 +44,17 @@ confrontare progetti diversi. Un confronto commit-vs-churn onesto richiede un pa
 dedicato (es. churn per commit per progetto), non due pannelli affiancati; per ora la
 tabella di riepilogo resta il posto dove leggere le due metriche sullo stesso progetto.
 
-L'indice composito resta disponibile come metrica SECONDARIA (solo in tabella):
+Nota storica: le versioni precedenti del report avevano anche un INDICE composito (somma sui giorni di
+ln(1 + churn_giorno con tetto) e ln(1 + file distinti)), relegato alla tabella. È stato
+rimosso: era la parte più simile a un punteggio e invitava a leggere la tabella come una
+classifica. Due lezioni misurate restano utili anche senza di lui: una forma moltiplicativa
+azzerava le giornate di sole cancellazioni, e un tetto applicato all'aggregato di periodo
+(invece che per giorno) si saturava; il valore stesso del tetto (1000, poi 15000) dipendeva
+dal modello di sviluppo — vedi CLAUDE.md.
 
-  indice = somma sui giorni di [ 1.0 * ln(1 + min(churn_giorno, 15000))
-                               + 0.5 * ln(1 + file_distinti_giorno) ]
-
-È ADDITIVO e non moltiplicativo di proposito, e il tetto (15000 righe, p99 osservato
-su repository reali con AI coding assistant — la cifra originale di 1000 risaliva a
-un modello di sviluppo antecedente) è applicato PER GIORNO. Nella versione precedente
-il tetto veniva applicato all'aggregato di periodo: su qualsiasi intervallo più lungo
-di pochi giorni si saturava, e l'indice finiva per dipendere solo dal numero di file
-toccati (tutti gli autori attivi ottenevano lo stesso valore di volume).
+NESSUNA VALUTAZIONE DELLE PERSONE: il report non ha punteggi né totali per persona; gli
+autori compaiono in ordine alfabetico e come presenza. Per vedere il lavoro di UNA persona si
+filtra per autore al collector. La tabella è per progetto, non per autore.
 
 ATTENZIONE: sono indicatori di attività, non misure di produttività o di qualità.
 Code review, design, mentoring e debugging difficile sono strutturalmente invisibili.
@@ -57,10 +63,13 @@ Code review, design, mentoring e debugging difficile sono strutturalmente invisi
 import json
 import os
 import sys
+import textwrap
+from datetime import date
 
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.colors
 import matplotlib.ticker
 import matplotlib.pyplot as plt
 import numpy as np
@@ -70,9 +79,6 @@ import pandas as pd
 # Parametri delle metriche (mantenere allineati con plot_git.py)
 # -----------------------------------------------------------------------------
 DELETED_WEIGHT = 0.4      # quanto pesa una riga rimossa rispetto a una aggiunta
-DAILY_CHURN_CAP = 15000   # tetto anti-outlier, PER GIORNO per autore
-W_CHURN = 1.0             # peso del termine di volume nell'indice composito
-W_FILES = 0.5             # peso del termine di dispersione su file
 
 # -----------------------------------------------------------------------------
 # Palette validata (light surface). Ordine fisso, mai ciclato: dal 9° autore in poi
@@ -110,6 +116,12 @@ ROW_UNIT_INCHES = 3.427   # altezza in pollici di UNA unità di height_ratio: ma
                           # costante lascia le prime tre righe della stessa dimensione
                           # assoluta qualunque sia l'altezza della tabella
 TABLE_RATIO_MIN = 0.30    # una tabella con una riga sola non deve collassare
+MAX_PROJECT_ROWS = 20        # righe massime della matrice progetti × tempo (oltre: nota)
+MAX_MATRIX_ROWS = 30         # righe massime di una matrice di presenza (oltre: nota, mai taglio muto)
+MATRIX_CELL_INCHES = 0.30    # altezza di una riga di cella: abbastanza per una cifra da 8 pt
+MATRIX_MIN_AXES_INCHES = 0.60
+MATRIX_RAMP = ["#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]  # = PUNCH_RAMP[1:]
+EMPTY_CELL = "#efeee8"       # cella senza giorni attivi: quasi invisibile, non una tinta di dato
 FIG_WIDTH_INCHES = 17
 FIG_HSPACE = 0.5
 # Header e footer in POLLICI, non in frazione di figura: da quando l'altezza totale varia
@@ -127,6 +139,10 @@ LEGEND_ROW1_INCHES = 0.230
 LEGEND_EXTRA_ROW_INCHES = 0.1925
 LEGEND_BOTTOM_PAD_INCHES = 0.08   # distanza tra il bordo inferiore della figura e la legenda
 NOTE_INCHES = 0.30                # spazio per la nota sotto la tabella, sopra la legenda
+# Riquadro «cosa non misura» (fra la legenda e il resto): testo da 8 pt a capo automatico.
+LIMITS_WRAP_CHARS = 190           # caratteri per riga (la figura è larga 17": ne servono ~13)
+LIMITS_LINE_INCHES = 0.155        # una riga a 8 pt con linespacing 1.3
+LIMITS_GAP_INCHES = 0.06          # fra la cima della legenda e il riquadro
 
 # -----------------------------------------------------------------------------
 # Lingua delle scritte nel grafico (solo il PNG: i messaggi su stdout restano invariati,
@@ -137,8 +153,12 @@ STRINGS = {
     "it": {
         "other": "Altro",
         "suptitle": "Attività di sviluppo multi-progetto  ({start} → {end})",
-        "active_title": "Giorni attivi per autore (somma sui progetti)",
-        "active_xlabel": "Giorni con almeno 1 commit",
+        "buckets": {"D": "giorno", "W-MON": "settimana", "MS": "mese"},
+        "presence_title": "Presenza per autore, tutti i progetti (giorni attivi per {bucket})",
+        "presence_caption": "Più scuro = più giorni attivi",
+        "presence_hidden": "mostrati {shown} autori su {total} (i più attivi)",
+        "projects_title": "Attività per progetto nel tempo (giorni attivi per {bucket})",
+        "projects_hidden": "mostrati {shown} progetti su {total} (i più attivi)",
         "commits_title": "Commit per progetto e autore",
         "commits_ylabel": "Commit",
         "commits_donut": "Distribuzione dei commit per progetto",
@@ -150,17 +170,21 @@ STRINGS = {
         "top_n": "  (primi {n} di {total})",
         "no_metric": {"commits": "Nessun commit nel periodo", "churn": "Nessun churn nel periodo"},
         "table_title": "Riepilogo per progetto",
-        "table_cols": ["Progetto", "Churn", "Commit", "Giorni att.", "File", "Autori", "Indice"],
-        "table_note": "Churn = aggiunte + 0.4 × rimozioni · Indice = metrica secondaria, "
-                      "additiva, con tetto giornaliero",
+        "table_cols": ["Progetto", "Churn", "Commit", "Giorni att.", "File", "Autori"],
+        "table_note": "Churn = aggiunte + 0.4 × rimozioni",
         "table_shown": "Mostrati i primi {shown} di {total} progetti. ",
+        "limits_note": "Questi grafici contano commit e righe modificate: misurano la quantità, non la qualità né la difficoltà del lavoro. Il lavoro che non passa da commit git (per esempio attivare servizi a un cliente o migrare database), le assenze e le ferie qui non si vedono.",
         "thousands_sep": ".",
     },
     "en": {
         "other": "Other",
         "suptitle": "Multi-project development activity  ({start} → {end})",
-        "active_title": "Active days by author (sum over projects)",
-        "active_xlabel": "Days with at least 1 commit",
+        "buckets": {"D": "day", "W-MON": "week", "MS": "month"},
+        "presence_title": "Presence by author, all projects (active days per {bucket})",
+        "presence_caption": "Darker = more active days",
+        "presence_hidden": "showing {shown} of {total} authors (most active)",
+        "projects_title": "Activity by project over time (active days per {bucket})",
+        "projects_hidden": "showing {shown} of {total} projects (most active)",
         "commits_title": "Commits by project and author",
         "commits_ylabel": "Commits",
         "commits_donut": "Commit distribution by project",
@@ -172,10 +196,10 @@ STRINGS = {
         "top_n": "  (top {n} of {total})",
         "no_metric": {"commits": "No commits in the period", "churn": "No churn in the period"},
         "table_title": "Summary by project",
-        "table_cols": ["Project", "Churn", "Commits", "Active days", "Files", "Authors", "Index"],
-        "table_note": "Churn = added + 0.4 × deleted · Index = secondary metric, "
-                      "additive, with a daily cap",
+        "table_cols": ["Project", "Churn", "Commits", "Active days", "Files", "Authors"],
+        "table_note": "Churn = added + 0.4 × deleted",
         "table_shown": "Showing the top {shown} of {total} projects. ",
+        "limits_note": "These charts count commits and changed lines: they measure quantity, not the quality or difficulty of the work. Work that doesn't go through git commits (for example activating services for a customer or migrating databases), absences and holidays are not visible here.",
         "thousands_sep": ",",
     },
 }
@@ -265,14 +289,6 @@ def churn_of(added, deleted):
     return added + DELETED_WEIGHT * deleted
 
 
-def daily_index(added, deleted, files):
-    """Indice composito di un singolo giorno (additivo, cap per giorno)."""
-    if files <= 0:
-        return 0.0
-    churn = min(churn_of(added, deleted), DAILY_CHURN_CAP)
-    return W_CHURN * np.log1p(churn) + W_FILES * np.log1p(files)
-
-
 # -----------------------------------------------------------------------------
 # Lettura input
 # -----------------------------------------------------------------------------
@@ -310,31 +326,25 @@ def flatten(payload, aliases):
         sys.exit(1)
 
     rows = []
-    legacy_aggregate = False
+    day_rows = []
     for entry in entries:
         author = entry.get("author_name") or entry.get("author") or "Sconosciuto"
         if aliases_needed:
             author = aliases.get(author, author)
         project = entry.get("project", "?")
         days = entry.get("daily_data") or []
+        for d in days:
+            # Giorni con attività: alimentano le matrici di presenza (autori e progetti nel tempo).
+            if d.get("date") and int(d.get("commits", 0) or 0) > 0:
+                day_rows.append({"project": project, "author": author,
+                                 "date": pd.to_datetime(d["date"])})
 
         if days:
-            index = sum(
-                daily_index(int(d.get("added", 0) or 0),
-                            int(d.get("deleted", 0) or 0),
-                            int(d.get("files", 0) or 0))
-                for d in days
-            )
             active_days = entry.get("active_days")
             if active_days is None:
                 active_days = sum(1 for d in days if int(d.get("commits", 0) or 0) > 0)
         else:
-            # Formato legacy senza dettaglio giornaliero: l'indice va calcolato
-            # sull'aggregato, dove il tetto anti-outlier satura. Lo segnaliamo.
-            legacy_aggregate = True
-            index = daily_index(int(entry.get("added", 0) or 0),
-                                int(entry.get("deleted", 0) or 0),
-                                int(entry.get("files", 0) or 0))
+            # Formato legacy senza dettaglio giornaliero: restano i soli totali per entry.
             active_days = entry.get("active_days") or 0
 
         added = int(entry.get("added", 0) or 0)
@@ -352,13 +362,7 @@ def flatten(payload, aliases):
             "files": int(entry.get("files", 0) or 0),
             "churn": churn_of(added, deleted),
             "active_days": int(active_days or 0),
-            "index": index,
         })
-
-    if legacy_aggregate:
-        print("Avviso: JSON senza dettaglio giornaliero (formato precedente). "
-              "L'indice composito è calcolato sull'aggregato di periodo e non è "
-              "confrontabile con quello dei report nuovi.")
 
     if not rows:
         print("Nessun dato di attività trovato nel periodo: niente da rappresentare.")
@@ -368,9 +372,22 @@ def flatten(payload, aliases):
     # Gli alias possono aver unito due identità nello stesso progetto: riaggreghiamo.
     df = (df.groupby(["project", "author"], as_index=False)
             .agg({"commits": "sum", "added": "sum", "deleted": "sum",
-                  "files": "sum", "churn": "sum", "active_days": "max",
-                  "index": "sum"}))
-    return df, meta
+                  "files": "sum", "churn": "sum", "active_days": "max"}))
+    days_df = pd.DataFrame(day_rows, columns=["project", "author", "date"])
+    return df, meta, days_df
+
+
+def choose_bucket(start, end):
+    """Granularità adattiva (stessa regola di plot_git.py): una colonna al giorno diventa
+    illeggibile su periodi lunghi."""
+    span = (date.fromisoformat(end) - date.fromisoformat(start)).days + 1
+    if span <= 45:
+        freq = "D"
+    elif span <= 250:
+        freq = "W-MON"
+    else:
+        freq = "MS"
+    return freq, T["buckets"][freq]
 
 
 def assign_colors(authors_by_size):
@@ -389,8 +406,7 @@ def fold_tail(df, authors_by_size):
     df["author"] = df["author"].where(df["author"].isin(keep), OTHER_LABEL)
     df = (df.groupby(["project", "author"], as_index=False)
             .agg({"commits": "sum", "added": "sum", "deleted": "sum",
-                  "files": "sum", "churn": "sum", "active_days": "max",
-                  "index": "sum"}))
+                  "files": "sum", "churn": "sum", "active_days": "max"}))
     return df, authors_by_size[:MAX_SERIES] + [OTHER_LABEL]
 
 
@@ -448,6 +464,82 @@ def recessive_spines(ax, keep=("left", "bottom")):
 # -----------------------------------------------------------------------------
 # Pannelli
 # -----------------------------------------------------------------------------
+def alpha_order(names):
+    """Ordine di VISUALIZZAZIONE degli autori: alfabetico (case-insensitive), "Altro" per
+    ultimo. Mai per volume: un elenco ordinato per commit o churn è una classifica."""
+    named = sorted((n for n in names if n != OTHER_LABEL), key=lambda n: n.casefold())
+    return named + ([OTHER_LABEL] if OTHER_LABEL in names else [])
+
+
+def bucketed_days(frame, key_col, keys, full_index, freq):
+    """Giorni DISTINTI attivi per bucket e per chiave (autore o progetto).
+
+    `frame` ha una riga per (data, chiave) con attività. I bucket sono gli stessi dei
+    grafici nel tempo (stesso `full_index` giornaliero e stessa `freq` di resample), così
+    le colonne della matrice stanno sotto le stesse etichette."""
+    flag = frame.assign(_v=1).pivot_table(index="date", columns=key_col, values="_v",
+                                          aggfunc="max")
+    flag = flag.reindex(full_index).fillna(0).reindex(columns=keys, fill_value=0)
+    return flag.resample(freq).sum()
+
+
+def panel_matrix(ax, matrix, row_labels, col_labels, title, caption, show_numbers):
+    """Matrice righe × bucket temporali: giorni attivi per cella, rampa sequenziale a una
+    tinta (più scuro = più giorni). Le celle vuote sono quasi invisibili, così «presente»
+    risalta. Con bucket settimanali o mensili il numero sta dentro la cella (nessun valore
+    raggiungibile solo col colore); con bucket giornalieri la cella vale 0/1 e non serve."""
+    data = np.asarray(matrix, dtype=float)
+    vmax = max(float(data.max()) if data.size else 0.0, 3.0)   # 1 giorno = tinta media, non la più scura
+    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("matrix_blue", MATRIX_RAMP)
+    cmap.set_bad(EMPTY_CELL)
+    ax.imshow(np.ma.masked_where(data <= 0, data), aspect="auto", cmap=cmap,
+              vmin=0, vmax=vmax, interpolation="nearest")
+    n_rows, n_cols = data.shape
+    ax.set_yticks(range(n_rows))
+    ax.set_yticklabels(row_labels, fontsize=9, color=INK_SECONDARY)
+    step = max(1, int(np.ceil(n_cols / 18)))
+    positions = list(range(0, n_cols, step))
+    ax.set_xticks(positions)
+    ax.set_xticklabels([col_labels[i] for i in positions], rotation=45, ha="right",
+                       fontsize=9, color=INK_MUTED)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.tick_params(length=0)
+    # Gap fra le celle nel colore della superficie (stesso trattamento della punch card).
+    ax.set_xticks(np.arange(-0.5, n_cols, 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, n_rows, 1), minor=True)
+    ax.grid(which="minor", color=SURFACE, linewidth=1.5)
+    ax.tick_params(which="minor", length=0)
+    if show_numbers:
+        for i in range(n_rows):
+            for j in range(n_cols):
+                v = data[i, j]
+                if v > 0:
+                    ax.text(j, i, f"{int(v)}", ha="center", va="center", fontsize=8,
+                            color="white" if v / vmax > 0.45 else INK_PRIMARY)
+    ax.set_title(title, fontsize=12, color=INK_PRIMARY, loc="left", pad=10)
+    if caption:
+        # Sulla riga del titolo, a destra: sotto l'asse c'è già lo spazio delle etichette x
+        # ruotate e una didascalia lì finiva sul titolo del pannello successivo (misurato).
+        ax.set_title(caption, fontsize=8, color=INK_MUTED, loc="right", pad=10)
+
+
+def matrix_inputs(frame, key_col, full_index, freq, max_rows, order_keys=None):
+    """Prepara una matrice di presenza per `key_col` ('author' o 'project').
+
+    Ritorna (matrice righe×bucket, etichette righe, nascoste, DataFrame bucket×chiavi).
+    Se le chiavi superano `max_rows` si tengono le più attive (solo per il TAGLIO) e si
+    segnala quante sono nascoste; l'ordine mostrato è `order_keys(keys)` (alfabetico per gli
+    autori, per attività decrescente per i progetti)."""
+    active = frame[["date", key_col]].drop_duplicates()
+    ranked = active.groupby(key_col)["date"].nunique().sort_values(ascending=False)
+    kept = list(ranked.index[:max_rows])
+    keys = order_keys(kept) if order_keys else kept
+    hidden = len(ranked) - len(kept)
+    buckets = bucketed_days(active[active[key_col].isin(kept)], key_col, keys, full_index, freq)
+    return buckets.T.to_numpy(), keys, hidden, buckets
+
+
 def panel_metric_by_project(ax, df, colors, author_order, metric, title, ylabel):
     """Barre impilate per progetto×autore, generica sulla metrica (churn o commit):
     stesso trattamento visivo per entrambe, cambia solo la colonna aggregata."""
@@ -574,26 +666,6 @@ def panel_donut(ax, df, metric, title, xlabel):
     ax.axis("equal")
 
 
-def panel_active_days(ax, df, colors):
-    data = (df.groupby("author")["active_days"].sum()
-              .sort_values(ascending=True))
-    y = np.arange(len(data))
-    ax.barh(y, data.to_numpy(), height=0.6,
-            color=[colors.get(a, INK_MUTED) for a in data.index],
-            edgecolor=SURFACE, linewidth=0.6)
-    ax.set_yticks(y)
-    ax.set_yticklabels(data.index, fontsize=9, color=INK_SECONDARY)
-    ax.set_title(T["active_title"], fontsize=12,
-                 color=INK_PRIMARY, loc="left", pad=10)
-    ax.set_xlabel(T["active_xlabel"], fontsize=9)
-    ax.grid(axis="x", color=GRIDLINE, linewidth=0.8, linestyle="-")
-    recessive_spines(ax, keep=("bottom",))
-    integer_axis(ax, axis="x")
-    for yi, v in zip(y, data.to_numpy()):
-        ax.text(v, yi, f" {int(v)}", va="center", ha="left",
-                fontsize=9, color=INK_SECONDARY)
-
-
 def panel_table(ax, df):
     """Tabella riepilogo per progetto.
 
@@ -607,7 +679,7 @@ def panel_table(ax, df):
     summary = (df.groupby("project")
                  .agg(churn=("churn", "sum"), commit=("commits", "sum"),
                       file=("files", "sum"), giorni=("active_days", "sum"),
-                      autori=("author", "nunique"), indice=("index", "sum"))
+                      autori=("author", "nunique"))
                  .sort_values("churn", ascending=False))
 
     shown = summary.head(MAX_TABLE_ROWS)
@@ -621,13 +693,12 @@ def panel_table(ax, df):
             f"{int(r['giorni'])}",
             fmt_int(r['file']),
             f"{int(r['autori'])}",
-            f"{r['indice']:.1f}",
         ])
 
     table = ax.table(
         cellText=cells,
         colLabels=T["table_cols"],
-        colWidths=[0.26, 0.14, 0.12, 0.14, 0.12, 0.10, 0.12],
+        colWidths=[0.30, 0.16, 0.14, 0.16, 0.14, 0.10],
         cellLoc="right", loc="upper center",
     )
     table.auto_set_font_size(False)
@@ -655,19 +726,28 @@ def panel_table(ax, df):
 FOOTER_GAP_INCHES = 0.12   # aria minima fra il fondo dell'ultimo pannello e la legenda
 
 
-def fit_footer(fig, last_ax, legend, footer_inches, suptitle):
-    """Allunga la figura se il fondo dell'ultimo pannello (nota compresa) scende sotto la
-    cima della legenda. Stessa funzione di plot_git.py (dove il caso si è presentato con
-    l'ownership come ultima riga): qui l'ultima riga è sempre la tabella e il footer è
-    tarato su quella, ma la nota cambia lunghezza con la lingua e con "Mostrati i primi…":
-    si misura il contenuto EFFETTIVAMENTE disegnato invece di fidarsi della costante.
-    Header, righe e legenda restano alla stessa distanza in pollici: cresce solo il footer.
+def fit_footer(fig, last_ax, anchored, footer_inches, suptitle):
+    """Allunga la figura se il fondo dell'ultimo pannello (etichetta dell'asse e
+    didascalie comprese) scende sotto la cima del footer.
+
+    `anchored` = elementi del footer (legenda, riquadro dei limiti) con la loro distanza in
+    POLLICI dal bordo inferiore: `[(artista, pollici), ...]` (i None si ignorano).
+
+    Il footer è dimensionato per la nota della tabella (NOTE_INCHES), ma quando l'ultima
+    riga è la punch card o l'ownership sotto l'asse ci sono anche un'etichetta x e una
+    didascalia: misurato, con l'ownership in fondo "Righe (git blame)" finiva sotto la
+    legenda. Invece di un'altra costante per ogni combinazione di pannelli, si misura il
+    contenuto EFFETTIVAMENTE disegnato (bbox reali dopo draw()) e si aggiunge solo lo spazio
+    mancante. Header, righe e footer restano alla stessa distanza in POLLICI dai bordi
+    (stessa logica delle costanti in testa): cresce solo lo spazio fra l'ultimo pannello e
+    il footer, e ogni elemento del footer viene ri-ancorato alla nuova altezza.
     """
+    anchored = [(a, y) for a, y in anchored if a is not None]
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
-    content_bottom = last_ax.get_tightbbox(renderer).y0
-    legend_top = legend.get_window_extent(renderer).y1 if legend else 0.0
-    overlap_px = legend_top + FOOTER_GAP_INCHES * fig.dpi - content_bottom
+    content_bottom = last_ax.get_tightbbox(renderer).y0           # pixel dal basso
+    footer_top = max((a.get_window_extent(renderer).y1 for a, _ in anchored), default=0.0)
+    overlap_px = footer_top + FOOTER_GAP_INCHES * fig.dpi - content_bottom
     if overlap_px <= 0:
         return
     extra = overlap_px / fig.dpi
@@ -677,9 +757,11 @@ def fit_footer(fig, last_ax, legend, footer_inches, suptitle):
     fig.subplots_adjust(top=1 - HEADER_INCHES / new_height,
                         bottom=(footer_inches + extra) / new_height)
     suptitle.set_y(1 - SUPTITLE_INCHES / new_height)
-    if legend:
-        legend.set_bbox_to_anchor((0.5, LEGEND_BOTTOM_PAD_INCHES / new_height),
-                                  transform=fig.transFigure)
+    for artist, inches in anchored:
+        if hasattr(artist, "set_bbox_to_anchor"):        # legenda
+            artist.set_bbox_to_anchor((0.5, inches / new_height), transform=fig.transFigure)
+        else:                                            # testo
+            artist.set_y(inches / new_height)
 
 
 # -----------------------------------------------------------------------------
@@ -691,7 +773,7 @@ def main():
     aliases = load_aliases()
     if aliases and isinstance(payload, list):
         print(f"Caricati {len(aliases)} alias autore (JSON in formato legacy).")
-    df, meta = flatten(payload, aliases)
+    df, meta, days_df = flatten(payload, aliases)
 
     start = meta.get("start_date", "N/A")
     end = meta.get("end_date", "N/A")
@@ -699,11 +781,42 @@ def main():
     by_size = (df.groupby("author")["churn"].sum()
                  .sort_values(ascending=False).index.tolist())
     df, author_order = fold_tail(df, by_size)
-    colors = assign_colors(author_order)
+    colors = assign_colors(author_order)   # per RANGO (serve al fold), mai per ordine mostrato
+    display_authors = alpha_order(author_order)
+
+    # Matrice di presenza per autore (tutti i progetti insieme), stessi bucket temporali
+    # del report singolo. Serve metadata con le date e almeno un giorno con attività:
+    # con JSON legacy il pannello viene saltato (non lasciato vuoto).
+    has_matrix = (not days_df.empty and start not in ("N/A", "") and end not in ("N/A", ""))
+    pres_matrix = pres_authors = pres_caption = col_labels = None
+    proj_matrix = proj_names = proj_caption = None
+    bucket_name = ""
+    freq = "D"
+    if has_matrix:
+        freq, bucket_name = choose_bucket(start, end)
+        full = pd.date_range(start=start, end=end, freq="D")
+        pres_matrix, pres_authors, pres_hidden, buckets = matrix_inputs(
+            days_df, "author", full, freq, MAX_MATRIX_ROWS, order_keys=alpha_order)
+        label_fmt = "%Y-%m" if freq == "MS" else "%Y-%m-%d"
+        col_labels = [d.strftime(label_fmt) for d in buckets.index]
+        pres_caption = T["presence_caption"]
+        if pres_hidden:
+            pres_caption += " · " + T["presence_hidden"].format(
+                shown=len(pres_authors), total=len(pres_authors) + pres_hidden)
+        # Asse del tempo a livello di PROGETTO (non di persona): giorni distinti con attività
+        # nel progetto, su tutti gli autori. Righe per attività totale decrescente: sono
+        # progetti, quindi l'ordinamento è lecito (e fa leggere subito dove va il lavoro).
+        proj_matrix, proj_names, proj_hidden, _ = matrix_inputs(
+            days_df, "project", full, freq, MAX_PROJECT_ROWS)
+        proj_caption = T["presence_caption"]
+        if proj_hidden:
+            proj_caption += " · " + T["projects_hidden"].format(
+                shown=len(proj_names), total=len(proj_names) + proj_hidden)
 
     apply_style()
-    # 4 righe: giorni attivi da solo (il più affidabile, in cima), poi UNA RIGA PER
-    # METRICA — commit (riga 2), churn (riga 3) — con dentro barre impilate e ciambella
+    # 5 righe: due matrici nel tempo in cima (presenza per autore, attività per progetto;
+    # assenti con JSON legacy), poi UNA RIGA PER METRICA — commit, churn — con dentro barre
+    # impilate e ciambella
     # della stessa metrica affiancate. Due ragioni, entrambe misurate:
     #
     #   1. Barre e ciambella della stessa metrica raccontano la stessa cosa a due livelli
@@ -737,7 +850,13 @@ def main():
         TABLE_RATIO_MIN,
         (TABLE_ROW_INCHES * (n_table_rows + 1) + TABLE_PAD_INCHES) / ROW_UNIT_INCHES,
     )
-    ratios = [0.75, 1.0, 1.0, table_ratio]
+    ratios = [1.0, 1.0, table_ratio]
+    if has_matrix:
+        matrix_ratio = max(MATRIX_MIN_AXES_INCHES,
+                           MATRIX_CELL_INCHES * len(pres_authors)) / ROW_UNIT_INCHES
+        proj_ratio = max(MATRIX_MIN_AXES_INCHES,
+                         MATRIX_CELL_INCHES * len(proj_names)) / ROW_UNIT_INCHES
+        ratios = [matrix_ratio, proj_ratio] + ratios
     # Altezza figura che rende ROW_UNIT_INCHES l'altezza di un'unità di ratio: le righe
     # occupano sum(ratios) unità, più un gap fra righe pari a hspace × altezza media,
     # più header e footer (assoluti, vedi le costanti in testa).
@@ -751,37 +870,51 @@ def main():
     legend_ncol = min(n_legend_labels, 6) or 1
     legend_rows = -(-n_legend_labels // legend_ncol)  # ceiling division
     legend_height = LEGEND_ROW1_INCHES + max(0, legend_rows - 1) * LEGEND_EXTRA_ROW_INCHES
-    footer_inches = LEGEND_BOTTOM_PAD_INCHES + legend_height + NOTE_INCHES
+    limits_text = textwrap.fill(T["limits_note"], width=LIMITS_WRAP_CHARS)
+    limits_height = LIMITS_GAP_INCHES + LIMITS_LINE_INCHES * (limits_text.count("\n") + 1)
+    footer_inches = LEGEND_BOTTOM_PAD_INCHES + legend_height + limits_height + NOTE_INCHES
 
     fig_height = rows_height + HEADER_INCHES + footer_inches
     fig_top = 1 - HEADER_INCHES / fig_height
     fig_bottom = footer_inches / fig_height
 
     fig = plt.figure(figsize=(FIG_WIDTH_INCHES, fig_height))
-    gs = fig.add_gridspec(4, 2, height_ratios=ratios,
+    gs = fig.add_gridspec(len(ratios), 2, height_ratios=ratios,
                            hspace=FIG_HSPACE, wspace=0.28)
     suptitle = fig.suptitle(T["suptitle"].format(start=start, end=end),
                  fontsize=16, color=INK_PRIMARY, x=0.02, ha="left",
                  y=1 - SUPTITLE_INCHES / fig_height)
 
-    ax1 = fig.add_subplot(gs[0, :])
-    panel_active_days(ax1, df, colors)
+    row = 0
+    if has_matrix:
+        ax1 = fig.add_subplot(gs[row, :])
+        panel_matrix(ax1, pres_matrix, pres_authors, col_labels,
+                     T["presence_title"].format(bucket=bucket_name), pres_caption,
+                     show_numbers=(freq != "D"))
+        row += 1
+        ax1b = fig.add_subplot(gs[row, :])
+        panel_matrix(ax1b, proj_matrix, proj_names, col_labels,
+                     T["projects_title"].format(bucket=bucket_name), proj_caption,
+                     show_numbers=(freq != "D"))
+        row += 1
 
-    ax2 = fig.add_subplot(gs[1, 0])
-    panel_metric_by_project(ax2, df, colors, author_order, "commits",
+    ax2 = fig.add_subplot(gs[row, 0])
+    panel_metric_by_project(ax2, df, colors, display_authors, "commits",
                              T["commits_title"], T["commits_ylabel"])
 
-    ax3 = fig.add_subplot(gs[1, 1])
+    ax3 = fig.add_subplot(gs[row, 1])
     panel_donut(ax3, df, "commits", T["commits_donut"], T["commits_share"])
+    row += 1
 
-    ax4 = fig.add_subplot(gs[2, 0])
-    panel_metric_by_project(ax4, df, colors, author_order, "churn",
+    ax4 = fig.add_subplot(gs[row, 0])
+    panel_metric_by_project(ax4, df, colors, display_authors, "churn",
                              T["churn_title"], T["churn_ylabel"])
 
-    ax5 = fig.add_subplot(gs[2, 1])
+    ax5 = fig.add_subplot(gs[row, 1])
     panel_donut(ax5, df, "churn", T["churn_donut"], T["churn_share"])
+    row += 1
 
-    ax6 = fig.add_subplot(gs[3, :])
+    ax6 = fig.add_subplot(gs[row, :])
     panel_table(ax6, df)
 
     # Le handle si prendono da ax2 (commit per progetto): il primo pannello che disegna
@@ -792,6 +925,12 @@ def main():
         legend = fig.legend(handles, labs, loc="lower center", ncol=min(len(labs), 6),
                             fontsize=9, labelcolor=INK_SECONDARY, frameon=False,
                             bbox_to_anchor=(0.5, LEGEND_BOTTOM_PAD_INCHES / fig_height))
+
+    # Riquadro «cosa non misura»: sopra la legenda, ancorato in pollici dal bordo inferiore
+    # come la legenda (fit_footer() li ri-ancora insieme se la figura si allunga).
+    limits_y = LEGEND_BOTTOM_PAD_INCHES + legend_height + LIMITS_GAP_INCHES
+    limits_artist = fig.text(0.02, limits_y / fig_height, limits_text, fontsize=8,
+                             color=INK_MUTED, va="bottom", ha="left", linespacing=1.3)
 
     # tight_layout non gestisce bene le legende dentro le ciambelle (bbox_to_anchor
     # fuori asse) su un gridspec a 4 righe disomogenee: margini espliciti invece di
@@ -815,7 +954,8 @@ def main():
     label_span = current_left - min_x0
     left_margin = max(0.035, label_span + 0.015)
     fig.subplots_adjust(left=left_margin)
-    fit_footer(fig, ax6, legend, footer_inches, suptitle)
+    fit_footer(fig, ax6, [(legend, LEGEND_BOTTOM_PAD_INCHES), (limits_artist, limits_y)],
+               footer_inches, suptitle)
 
     safe_start = str(start).replace(" ", "_").replace("/", "-")
     safe_end = str(end).replace(" ", "_").replace("/", "-")

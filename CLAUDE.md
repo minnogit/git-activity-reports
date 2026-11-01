@@ -130,7 +130,7 @@ sviluppo; se si tocca la raccolta dati, verificarle di nuovo:
    esaminato (i grafici di GitHub, git-fame, GitStats) risolve questo in modo robusto — coerentemente,
    la scelta è contare tutto: elimina il bug per costruzione, e sposta `churn` a metrica meno
    indicativa delle tre (non più il primo pannello dei report — vedi "Plotter Python" sotto).
-   `DAILY_CHURN_CAP` (vedi sotto) resta quindi l'unica protezione contro un outlier estremo.
+   Non c'è alcun tetto sul churn (vedi «Metriche» sotto): un outlier estremo compare per intero.
 
 ### `find_generated_candidates.sh` — diagnostico, indipendente dalle statistiche del tool
 
@@ -198,82 +198,113 @@ Entrambi leggono JSON da stdin, quindi vanno sempre invocati in pipe da uno dei 
 JSON salvato precedentemente), non da soli. Entrambi accettano anche il formato JSON precedente (array
 senza `metadata`) per poter rielaborare file vecchi.
 
-- **`plot_git.py`** → `git_stats.png`, 4 pannelli su griglia a righe (non più una griglia 2×2 semplice)
-  **in ordine di attendibilità, non di prima impressione**: giorni attivi per autore (riga 1, piena
-  larghezza — il più affidabile, la stessa priorità visiva data alla metrica più affidabile nel report
-  multi-progetto), poi commit e churn nel tempo per autore affiancati (riga 2, quest'ultimo con la
-  linea di trend — churn non è il primo pannello, vedi "Vincoli di raccolta", punto 5), tabella
-  riepilogo (riga 3, piena larghezza). **Granularità
-  adattiva**: ≤45 giorni → giornaliera, ≤250 → settimanale, oltre → mensile (`choose_bucket()`); serve
-  perché una barra al giorno è illeggibile su periodi lunghi. **Quinto pannello opzionale** (striscia
-  larga sotto le prime tre righe, `panel_punch_card()`): heatmap giorno×ora di quando avvengono i commit,
-  sequenziale a una tinta (rampa blu di `palette.md`), presente solo se il JSON ha `punch_card`.
-  Deliberatamente descrittivo ("quando"), non valutativo ("quanto si è lavorato") — i timestamp dei
-  commit non sono un proxy affidabile delle ore lavorate, quindi non è una quarta metrica nell'ordine
-  di attendibilità sopra. Margini: **non** si usa mai `fig.tight_layout()` (nemmeno per il layout
-  base a 3 righe, punch card/ownership assenti) — un gridspec a >2 righe di altezze disomogenee
-  (vero anche solo per giorni attivi + commit/churn + tabella) e/o un asse aggiuntivo "incompatibile"
-  (la colorbar del punch card, la legenda a livello di figura) fa avvisare "Axes that are not
-  compatible" e poi NON calcola nulla: lascia i margini di default di matplotlib (0.125/0.9/0.11,
-  verificato stampando `fig.subplotpars`), abbastanza larghi da non tagliare "Gabriele Stringano"
-  per coincidenza ma molto più dello spazio realmente necessario (misurato: margini vistosamente
-  sproporzionati). Si misura invece SEMPRE lo spazio EFFETTIVAMENTE occupato dall'etichetta y più
-  lunga dopo `fig.canvas.draw()` (bbox del testo già renderizzato via `get_window_extent()`, non una
-  stima) e si calcola da lì il margine sinistro minimo che la ospita, con `fig.subplots_adjust()`;
-  right/top/bottom/hspace/wspace restano fissi (valori già verificati sul contenuto del report).
-  Verificato anche con un nome sintetico da 47 caratteri: margine adattato correttamente, nessun
-  taglio. **Sesto pannello opzionale** (`panel_ownership()`, striscia larga sotto gli altri):
-  barre orizzontali con le righe possedute per autore secondo `ownership` nel JSON — FOTOGRAFIA a
-  fine periodo (git blame all'ultimo commit ≤ end_date), non una serie temporale come tutto il resto:
-  può includere autori mai attivi nel periodo. Stessa palette/assegnazione colori degli altri
-  pannelli (chi non è tra i primi 8 per attività nel periodo si accorpa in "Altro", mai una tinta
-  nuova). Il numero di righe extra (`extra_rows` in `main()`) si adatta a quali dei due pannelli
-  opzionali (punch card, ownership) sono presenti nel JSON — 0, 1 o 2 righe in più sotto le prime tre.
-  **Altezza adattiva** (stesso fix, stesse costanti misurate indipendentemente — vedi
-  `plot_multiproject.py` per i dettagli, qui `TABLE_ROW_INCHES=0.267` per le 6 colonne di
-  `panel_table`, diverso dalle 7 colonne dell'altro file): la riga della tabella si dimensiona sul
-  numero di autori mostrati, non sul caso peggiore fisso, ed **anche il footer si adatta al numero
-  di righe della legenda** (autori + "Trend", quest'ultimo presente solo se `len(labels) >= 3`) —
-  con più di `ncol=6` voci la legenda va a capo, e un footer tarato su una riga sola lasciava
-  sovrapporre la seconda riga al pannello sotto (misurato: 9 autori + Trend, 2 righe di legenda,
-  sovrapposte alla punch card).
-- **`plot_multiproject.py`** → `git_activity_multi_project_report_<start>_<end>.png`, 6 pannelli su
-  griglia 4 righe × 2 colonne, **una riga per metrica**: giorni attivi per autore (riga 1, piena
-  larghezza — il più affidabile, da solo in cima), commit (riga 2: barre impilate per progetto/autore
-  via `panel_metric_by_project()` + ciambella di distribuzione via `panel_donut()`, entrambe generiche
-  sulla metrica; barra 100% se i progetti sono < 3, via `_share_bar()`), churn (riga 3, stessi due
-  pannelli sulla metrica churn), tabella riepilogo (riga 4, piena larghezza). Due vincoli da non
-  regredire: (1) il churn sta SOTTO il commit, non accanto — le versioni più vecchie gli davano DUE
-  pannelli e al commit zero (solo in tabella), incoerente con l'ordine di attendibilità dichiarato nel
-  docstring del modulo; (2) **non** riaffiancare commit e churn sulla stessa riga "per confrontarli":
-  è stato provato e NON funziona, perché ogni pannello riordina i progetti per il PROPRIO totale
-  (`sort_values` in entrambe le funzioni) — misurato su dati sintetici, commit e churn producono
-  ordinamenti completamente diversi appena un progetto ha commit grossi (un client rigenerato finisce
-  ultimo per commit e primo per churn), quindi "prima barra a sinistra vs prima barra a destra"
-  confrontava progetti DIVERSI; le scale y sono anche incommensurabili (es. 560 commit vs 420.000
-  righe). Un confronto commit-vs-churn onesto richiede un pannello dedicato (es. churn per commit per
-  progetto), non due pannelli affiancati. Margini: stesso approccio di `plot_git.py`
-  (misurare il testo renderizzato per il margine sinistro, mai un valore fisso — altrimenti tronca nomi
-  lunghi come "Gabriele Stringano", misurato). **Altezza della figura adattiva**: le celle della
-  tabella sono dimensionate dal FONT e non dall'asse che le contiene (misurato: 0.289" per riga
-  header incluso, `TABLE_ROW_INCHES`, con l'asse fermo a 4.627" a qualunque conteggio di righe), quindi
-  un `height_ratio` fisso sulla riga della tabella lasciava ~3.5" di banda vuota con 3 progetti e
-  rischiava lo sforo con 12. Ora il ratio della quarta riga si calcola dal numero di progetti
-  effettivamente mostrati (`MAX_TABLE_ROWS`) e l'altezza della figura si accorcia di conseguenza,
-  mantenendo `ROW_UNIT_INCHES` costante — così le prime tre righe conservano la stessa dimensione
-  assoluta a ogni conteggio. Corollario da NON regredire: header e footer sono in POLLICI
-  (`HEADER_INCHES`/`SUPTITLE_INCHES`/`LEGEND_BOTTOM_PAD_INCHES`), non in frazione di figura — con
-  frazioni fisse, accorciando la figura il suptitle finiva sopra il titolo del primo pannello
-  (misurato con 3 progetti). Se si cambiano fontsize o `table.scale` in `panel_table`, rimisurare
-  `TABLE_ROW_INCHES` (due render con conteggi diversi bastano: l'altezza è lineare nelle righe).
-  **Il footer si adatta anche al numero di righe della legenda**: con più di `ncol=6` voci (8 autori
-  + "Altro") la legenda va a capo su una seconda riga — con un `FOOTER_INCHES` fisso tarato su una
-  riga sola, la seconda riga finiva sopra il pannello successivo (misurato: 9 autori sintetici, 2
-  righe di legenda, sovrapposte alla tabella). Il numero di righe (`legend_rows`, calcolato PRIMA di
-  creare la figura da `len(author_order)` con lo stesso `ncol` con cui la legenda verrà poi
-  disegnata) determina l'altezza riservata: 0.230" la prima riga, +0.1925" per ognuna successiva
-  (`LEGEND_ROW1_INCHES`/`LEGEND_EXTRA_ROW_INCHES`, misurate via `get_window_extent()`, non
-  un'ipotesi). Stesso bug e stesso fix in `plot_git.py`, dove alle voci-autore si aggiunge "Trend".
+**Nessuna valutazione delle persone** (principio di design dei due plotter, non un dettaglio
+estetico): niente punteggi, niente ordinamenti né totali per persona nella vista predefinita.
+Le persone compaiono come PRESENZA (chi ha lavorato quando), non come volume: gli autori sono
+sempre in ordine ALFABETICO (legenda, impilamento, righe delle matrici; «Altro» ultimo — i colori
+restano assegnati per rango perché serve al fold dei primi 8, ma l'ordine mostrato non è quello) e
+le tabelle sono di repository o di progetto, mai per autore. Il «modo personale» è il filtro per
+autore al collector, non un'altra versione dei grafici. L'ownership (pannello opzionale del
+singolo) resta ordinata per righe possedute perché risponde a una domanda di concentrazione della
+conoscenza (rischio da dipendenza da una persona), non di merito. Un indice composito per autore
+c'era ed è stato tolto per questo (vedi «Metriche»): non reintrodurlo, né sotto forma di tabella
+per persona con commit e churn, anche se in ordine alfabetico.
+
+- **`plot_git.py`** → `git_stats.png`, griglia a righe **in ordine di attendibilità, non di prima
+  impressione**: **matrice di presenza** per autore (riga 1, piena larghezza; al posto delle vecchie
+  barre di «giorni attivi per autore», che ordinate per valore erano una classifica), poi commit e
+  churn nel tempo per autore affiancati (riga 2, quest'ultimo con la linea di trend — churn non è il
+  primo pannello, vedi "Vincoli di raccolta", punto 5), **riepilogo del periodo** (riga 3: UNA riga di
+  totali del repository — commit, churn, file, giorni attivi, autori — mai per persona; `panel_table()`
+  ha costanti diverse dal multi-repo, vedi sotto), poi i pannelli opzionali. **Granularità
+  adattiva**: ≤45 giorni → giornaliera, ≤250 → settimanale, oltre → mensile (`choose_bucket()`, ora
+  presente anche nel multi-repo); serve perché una barra al giorno è illeggibile su periodi lunghi.
+  **Quinto pannello opzionale** (striscia larga sotto le prime tre righe, `panel_punch_card()`):
+  heatmap giorno×ora di quando avvengono i commit, sequenziale a una tinta (rampa blu di
+  `palette.md`), presente solo se il JSON ha `punch_card`. Deliberatamente descrittivo ("quando"),
+  non valutativo ("quanto si è lavorato") — i timestamp dei commit non sono un proxy affidabile delle
+  ore lavorate, quindi non è una quarta metrica nell'ordine di attendibilità sopra. Margini: **non** si
+  usa mai `fig.tight_layout()` (nemmeno per il layout base, punch card/ownership assenti) — un
+  gridspec a >2 righe di altezze disomogenee e/o un asse aggiuntivo "incompatibile" (la colorbar del
+  punch card, la legenda a livello di figura) fa avvisare "Axes that are not compatible" e poi NON
+  calcola nulla: lascia i margini di default di matplotlib (0.125/0.9/0.11, verificato stampando
+  `fig.subplotpars`), abbastanza larghi da non tagliare "Gabriele Stringano" per coincidenza ma molto
+  più dello spazio realmente necessario (misurato: margini vistosamente sproporzionati). Si misura
+  invece SEMPRE lo spazio EFFETTIVAMENTE occupato dall'etichetta y più lunga dopo `fig.canvas.draw()`
+  (bbox del testo già renderizzato via `get_window_extent()`, non una stima) e si calcola da lì il
+  margine sinistro minimo che la ospita, con `fig.subplots_adjust()`; right/top/bottom/hspace/wspace
+  restano fissi (valori già verificati sul contenuto del report). Verificato anche con un nome
+  sintetico da 47 caratteri: margine adattato correttamente, nessun taglio. **Sesto pannello
+  opzionale** (`panel_ownership()`, striscia larga sotto gli altri): barre orizzontali con le righe
+  possedute per autore secondo `ownership` nel JSON — FOTOGRAFIA a fine periodo (git blame all'ultimo
+  commit ≤ end_date), non una serie temporale come tutto il resto: può includere autori mai attivi nel
+  periodo. Stessa palette/assegnazione colori degli altri pannelli (chi non è tra i primi 8 per
+  attività nel periodo si accorpa in "Altro", mai una tinta nuova). Il numero di righe extra
+  (`extra_rows` in `main()`) si adatta a quali dei due pannelli opzionali (punch card, ownership) sono
+  presenti nel JSON — 0, 1 o 2 righe in più sotto le prime tre. **Altezza adattiva** (stesso criterio
+  del multi-repo, costanti misurate indipendentemente): la riga del riepilogo ha altezza fissa per
+  UNA riga (`TABLE_ROW_INCHES=0.267` per riga, `TABLE_PAD_INCHES=0.30`, `TABLE_RATIO_MIN=0.25`), la
+  matrice di presenza si dimensiona sul numero di autori mostrati, e **il footer si adatta** a
+  legenda (autori + "Trend", quest'ultimo presente solo se `len(labels) >= 3`) e riquadro dei limiti
+  (vedi `fit_footer()`). `FIG_HSPACE=0.72` (era 0.6): con la matrice sottile l'altezza media degli
+  assi scende e il gap fra righe, che è una frazione di quella media, si restringeva fino a far
+  toccare la didascalia della punch card col titolo del pannello sotto (misurato).
+- **`plot_multiproject.py`** → `git_activity_multi_project_report_<start>_<end>.png`, griglia a 2
+  colonne: **due matrici nel tempo** a piena larghezza (presenza per autore su tutti i progetti, poi
+  **attività per progetto nel tempo**: progetti × bucket, giorni distinti con attività nel progetto su
+  tutti gli autori, righe per attività decrescente — sono progetti, non persone, quindi l'ordinamento è
+  lecito), poi **una riga per metrica**: commit (barre impilate per progetto/autore via
+  `panel_metric_by_project()` + ciambella di distribuzione via `panel_donut()`, entrambe generiche
+  sulla metrica; barra 100% se i progetti sono < 3, via `_share_bar()`), churn (stessi due pannelli
+  sulla metrica churn), tabella per progetto (churn, commit, giorni attivi, file, numero di autori). Le
+  due matrici richiedono `metadata.start_date/end_date` e `daily_data` (le date dei giorni attivi
+  arrivano da lì, `flatten()` le restituisce come `days_df`): con JSON legacy si SALTANO senza errori,
+  non si lasciano vuote. Due vincoli da non regredire: (1) il churn sta SOTTO il commit, non accanto —
+  le versioni più vecchie gli davano DUE pannelli e al commit zero (solo in tabella), incoerente con
+  l'ordine di attendibilità dichiarato nel docstring del modulo; (2) **non** riaffiancare commit e
+  churn sulla stessa riga "per confrontarli": è stato provato e NON funziona, perché ogni pannello
+  riordina i progetti per il PROPRIO totale (`sort_values` in entrambe le funzioni) — misurato su dati
+  sintetici, commit e churn producono ordinamenti completamente diversi appena un progetto ha commit
+  grossi (un client rigenerato finisce ultimo per commit e primo per churn), quindi "prima barra a
+  sinistra vs prima barra a destra" confrontava progetti DIVERSI; le scale y sono anche incommensurabili
+  (es. 560 commit vs 420.000 righe). Un confronto commit-vs-churn onesto richiede un pannello dedicato
+  (es. churn per commit per progetto), non due pannelli affiancati. Margini: stesso approccio di
+  `plot_git.py` (misurare il testo renderizzato per il margine sinistro, mai un valore fisso —
+  altrimenti tronca nomi lunghi come "Gabriele Stringano", misurato). **Altezza della figura
+  adattiva**: le celle della tabella sono dimensionate dal FONT e non dall'asse che le contiene
+  (misurato: 0.289" per riga header incluso, `TABLE_ROW_INCHES`, con l'asse fermo a 4.627" a qualunque
+  conteggio di righe), quindi un `height_ratio` fisso sulla riga della tabella lasciava ~3.5" di banda
+  vuota con 3 progetti e rischiava lo sforo con 12. Il ratio della tabella si calcola dal numero di
+  progetti effettivamente mostrati (`MAX_TABLE_ROWS`), quello delle matrici dal numero di righe
+  (`MATRIX_CELL_INCHES`), e l'altezza della figura segue, mantenendo `ROW_UNIT_INCHES` costante — così
+  le righe dei grafici conservano la stessa dimensione assoluta a ogni conteggio. Corollario da NON
+  regredire: header e footer sono in POLLICI (`HEADER_INCHES`/`SUPTITLE_INCHES`/
+  `LEGEND_BOTTOM_PAD_INCHES`), non in frazione di figura — con frazioni fisse, accorciando la figura
+  il suptitle finiva sopra il titolo del primo pannello (misurato con 3 progetti). Se si cambiano
+  fontsize o `table.scale` in `panel_table`, rimisurare `TABLE_ROW_INCHES` (due render con conteggi
+  diversi bastano: l'altezza è lineare nelle righe). **Il footer si adatta al numero di righe della
+  legenda**: con più di `ncol=6` voci (8 autori + "Altro") la legenda va a capo su una seconda riga —
+  con un footer fisso tarato su una riga sola, la seconda riga finiva sopra il pannello successivo
+  (misurato: 9 autori sintetici, 2 righe di legenda, sovrapposte alla tabella). Il numero di righe
+  (`legend_rows`, calcolato PRIMA di creare la figura da `len(author_order)` con lo stesso `ncol` con
+  cui la legenda verrà poi disegnata) determina l'altezza riservata: 0.230" la prima riga, +0.1925" per
+  ognuna successiva (`LEGEND_ROW1_INCHES`/`LEGEND_EXTRA_ROW_INCHES`, misurate via
+  `get_window_extent()`, non un'ipotesi). Stesso bug e stesso fix in `plot_git.py`, dove alle
+  voci-autore si aggiunge "Trend".
+
+**Matrici** (`panel_matrix()`, `bucketed_days()`, `matrix_inputs()`, `alpha_order()`, duplicate
+identiche nei due plotter): righe × bucket temporali, valore della cella = giorni DISTINTI con
+attività nel bucket, calcolati con gli stessi bucket dei grafici nel tempo (stesso `full` giornaliero e
+stessa `freq` di `resample`, così le colonne stanno sotto le stesse etichette). Celle vuote quasi
+invisibili (`EMPTY_CELL`) perché «presente» risalti; rampa blu sequenziale a una tinta; numero dentro
+la cella quando il bucket non è giornaliero (nessun valore raggiungibile solo col colore). La scala
+ha `vmax` minimo 3: con `vmax=1` tutte le celle giornaliere (0/1) erano nere come "il massimo"
+(misurato). La didascalia («Più scuro = più giorni attivi», più l'eventuale «mostrati N su M») sta
+sulla RIGA DEL TITOLO, a destra: sotto l'asse ci sono già le etichette x a 45° e una didascalia lì
+finiva sul titolo del pannello seguente (misurato). Tetto di righe (`MAX_MATRIX_ROWS=30` autori,
+`MAX_PROJECT_ROWS=20` progetti): oltre, si tengono i più attivi — solo per il TAGLIO, l'ordine
+mostrato resta quello della matrice — e la nota lo dichiara: mai un taglio muto. Altezza in POLLICI
+(`MATRIX_CELL_INCHES=0.30` per riga, minimo `MATRIX_MIN_AXES_INCHES=0.60`).
 
 **Lingua delle scritte nei grafici** (duplicata identica nei due plotter: `STRINGS`,
 `detect_lang()`, `set_lang()`, `fmt_int()`). Ogni testo disegnato nel PNG passa da `T[...]`, mai
@@ -287,40 +318,47 @@ con successo"/"Report multi-progetto ... generato con successo" sono intercettat
 dall'estensione, che passa `GIT_ACTIVITY_LANG` dalla lingua di VS Code.
 
 **`fit_footer()`** (duplicata nei due plotter): dopo il disegno misura il fondo reale dell'ultimo
-pannello (`get_tightbbox`, etichette e didascalie comprese) e la cima della legenda, e se si
-sovrappongono allunga la figura solo del necessario, tenendo header/righe/legenda alla stessa
-distanza in pollici. Serve perché il footer (`NOTE_INCHES`) è tarato sulla nota della tabella,
-ma in `plot_git.py` l'ultima riga può essere la punch card o l'ownership, con etichetta x e
-didascalia sotto l'asse: misurato, con l'ownership in fondo "Righe (git blame)" finiva sotto la
-legenda. Non sostituirla con un'altra costante per combinazione di pannelli. Le barre impilate
-hanno inoltre un 8% di respiro sopra il massimo (`set_ylim`), altrimenti il vertice toccava il bordo.
+pannello (`get_tightbbox`, etichette e didascalie comprese) e la cima di TUTTO il footer —
+legenda e riquadro «cosa non misura» (`limits_note` in `STRINGS`, a capo con `textwrap` a
+`LIMITS_WRAP_CHARS`, ancorato in pollici sopra la legenda) — e se si sovrappongono allunga la figura
+solo del necessario, ri-ancorando ogni elemento del footer (`anchored = [(artista, pollici), ...]`)
+alla nuova altezza e tenendo header/righe alla stessa distanza in pollici. Serve perché il footer
+(`NOTE_INCHES`) è tarato sulla nota della tabella, ma in `plot_git.py` l'ultima riga può essere la
+punch card o l'ownership, con etichetta x e didascalia sotto l'asse: misurato, con l'ownership in
+fondo "Righe (git blame)" finiva sotto la legenda. Non sostituirla con un'altra costante per
+combinazione di pannelli. Le barre impilate hanno inoltre un 8% di respiro sopra il massimo
+(`set_ylim`), altrimenti il vertice toccava il bordo.
 
 #### Metriche (duplicate identiche nei due plotter — modificarle in entrambi)
 
 ```python
-DELETED_WEIGHT = 0.4 ; DAILY_CHURN_CAP = 15000 ; W_CHURN = 1.0 ; W_FILES = 0.5
-churn  = added + DELETED_WEIGHT * deleted
-indice = Σ giorni [ W_CHURN*ln(1+min(churn_giorno, DAILY_CHURN_CAP)) + W_FILES*ln(1+file_distinti) ]
+DELETED_WEIGHT = 0.4
+churn = added + DELETED_WEIGHT * deleted
 ```
 
-Il report mostra **giorni attivi, commit e churn affiancati, in quest'ordine di attendibilità**;
-l'indice composito è deliberatamente relegato alla sola tabella. Tre proprietà da non regredire:
+Il report mostra **giorni attivi (matrice di presenza), commit e churn, in quest'ordine di
+attendibilità**. Non c'è nessun tetto sul churn (i grafici usano il valore grezzo): un
+`node_modules` committato per errore compare per intero.
+
+**Nessun indice composito.** C'era (somma sui giorni di `ln(1+min(churn_giorno, cap))` e
+`ln(1+file_distinti)`, solo in tabella) ed è stato tolto: era la parte più simile a un punteggio per
+persona e invitava a leggere la tabella come una classifica. Tre lezioni misurate valgono per
+qualunque metrica composita se mai se ne reintroducesse una:
 
 - **Additivo, non moltiplicativo.** La vecchia forma `ln(added)*ln(files)` azzerava tutto se un fattore
   era 0 (una giornata di sole cancellazioni valeva 0) e premiava lo spread: un find/replace su 100 file
-  valeva ~6.7x un fix profondo in 1 file. Ora quel rapporto è ~1.4x.
-- **Il cap è PER GIORNO.** Applicato a un aggregato di periodo (come faceva `plot_multiproject.py`)
-  saturava: `ln(1+1000)` diventava costante per tutti e l'indice misurava solo i file toccati (esempio
-  storico con il valore dell'epoca; il valore attuale del cap è 15000, vedi sotto).
+  valeva ~6.7x un fix profondo in 1 file. Con la forma additiva quel rapporto era ~1.4x.
+- **Un tetto è PER GIORNO.** Applicato a un aggregato di periodo (come faceva `plot_multiproject.py`)
+  saturava: diventava costante per tutti e la metrica misurava solo i file toccati.
 - **Le cancellazioni pesano.** `deleted` entra nel churn; prima era ignorato.
 
-**`DAILY_CHURN_CAP` non è una costante fissa per sempre.** Fissato a 1000 il 9 gennaio 2026, misurato
-di nuovo ad agosto 2026 (repository reali con uso di agenti di coding AI) risultava al **90° percentile**
-della distribuzione — troncava il 72% del churn di giornate normali (gen-mag: 44%), non solo di outlier.
-Un commit reale da 336 file/22.180 churn ("CRUD per tutte le tabelle") ha confermato che non era rumore
-da attenuare. Alzato a 15000 (p99 osservato). Se il modello di sviluppo cambia ancora, ricontrollare la
-distribuzione (vedi README.it.md, sezione "Pesi delle metriche") prima di assumere che il valore attuale
-resti corretto — non è una scelta estetica, è calibrata sui dati e va rifatta quando i dati cambiano.
+**Una soglia calibrata sui dati va ricalibrata quando i dati cambiano.** Il tetto giornaliero del
+churn, quando c'era, fissato a 1000 il 9 gennaio 2026, misurato di nuovo ad agosto 2026 (repository
+reali con uso di agenti di coding AI) risultava al **90° percentile** della distribuzione — troncava
+il 72% del churn di giornate normali (gen-mag: 44%), non solo di outlier. Un commit reale da 336
+file/22.180 churn ("CRUD per tutte le tabelle") ha confermato che non era rumore da attenuare. Era
+stato alzato a 15000 (p99 osservato). Per misurare la distribuzione vedi README.it.md, sezione "Pesi
+delle metriche".
 
 #### Grafica
 
@@ -328,8 +366,11 @@ Palette fissa `SERIES` (8 tinte, validata per separazione CVD e contrasto): l'**
 Oltre 8 autori la coda va in "Altro", mai generare tinte nuove. Il colore segue l'entità e resta lo
 stesso in tutti i pannelli, non dipende dal rango. Griglie e assi sono hairline **solide** (non
 tratteggiate); il "gap" tra segmenti impilati è tracciato nel colore della superficie, non come bordo.
-La tabella di riepilogo non è decorativa: è il ripiego di accessibilità richiesto dalle tinte a basso
-contrasto (aqua/yellow/magenta), perché nessun valore sia raggiungibile solo tramite il colore.
+Il ripiego di accessibilità richiesto dalle tinte a basso contrasto (aqua/yellow/magenta) — nessun
+valore raggiungibile solo tramite il colore — oggi è: i numeri dentro le celle delle matrici con
+bucket non giornalieri, la riga di totali del repository (singolo) e la tabella per progetto
+(multi). Non c'è più una tabella con i valori per autore: i colori degli autori nelle barre
+impilate dicono CHI, i totali per persona non sono raggiungibili da nessuna parte, di proposito.
 
 ### Alias autori (`git-activity-aliases.json`)
 
