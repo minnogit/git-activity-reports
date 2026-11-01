@@ -14,6 +14,8 @@ attivi, autori) di un repository o di un intero workspace, a partire da un inter
 - **Analizza Progetto Corrente**: grafico di attività del repository in cui stai lavorando.
 - **Analizza Tutto il Workspace (Multi-Repo)**: report comparativo di tutti i repository Git
   trovati nel workspace (fino a 3 livelli di profondità).
+- **Analizza il Mio Lavoro**: gli stessi report, ma solo per te (identità da `git config user.email`
+  o dall'impostazione `git-activity.author`).
 - **Intervallo di date configurabile**, anche relativo (`30 days ago`, `last monday`).
 - **Grafico integrato** in un pannello, salvato come PNG; dalla notifica finale puoi
   salvarne una copia o mostrarlo nella cartella.
@@ -102,12 +104,22 @@ L'estensione non è (ancora) pubblicata su VS Code Marketplace.
 3. Cerca e seleziona:
    - **Git Activity: Analizza Progetto Corrente** per analizzare il progetto singolo.
    - **Git Activity: Analizza Tutto il Workspace (Multi-Repo)** per analizzare multi-repository.
+   - **Git Activity: Analizza il Mio Lavoro** per vedere solo il tuo lavoro (vedi sotto).
 4. L'estensione mostrerà una barra di progresso durante l'elaborazione.
 5. Una volta completato, si aprirà un pannello con il grafico e una notifica col percorso del
    file, da cui puoi **salvarne una copia** o **mostrarlo nella cartella**.
 
 Comandi, impostazioni, messaggi e scritte dentro i grafici seguono la lingua di VS Code:
 italiano se VS Code è in italiano, inglese altrimenti.
+
+### Analizza il mio lavoro
+
+**Git Activity: Analizza il Mio Lavoro** genera lo stesso report ma solo con i tuoi commit. L'identità è, in ordine:
+
+1. l'impostazione `git-activity.author` (un nome come appare nei report, oppure un'email), se valorizzata;
+2. l'email di `git config user.email` nel repository corrente.
+
+Se nel workspace c'è più di un repository, un menu chiede se analizzare il progetto corrente o l'intero workspace. Il filtro lo applica il collector: con un'email il confronto è esatto e non distingue le maiuscole, e include anche le altre identità che il tuo file `git-activity-aliases.json` unisce a quell'email (oppure che un `.mailmap` del repository unisce). Se committi con email diverse e non le hai unite, imposta `git-activity.author` o aggiungi gli alias per email (vedi il [README del progetto](../README.md)). Nel report del singolo repository non compare il pannello sull'ownership, perché mostrerebbe gli altri autori.
 
 ### Dove viene salvato il PNG
 
@@ -132,6 +144,7 @@ Puoi personalizzare le date di analisi nelle impostazioni di VSCode:
   - `Start Date`: Data di inizio (es. "2023-01-01" o "30 days ago").
   - `End Date`: Data di fine (es. "now" o "2023-12-31").
   - `Output Dir`: cartella del PNG generato (vuota = vedi sopra; supporta `~`).
+  - `Author`: nome o email usati da «Analizza il Mio Lavoro» (vuota = `git config user.email` del repository).
 
 Il valore può essere sia una data assoluta (`YYYY-MM-DD`) sia un'espressione relativa —
 qualunque cosa capisca `date -d` (GNU date): "yesterday", "2 weeks ago", "last monday",

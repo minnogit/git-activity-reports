@@ -3,6 +3,8 @@
 ## [Non rilasciato]
 
 ### Aggiunto
+- Comando «Analizza il Mio Lavoro» e impostazione `git-activity.author`: gli stessi report filtrati su una persona (nome o email; con l'email sono incluse le identità unite dagli alias o da un `.mailmap`). Con il filtro il report del singolo repository non include l'ownership.
+- I collector riconoscono l'identità per email: alias per email nel file degli alias e `.mailmap` del repository (vedi il README del progetto).
 - Le scritte nei grafici seguono la lingua di VS Code (italiano o inglese).
 - Gli script collector/plotter sono inclusi nel `.vsix` (`bundled/`): non serve più il pacchetto `.deb`.
 - Impostazione `git-activity.outputDir` e notifica "Report salvato in…" con i pulsanti "Salva con nome…" e "Mostra nella cartella".

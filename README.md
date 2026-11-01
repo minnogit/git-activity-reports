@@ -140,8 +140,9 @@ cd ~/projects/backend
 gitstats 2025-11-01 2025-11-30
 # -> generates git_stats.png
 
-# 2. Same report, filtered by author
+# 2. Same report, filtered by author (name or email)
 gitstats 2025-11-01 2025-11-30 "Mario Rossi"
+gitstats 2025-11-01 2025-11-30 mario.rossi@example.com
 
 # 3. Comparison across multiple repositories (local and/or remote), with chart
 gitstats-multi 2025-11-01 2025-11-30 ~/projects/repoA ~/projects/repoB
@@ -149,6 +150,9 @@ gitstats-multi 2025-11-01 2025-11-30 ~/projects/repoA ~/projects/repoB
 
 # 4. Same comparison, reading the project list from a file instead of the command line
 gitstats-multi --file project_list.txt 2025-11-01 2025-11-30
+
+# 5. Only one person's work across all projects (name or email)
+gitstats-multi --author mario.rossi@example.com --file project_list.txt 2025-11-01 2025-11-30
 ```
 
 **Without wrappers** (only the scripts in the `PATH`, step 3 of Installation — it does the same thing "by hand",
@@ -169,7 +173,8 @@ git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 ~/projects/repoA ~/pro
 | Where to run it | Inside the repo folder (or with `--repo`) | From any folder |
 | `START` / `END` | `YYYY-MM-DD`, required | `YYYY-MM-DD`, required (also via `--start`/`--end`) |
 | 3rd positional argument | `text` (default) or `json` | — (repository path/URL) |
-| 4th positional argument | author name (optional, filters) | — |
+| 4th positional argument | author name or email (optional, filters) | — |
+| Filter by author | 4th positional argument | `--author <name\|email>` |
 | Repository list | not applicable (a single repo per run) | paths/URLs at the end of the command, or `--file list.txt` |
 | Update from remote | only with `--fetch` | only with `--fetch` |
 | Repository via URL | `--repo <url>` | pass the URL as a path (positional or a line of `--file`) |
@@ -223,12 +228,13 @@ the bars become too narrow/numerous and the chart loses readability. For long pe
 ./git_stats_collector.sh <START_DATE> <END_DATE> [format] [author]
 ```
 
-**Note:** The Python script `plot_git.py` supports grouping authors through an optional `git-activity-aliases.json` file in the same directory. This file lets you group several Git author names under a single common name, which is useful when the same developer has contributed under different names. Example:
+**Note:** The collectors (`git_stats_collector.sh` and `git_multiproject_stats_collector.sh`) support grouping authors through an optional `git-activity-aliases.json` file. This file lets you group several Git author names under a single common name, which is useful when the same developer has contributed under different names. Example:
 
 ```json
 {
   "Mario Rossi": "Mario R.",
   "Rossi M.": "Mario R.",
+  "mario.rossi@example.com": "Mario R.",
   "Giulia Verdi": "Giulia V."
 }
 ```
@@ -244,6 +250,8 @@ The configuration file can be placed in several locations and will be searched f
 5. In the system directory (`/etc/git-activity-reports/git-activity-aliases.json`)
 
 If no configuration file exists, the script will keep working normally without grouping authors.
+
+**Identity by email and `.mailmap`.** A key containing `@` is an **email** (compared case-insensitively) and takes precedence over a name alias. Use it when the same person appears under different names but the same email, or under several emails. There is no automatic "same email = same person" merge: shared emails, `noreply` addresses and bots would merge different people, so merging is always explicit. Author names and emails are read with `%aN`/`%aE`, which honor a repository `.mailmap`: if you have one, git applies it before the aliases.
 
 ## 🌐 Remote Repositories (analyzing a Git URL)
 
@@ -301,7 +309,7 @@ The keys must match exactly the URL passed on the command line/in the `--file` f
 | 1         | `DATA_INIZIO` | ✓            | Start date (YYYY-MM-DD)         | -       |
 | 2         | `DATA_FINE`   | ✓            | End date (YYYY-MM-DD)           | -       |
 | 3         | `formato`     | ✗            | Output format: `text` or `json` | `text`  |
-| 4         | `autore`      | ✗            | Filter by author, **exact match** on the name | all     |
+| 4         | `autore`      | ✗            | Filter by author, **exact match**: name or email (if it contains `@`; with an email it includes the identities merged by the aliases). With a filter, ownership is not computed | all     |
 
 ### Available Options
 
@@ -429,6 +437,7 @@ detail), ideal for:
 | `--start`    | `<date>`  | Period start date (format: YYYY-MM-DD)                 |
 | `--end`      | `<date>`  | Period end date (format: YYYY-MM-DD)                   |
 | `--fetch`    | -         | Enables updating the repositories with git fetch       |
+| `--author`   | `<name\|email>` | Only one person's work, exact match: display name or email (if it contains `@`; with an email it includes the identities merged by the aliases) |
 | `-h, --help` | -         | Shows the help                                         |
 
 **Note:** each path (positional or a line of `--file`) can also be a Git URL, not just a local
@@ -853,6 +862,7 @@ The `git-activity-aliases.json` file lets you group different Git author names u
 {
   "Mario Rossi": "Mario R.",
   "Rossi M.": "Mario R.",
+  "mario.rossi@example.com": "Mario R.",
   "Giulia Verdi": "Giulia V."
 }
 ```
@@ -868,6 +878,8 @@ The configuration file can be placed in several locations and will be searched i
 5. In the system directory (`/etc/git-activity-reports/git-activity-aliases.json`)
 
 If no configuration file exists, the script will keep working normally without grouping authors.
+
+**Identity by email and `.mailmap`.** A key containing `@` is an **email** (compared case-insensitively) and takes precedence over a name alias. Use it when the same person appears under different names but the same email, or under several emails. There is no automatic "same email = same person" merge: shared emails, `noreply` addresses and bots would merge different people, so merging is always explicit. Author names and emails are read with `%aN`/`%aE`, which honor a repository `.mailmap`: if you have one, git applies it before the aliases.
 
 ---
 
@@ -936,6 +948,8 @@ counted **also** for "Luca". Practical consequences:
 - The `author` parameter requires the exact full name; if it finds no matches, the
   script lists the authors available in the period
 - Names with special characters (parentheses, dots) are no longer interpreted as regex
+- If the value contains `@` the filter compares the **email** (exact, case-insensitive, after a possible `.mailmap`) and also includes every identity that the aliases merge into the same display name
+- With an author filter **ownership is not computed**: the panel would show the other authors and the `git blame` runs would be a cost with no benefit
 
 ### Date Handling
 
@@ -1046,7 +1060,7 @@ it was a substring match (which however caused double counting between nested na
 **Solution:** the script itself lists the authors available in the period — copy the name from
 that list. If you use aliases, both the original Git name and the display name work: the
 requested name is first resolved through the alias map (the script tells you, e.g.
-`Autore "Michele Innocenti" risolto in "minnogit" tramite gli alias`, meaning: author "Michele Innocenti" resolved to "minnogit" via aliases).
+`Autore "Michele Innocenti" risolto in "minnogit" tramite gli alias`, meaning: author "Michele Innocenti" resolved to "minnogit" via aliases). The filter also accepts an **email** (e.g. `mario.rossi@example.com`): the comparison is exact but case-insensitive.
 
 #### "Non sei in un repository Git" ("You are not in a Git repository")
 
@@ -1587,13 +1601,23 @@ git clone https://github.com/user/repo.git /tmp/repo
 
 ### How do I handle authors with different emails?
 
-Git uses the name from `git config user.name`. If an author has commits under different names, they will appear separately. Solution:
+Git uses the name from `git config user.name`. If a person has commits under different names or emails, they will appear separately. There are two solutions, and you can use both. The first is a `.mailmap` in the repository, which the collectors honor:
 
 ```bash
-# Unify with .mailmap in the repository
 # .mailmap file:
 # Preferred Name <preferred@email.com> Old Name <old@email.com>
 ```
+
+The second is email aliases in `git-activity-aliases.json`: a key containing `@` is an email (case-insensitive) and applies to every repository:
+
+```json
+{
+  "mario@work.com": "Mario Rossi",
+  "mario.personal@example.com": "Mario Rossi"
+}
+```
+
+There is no automatic merge for equal emails: shared emails, `noreply` addresses and bots would merge different people.
 
 ### Do the scripts affect the repository?
 
@@ -1656,7 +1680,7 @@ gitstats-multi --file repos.txt 2025-12-01 2025-12-31
 The [`vscode-extension/`](vscode-extension/) folder contains an extension that calls the same
 collectors and plotters from Visual Studio Code, without opening a terminal: from the Command Palette
 (`Ctrl+Shift+P`) you choose **Git Activity: Analizza Progetto Corrente** (Analyze Current Project) or **Analizza Tutto il
-Workspace (Multi-Repo)** (Analyze Entire Workspace) and the chart opens in a panel. The extension contains no analysis logic
+Workspace (Multi-Repo)** (Analyze Entire Workspace) and the chart opens in a panel. A third command, **Analizza il Mio Lavoro** (Analyze My Work), shows the same report but only for you (identity from `git config user.email` or from the `git-activity.author` setting). The extension contains no analysis logic
 of its own: it uses the scripts of this repository, already included in its `.vsix` package.
 
 It requires the same prerequisites as the scripts (Linux/macOS with bash and GNU `date`, Git, Python 3

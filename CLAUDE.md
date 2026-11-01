@@ -19,11 +19,13 @@ manuale tipica dopo una modifica:
 # Singolo repository (deve essere eseguito dentro un repo git)
 ./git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py
 ./git_stats_collector.sh --fetch 2025-11-01 2025-11-30 text "Nome Autore"
+./git_stats_collector.sh 2025-11-01 2025-11-30 json mario@example.com   # filtro per email
 ./git_stats_collector.sh -h
 
 # Multi-repository (eseguibile da qualsiasi directory)
 ./git_multiproject_stats_collector.sh --file project_list.txt 2025-11-01 2025-11-30 | python3 plot_multiproject.py
 ./git_multiproject_stats_collector.sh --start 2025-11-01 --end 2025-11-30 ~/repoA ~/repoB
+./git_multiproject_stats_collector.sh --author mario@example.com 2025-11-01 2025-11-30 ~/repoA ~/repoB
 ./git_multiproject_stats_collector.sh -h
 
 # Wrapper semplificati (richiedono che gli script sopra siano nel PATH)
@@ -72,7 +74,8 @@ I due stadi sono disaccoppiati solo dal formato JSON — si può salvare l'outpu
 rieseguire il plot separatamente (`cat dati.json | python3 plot_git.py`).
 
 - **`git_stats_collector.sh`** → singolo repo, granularità **giornaliera**. Formato output `text` o `json`
-  (flag posizionale), filtro opzionale per autore (match **esatto**), `--repo <path|url>` per analizzare
+  (flag posizionale), filtro opzionale per autore (match **esatto**, per nome oppure per email se il
+  valore contiene `@`: vedi «Alias autori»), `--repo <path|url>` per analizzare
   un repo diverso dalla cwd. Output JSON: `{metadata: {start_date, end_date, project, date_basis},
   data: [{author, total_commits, daily_data: [{day, date, commits, lines, added, deleted, files}],
   punch_card: [{weekday, hour, commits}]}], ownership: {ref_commit, ref_date, total_lines,
@@ -87,10 +90,13 @@ rieseguire il plot separatamente (`cat dati.json | python3 plot_git.py`).
   processi) — l'aggregazione per-autore deve avvenire DENTRO ogni processo figlio prima di scrivere
   sullo stdout condiviso: solo righe corte restano atomiche a livello di pipe, l'output multi-riga
   crudo di `git blame` concatenato da processi concorrenti si corrompe per interleaving (misurato).
+  Con un filtro autore l'ownership NON viene calcolata (il pannello mostrerebbe gli altri autori e i
+  `git blame` sarebbero un costo senza beneficio).
 - **`git_multiproject_stats_collector.sh`** → più repo, per progetto+autore **con dettaglio giornaliero**.
   Sorgente repo: argomenti posizionali, oppure `--file <path>` (uno per riga, `#` = commento, supporta `~`
-  e spazi). Output: `{metadata, data: [{project, author, commits, added, deleted, lines, files,
-  active_days, daily_data: [...]}]}`.
+  e spazi). `--author <nome|email>` filtra su una persona (stessa semantica del collector singolo; il
+  parser accetta solo la forma `--author <valore>`, non `--author=<valore>`). Output: `{metadata, data:
+  [{project, author, commits, added, deleted, lines, files, active_days, daily_data: [...]}]}`.
 - Sono elencati **solo i giorni con attività**; i plotter ricostruiscono i giorni vuoti dal range in
   `metadata` (altrimenti il grafico comprimerebbe il tempo e il trend mentirebbe).
 - Entrambi gli script escludono i merge commit (`--no-merges`) e per default **non** eseguono `git fetch`
@@ -339,6 +345,24 @@ vince, nessun merge tra livelli):
    senza questo fallback un file alias messo accanto agli script non veniva mai trovato
 5. `/etc/git-activity-reports/git-activity-aliases.json`
 
+**Chiavi email.** Una chiave che contiene `@` è un'EMAIL: `dump_aliases_tsv` la normalizza in
+minuscolo (match case-insensitive), le altre chiavi restano nomi. Priorità: alias per email > alias per
+nome > nome così com'è (`resolve()` nell'awk dei collector, stessa regola nell'ownership). Nome ed email
+vengono da `%aN`/`%aE` di `git log` e dalle righe `author`/`author-mail` di `git blame --line-porcelain`:
+tutte rispettano un `.mailmap` del repository, che quindi unisce le identità già prima degli alias.
+**Nessun merge automatico «stessa email = stessa persona»**, scelta deliberata: email condivise,
+indirizzi `noreply` e bot unirebbero persone diverse; l'unione resta esplicita (alias o `.mailmap`).
+
+**Filtro autore** (4° argomento posizionale del singolo, `--author` del multi). Un valore con `@` è
+un'email: confronto esatto e case-insensitive sull'email dopo il `.mailmap`; se gli alias associano
+quell'email a un nome visualizzato D, il filtro include TUTTI i commit risolti a D (altrimenti si
+perderebbero le altre identità della stessa persona), altrimenti solo i commit con quell'email — non
+quelli con lo stesso nome, perché due email possono stare sotto lo stesso nome. Un valore senza `@` è il
+nome visualizzato esatto, o il nome git originale risolto dalla mappa per nome (comportamento storico).
+Il filtro agisce in awk sui commit grezzi, PRIMA dell'aggregazione: il TSV aggrega per nome visualizzato,
+quindi un filtro per email non si può applicare dopo. Se non c'è nessun dato: `Avviso: nessun dato per
+l'autore ...` con l'elenco dei nomi visti nel periodo (l'awk li accoda a un file temporaneo).
+
 **Gli alias vanno applicati nel collector, sui dati grezzi, prima di ogni aggregazione** — non nel
 plotter. Sommare metriche calcolate separatamente per ogni identità non equivale a calcolarle sui dati
 uniti: con la vecchia formula uno sviluppatore con 2 identità git otteneva un punteggio ~1.5x superiore
@@ -360,6 +384,13 @@ PNG risultante in una webview. Punti chiave:
   (comando "Analizza Progetto Corrente" vs "Analizza Tutto il Workspace (Multi-Repo)").
 - Sceglie la coppia collector+plotter per singolo repo o multi-repo in base al numero di repo
   trovati (1 vs N).
+- `git-activity.analyzeMyWork` («Analyze My Work»): stessi report, filtrati su una persona. Identità:
+  impostazione `git-activity.author` (nome o email), altrimenti `git config user.email` del repo corrente
+  (`resolveAuthor()`, `execFile`, mai shell). Con più repo nel workspace un QuickPick chiede progetto
+  corrente o intero workspace. L'autore arriva a `runAnalysis(context, paths, author)`: collector singolo =
+  4° argomento posizionale DOPO `json`, multi = `--author <valore>` PRIMA delle date. L'estensione non
+  risolve alias né `.mailmap`: passa l'identità così com'è e il collector fa il resto. Col filtro il report
+  singolo non ha ownership (il plotter salta il pannello se la chiave manca).
 - `resolveScriptPaths()` risolve i percorsi di collector e plotter in tre modi, in ordine: (1)
   `bundled/` dentro l'estensione stessa, popolata da `npm run copy-bundled`
   (`scripts/copy-bundled.js`) durante `vscode:prepublish` e quindi già presente in ogni `.vsix`
