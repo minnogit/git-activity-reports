@@ -16,6 +16,11 @@
 #   --start <data>   Data di inizio periodo (alternativa a posizionale)
 #   --end <data>     Data di fine periodo (alternativa a posizionale)
 #   --fetch          Abilita l'aggiornamento dei repository con git fetch
+#   --author <val>   Analizza solo il lavoro di una persona (match ESATTO): il nome
+#                    visualizzato (o il nome git originale, risolto tramite gli alias)
+#                    oppure, se il valore contiene '@', l'email dell'autore (senza
+#                    distinguere maiuscole, dopo un eventuale .mailmap); in quel caso
+#                    include anche le identità che gli alias uniscono allo stesso nome
 #   -h, --help       Mostra questo help
 #
 # PARAMETRI POSIZIONALI:
@@ -31,7 +36,11 @@
 #   - I giorni sono assegnati per AUTHOR-DATE, non per committer-date: un rebase o un
 #     cherry-pick non sposta più il lavoro nel periodo sbagliato.
 #   - `files` conta i file DISTINTI toccati, non le righe di --numstat.
-#   - Gli alias autore sono applicati QUI, prima di ogni aggregazione.
+#   - Gli alias autore sono applicati QUI, prima di ogni aggregazione. Una chiave
+#     dell'alias file che contiene '@' è un'EMAIL (alias per email > alias per nome >
+#     nome così com'è). Nome ed email vengono letti con %aN/%aE, che rispettano un
+#     .mailmap del repository. Nessun merge automatico "stessa email = stessa persona"
+#     senza alias o .mailmap (email condivise, noreply e bot unirebbero persone diverse).
 #   - L'output include `daily_data`: senza granularità giornaliera il tetto anti-outlier
 #     applicato dal plotter saturava su periodi lunghi, appiattendo tutti gli autori.
 #
@@ -101,6 +110,7 @@ PROJECT_FILE=""
 START_DATE=""
 END_DATE=""
 FETCH_ENABLED=false
+CLI_AUTHOR_FILTER=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -124,6 +134,14 @@ while [[ $# -gt 0 ]]; do
             FETCH_ENABLED=true
             shift
             ;;
+        --author)
+            if [[ -z "$2" || "$2" =~ ^-- ]]; then
+                echo "Errore: --author richiede un argomento (nome o email)." >&2
+                exit 1
+            fi
+            CLI_AUTHOR_FILTER="$2"
+            shift 2
+            ;;
         -h|--help)
             cat << 'EOF'
 UTILIZZO:
@@ -134,6 +152,9 @@ OPZIONI:
   --start <data>   Data di inizio periodo (alternativa a posizionale)
   --end <data>     Data di fine periodo (alternativa a posizionale)
   --fetch          Abilita l'aggiornamento dei repository con git fetch
+  --author <val>   Analizza solo il lavoro di una persona, match ESATTO: nome visualizzato
+                   oppure email (se contiene '@', senza distinguere maiuscole); con l'email
+                   include anche le identità unite dagli alias
   -h, --help       Mostra questo help
 
 PARAMETRI POSIZIONALI:
@@ -154,13 +175,17 @@ ESEMPI:
   # Con aggiornamento esplicito dei repository
   ./git_multiproject_stats_collector.sh --fetch --file repos.txt 2025-11-01 2025-11-30
 
+  # Solo il lavoro di una persona (nome visualizzato o email) su tutti i progetti
+  ./git_multiproject_stats_collector.sh --author mario.rossi@example.com --file progetti.txt 2025-11-01 2025-11-30
+
   # Repository remoto (clonato/aggiornato sotto ~/repos, override con GIT_ACTIVITY_REPOS_DIR)
   ./git_multiproject_stats_collector.sh 2025-11-01 2025-11-30 https://github.com/org/repo.git ~/repo2
 
 NOTE:
   - I giorni sono attribuiti per author-date (rebase-safe), non per committer-date
   - `files` conta i file distinti toccati, non le modifiche per file
-  - Gli alias autore sono applicati prima dell'aggregazione
+  - Gli alias autore sono applicati prima dell'aggregazione; una chiave con '@' è un'email
+  - Nome ed email autore rispettano un .mailmap del repository
 EOF
             exit 0
             ;;
@@ -335,7 +360,9 @@ find_aliases_file() {
     return 0
 }
 
-# Scrive su stdout righe "nome-git<TAB>nome-visualizzato" leggibili da awk
+# Scrive su stdout righe "chiave<TAB>nome-visualizzato" leggibili da awk. Una chiave che
+# contiene '@' è un'EMAIL e viene normalizzata in minuscolo (il match per email non
+# distingue le maiuscole); le altre chiavi sono nomi git e restano com'erano.
 dump_aliases_tsv() {
     local f
     f=$(find_aliases_file)
@@ -349,6 +376,8 @@ try:
         for k, v in data.items():
             k = str(k).replace("\t", " ").replace("\n", " ")
             v = str(v).replace("\t", " ").replace("\n", " ")
+            if "@" in k:
+                k = k.strip().lower()
             print(f"{k}\t{v}")
 except Exception:
     pass
@@ -391,9 +420,13 @@ except Exception:
 # -----------------------------------------------
 # Analisi di un singolo progetto
 # -----------------------------------------------
+# Parametri: $1 = percorso o URL; $2 = file alias (TSV, può essere vuoto); $3 = modalità
+# filtro autore ("", "name" o "email"); $4 = valore del filtro (per "email" in minuscolo);
+# $5 = nome visualizzato associato a quell'email dagli alias (può essere vuoto); $6 = file
+# dove accodare i nomi visualizzati visti nel periodo (per l'avviso "nessun dato").
 # Emette TSV: progetto \t autore \t data \t commits \t added \t deleted \t files_giorno \t files_periodo
 analyze_project() {
-    local input_path="$1" alias_tsv="$2"
+    local input_path="$1" alias_tsv="$2" filt_mode="${3:-}" filt_val="${4:-}" filt_disp="${5:-}" list_file="${6:-}"
     local project_path
     project_path=$(resolve_repo_path "$input_path")
     if [[ $? -ne 0 || -z "$project_path" ]]; then
@@ -426,8 +459,18 @@ analyze_project() {
     since_margin=$(date -d "$START_DATE -31 days" +%Y-%m-%d 2>/dev/null || echo "$START_DATE")
 
     git -C "$project_path" log --no-merges --since="$since_margin" \
-        --pretty=format:'%x01%H%x09%an%x09%ad' --date=short --numstat 2>/dev/null \
-    | awk -v start="$START_DATE" -v end="$END_DATE" -v aliasfile="$alias_tsv" -v project="$project_name" '
+        --pretty=format:'%x01%H%x09%aN%x09%aE%x09%ad' --date=short --numstat 2>/dev/null \
+    | awk -v start="$START_DATE" -v end="$END_DATE" -v aliasfile="$alias_tsv" -v project="$project_name" \
+          -v filt_mode="$filt_mode" -v filt_val="$filt_val" -v filt_disp="$filt_disp" \
+          -v listfile="$list_file" '
+        # Nome visualizzato: alias per email > alias per nome > nome così com'"'"'è.
+        # Le chiavi email nel TSV sono già in minuscolo (vedi dump_aliases_tsv).
+        function resolve(name, email,   e) {
+            e = tolower(email)
+            if (index(e, "@") && (e in alias)) return alias[e]
+            if (name in alias) return alias[name]
+            return name
+        }
         BEGIN {
             FS = "\t"; OFS = "\t"
             if (aliasfile != "") {
@@ -439,14 +482,26 @@ analyze_project() {
             }
             active = 0
         }
+        # Riga di intestazione commit: \x01<hash>\t<autore>\t<email>\t<author-date>
         substr($0, 1, 1) == "\001" {
-            a = $2; d = $3
+            d = $4
             if (d >= start && d <= end) {
-                if (a in alias) a = alias[a]
-                cur_a = a
-                cur = a SUBSEP d
-                commits[cur]++
-                active = 1
+                a = resolve($2, $3)
+                seen[a] = 1
+                keep = 1
+                # Il filtro autore agisce qui, PRIMA di aggregare: per email non si
+                # potrebbe fare dopo (il TSV aggrega per nome visualizzato, e due email
+                # diverse possono stare sotto lo stesso nome).
+                if (filt_mode == "name") keep = (a == filt_val)
+                else if (filt_mode == "email") keep = (tolower($3) == filt_val || (filt_disp != "" && a == filt_disp))
+                if (keep) {
+                    cur_a = a
+                    cur = a SUBSEP d
+                    commits[cur]++
+                    active = 1
+                } else {
+                    active = 0
+                }
             } else {
                 active = 0
             }
@@ -471,6 +526,7 @@ analyze_project() {
                 split(k, kk, SUBSEP)
                 print project, kk[1], kk[2], commits[k], added[k] + 0, deleted[k] + 0, files[k] + 0, pfiles[kk[1]] + 0
             }
+            if (listfile != "") for (x in seen) print x >> listfile
         }'
 }
 
@@ -496,11 +552,45 @@ main() {
     dump_aliases_tsv > "$alias_tsv"
     [[ -s "$alias_tsv" ]] || alias_tsv=""
 
+    # Filtro autore (match ESATTO): il valore, nome o email (se contiene '@'), va prima
+    # risolto attraverso la mappa degli alias, altrimenti un filtro col nome Git originale
+    # non troverebbe nulla (i dati sono già raggruppati sotto il nome visualizzato).
+    local filt_mode="" filt_val="" filt_disp="" authors_seen="$tmpdir/authors_seen.txt"
+    if [[ -n "$CLI_AUTHOR_FILTER" ]]; then
+        if [[ "$CLI_AUTHOR_FILTER" == *@* ]]; then
+            filt_mode="email"
+            filt_val=$(printf '%s' "$CLI_AUTHOR_FILTER" | tr '[:upper:]' '[:lower:]')
+            if [[ -n "$alias_tsv" ]]; then
+                filt_disp=$(awk -F'\t' -v w="$filt_val" '$1 == w { print $2; exit }' "$alias_tsv")
+                if [[ -n "$filt_disp" ]]; then
+                    echo "Email \"$CLI_AUTHOR_FILTER\" associata a \"$filt_disp\" tramite gli alias: incluse tutte le sue identità." >&2
+                fi
+            fi
+        else
+            filt_mode="name"
+            filt_val="$CLI_AUTHOR_FILTER"
+            if [[ -n "$alias_tsv" ]]; then
+                local mapped
+                mapped=$(awk -F'\t' -v w="$filt_val" '$1 == w { print $2; exit }' "$alias_tsv")
+                if [[ -n "$mapped" && "$mapped" != "$filt_val" ]]; then
+                    echo "Autore \"$filt_val\" risolto in \"$mapped\" tramite gli alias." >&2
+                    filt_val="$mapped"
+                fi
+            fi
+        fi
+    fi
+
     : > "$all_tsv"
     local path
     for path in "${PROJECT_PATHS[@]}"; do
-        analyze_project "$path" "$alias_tsv" >> "$all_tsv"
+        analyze_project "$path" "$alias_tsv" "$filt_mode" "$filt_val" "$filt_disp" "$authors_seen" >> "$all_tsv"
     done
+
+    if [[ -n "$filt_mode" && ! -s "$all_tsv" ]]; then
+        echo "Avviso: nessun dato per l'autore \"$CLI_AUTHOR_FILTER\" (il match è esatto)." >&2
+        echo "Autori disponibili nel periodo:" >&2
+        sort -u "$authors_seen" 2>/dev/null | sed 's/^/  - /' >&2
+    fi
 
     sort -t$'\t' -k1,1 -k2,2 -k3,3 "$all_tsv" | python3 -c '
 import sys, json

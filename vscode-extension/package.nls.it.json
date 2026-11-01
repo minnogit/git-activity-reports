@@ -6,5 +6,7 @@
   "config.endDate": "Data di fine per l'analisi (es. YYYY-MM-DD o 'now').",
   "config.outputDir": "Cartella dove viene scritto il PNG generato. Vuota: la cartella del workspace per l'analisi multi-repo, la cartella di storage dell'estensione per un singolo repository (così il report non compare mai come file non tracciato nel repo analizzato). Supporta `~` iniziale.",
   "capabilities.untrusted": "L'estensione esegue script bash e Python sui repository del workspace, quindi richiede un workspace attendibile.",
-  "capabilities.virtual": "L'estensione richiede un filesystem reale: esegue git e script locali."
+  "capabilities.virtual": "L'estensione richiede un filesystem reale: esegue git e script locali.",
+  "command.analyzeMyWork.title": "Analizza il Mio Lavoro",
+  "config.author": "Di chi mostra il lavoro «Analizza il Mio Lavoro»: un nome come appare nei report, oppure un indirizzo email (match esatto, senza distinguere maiuscole; con l'email sono incluse tutte le identità che il file degli alias unisce a quella). Vuota: l'email di `git config user.email` del repository."
 }

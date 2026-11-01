@@ -14,5 +14,9 @@
   "Save as…": "Salva con nome…",
   "Show in folder": "Mostra nella cartella",
   "Report saved to {0}": "Report salvato in {0}",
-  "PNG image": "Immagine PNG"
+  "PNG image": "Immagine PNG",
+  "Could not determine your Git identity. Set \"git-activity.author\" in the settings, or run \"git config user.email\" in the repository.": "Impossibile determinare la tua identità Git. Imposta \"git-activity.author\" nelle impostazioni, oppure esegui \"git config user.email\" nel repository.",
+  "Current project": "Progetto corrente",
+  "Whole workspace ({0} repositories)": "Intero workspace ({0} repository)",
+  "Analyze the work of {0} on:": "Analizza il lavoro di {0} su:"
 }

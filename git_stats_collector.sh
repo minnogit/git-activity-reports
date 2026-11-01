@@ -16,7 +16,14 @@
 #   DATA_FINE      Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
 #   formato        Formato output: 'text' o 'json' (default: text)
 #   autore         Filtra per autore specifico (default: tutti, modalità TOTALE)
-#                  Il match è ESATTO sul nome autore (non più una sottostringa).
+#                  Il match è ESATTO (non più una sottostringa). Se il valore contiene
+#                  una '@' è un'EMAIL (confronto esatto, senza distinguere maiuscole,
+#                  sull'email dell'autore dopo un eventuale .mailmap): include anche tutti
+#                  i commit delle identità che gli alias uniscono allo stesso nome
+#                  visualizzato. Altrimenti è il nome visualizzato (o il nome git
+#                  originale, risolto tramite gli alias).
+#                  Con un filtro autore l'ownership NON viene calcolata (il pannello
+#                  mostrerebbe gli altri autori).
 #
 # OWNERSHIP (--no-ownership per disattivare):
 #   Solo con formato 'json': calcola, via `git blame`, quante righe del repository al
@@ -41,7 +48,11 @@
 #     lo stesso file modificato in 3 commit conta 1, non 3.
 #   - Gli alias autore (git-activity-aliases.json) sono applicati QUI, prima di
 #     qualsiasi aggregazione, così le identità multiple dello stesso sviluppatore
-#     vengono unite sui dati grezzi.
+#     vengono unite sui dati grezzi. Una chiave dell'alias file che contiene '@' è
+#     un'EMAIL (alias per email > alias per nome > nome così com'è). Nome ed email
+#     vengono letti con %aN/%aE, che rispettano un .mailmap del repository. Nessun
+#     merge automatico "stessa email = stessa persona" senza alias o .mailmap
+#     (email condivise, noreply e bot unirebbero persone diverse).
 #
 # ESEMPI:
 #   # Report testuale per tutti gli autori (aggregato)
@@ -182,7 +193,10 @@ PARAMETRI:
   DATA_INIZIO      Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
   DATA_FINE        Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
   formato          Formato output: 'text' o 'json' (default: text)
-  autore           Filtra per autore specifico, match ESATTO (default: tutti)
+  autore           Filtra per autore specifico, match ESATTO (default: tutti).
+                   Nome visualizzato, oppure email (se contiene '@', senza distinguere
+                   maiuscole): include anche le identità unite dagli alias.
+                   Con un filtro autore l'ownership non viene calcolata.
 
 ESEMPI:
   # Report testuale per tutti gli autori (aggregato)
@@ -190,6 +204,9 @@ ESEMPI:
 
   # Report testuale per autore specifico
   ./git_stats_collector.sh 2025-11-01 2025-11-30 text "Mario Rossi"
+
+  # JSON del solo lavoro di una persona, identificata dall'email
+  ./git_stats_collector.sh 2025-11-01 2025-11-30 json mario.rossi@example.com | python3 plot_git.py
 
   # JSON per visualizzazione grafica
   ./git_stats_collector.sh 2025-11-01 2025-11-30 json | python3 plot_git.py
@@ -203,7 +220,8 @@ ESEMPI:
 NOTE:
   - I giorni sono attribuiti per author-date (rebase-safe), non per committer-date
   - `files` conta i file distinti toccati, non le modifiche per file
-  - Gli alias autore sono applicati prima dell'aggregazione
+  - Gli alias autore sono applicati prima dell'aggregazione; una chiave con '@' è un'email
+  - Nome ed email autore rispettano un .mailmap del repository
 EOF
             exit 0
             ;;
@@ -352,7 +370,9 @@ find_aliases_file() {
     return 0
 }
 
-# Scrive su stdout righe "nome-git<TAB>nome-visualizzato" leggibili da awk
+# Scrive su stdout righe "chiave<TAB>nome-visualizzato" leggibili da awk. Una chiave che
+# contiene '@' è un'EMAIL e viene normalizzata in minuscolo (il match per email non
+# distingue le maiuscole); le altre chiavi sono nomi git e restano com'erano.
 dump_aliases_tsv() {
     local f
     f=$(find_aliases_file)
@@ -366,6 +386,8 @@ try:
         for k, v in data.items():
             k = str(k).replace("\t", " ").replace("\n", " ")
             v = str(v).replace("\t", " ").replace("\n", " ")
+            if "@" in k:
+                k = k.strip().lower()
             print(f"{k}\t{v}")
 except Exception:
     pass
@@ -408,13 +430,17 @@ except Exception:
 # -----------------------------------------------
 # Raccolta dati: UN SOLO git log, aggregazione in awk
 # -----------------------------------------------
+# Parametri: $1 = file alias (TSV, può essere vuoto); $2 = modalità filtro autore
+# ("", "name" o "email"); $3 = valore del filtro (per "email" in minuscolo); $4 = nome
+# visualizzato associato a quell'email dagli alias (può essere vuoto); $5 = file dove
+# accodare i nomi visualizzati visti nel periodo (serve all'avviso "nessun dato").
 # Emette TSV: autore \t data \t ora \t commits \t added \t deleted \t files_distinti
 # "ora" (0-23) è l'ora locale registrata nel commit (fuso dell'autore, quello che git log
 # mostra di default) — nessuna conversione a un fuso comune, per restare semplice e
 # coerente con l'author-date già usata ovunque. Serve per il punch card giorno×ora nel
 # report; il giorno della settimana si deriva da "data" più a valle (python), non qui.
 collect_daily_tsv() {
-    local alias_tsv="$1"
+    local alias_tsv="$1" filt_mode="${2:-}" filt_val="${3:-}" filt_disp="${4:-}" list_file="${5:-}"
     # --since esteso indietro: filtriamo per author-date in awk, e la committer-date
     # di un commit rebasato è successiva alla sua author-date. Nessun --until, per non
     # perdere lavoro autorato nel periodo ma committato (rebasato) dopo la fine.
@@ -422,8 +448,18 @@ collect_daily_tsv() {
     since_margin=$(date -d "$START_DATE -31 days" +%Y-%m-%d 2>/dev/null || echo "$START_DATE")
 
     git log --no-merges --since="$since_margin" \
-        --pretty=format:'%x01%H%x09%an%x09%ad' --date=format:'%Y-%m-%d %H' --numstat 2>/dev/null \
-    | awk -v start="$START_DATE" -v end="$END_DATE" -v aliasfile="$alias_tsv" '
+        --pretty=format:'%x01%H%x09%aN%x09%aE%x09%ad' --date=format:'%Y-%m-%d %H' --numstat 2>/dev/null \
+    | awk -v start="$START_DATE" -v end="$END_DATE" -v aliasfile="$alias_tsv" \
+          -v filt_mode="$filt_mode" -v filt_val="$filt_val" -v filt_disp="$filt_disp" \
+          -v listfile="$list_file" '
+        # Nome visualizzato: alias per email > alias per nome > nome così com'"'"'è.
+        # Le chiavi email nel TSV sono già in minuscolo (vedi dump_aliases_tsv).
+        function resolve(name, email,   e) {
+            e = tolower(email)
+            if (index(e, "@") && (e in alias)) return alias[e]
+            if (name in alias) return alias[name]
+            return name
+        }
         BEGIN {
             FS = "\t"; OFS = "\t"
             if (aliasfile != "") {
@@ -435,18 +471,28 @@ collect_daily_tsv() {
             }
             active = 0
         }
-        # Riga di intestazione commit: \x01<hash>\t<autore>\t<author-date> <ora>
+        # Riga di intestazione commit: \x01<hash>\t<autore>\t<email>\t<author-date> <ora>
         substr($0, 1, 1) == "\001" {
-            a = $2
-            split($3, dt, " ")
+            split($4, dt, " ")
             d = dt[1]; hour = dt[2] + 0
             # Filtro esatto sul periodo per AUTHOR-DATE (confronto lessicografico su YYYY-MM-DD)
             if (d >= start && d <= end) {
-                if (a in alias) a = alias[a]
-                cur = a SUBSEP d SUBSEP hour
-                commits[cur]++
-                authors[a] = 1
-                active = 1
+                a = resolve($2, $3)
+                seen[a] = 1
+                keep = 1
+                # Il filtro autore agisce qui, PRIMA di aggregare: per email non si
+                # potrebbe fare dopo (il TSV aggrega per nome visualizzato, e due email
+                # diverse possono stare sotto lo stesso nome).
+                if (filt_mode == "name") keep = (a == filt_val)
+                else if (filt_mode == "email") keep = (tolower($3) == filt_val || (filt_disp != "" && a == filt_disp))
+                if (keep) {
+                    cur = a SUBSEP d SUBSEP hour
+                    commits[cur]++
+                    authors[a] = 1
+                    active = 1
+                } else {
+                    active = 0
+                }
             } else {
                 active = 0
             }
@@ -469,6 +515,7 @@ collect_daily_tsv() {
                 split(k, kk, SUBSEP)
                 print kk[1], kk[2], kk[3], commits[k], added[k] + 0, deleted[k] + 0, files[k] + 0
             }
+            if (listfile != "") for (x in seen) print x >> listfile
         }' \
     | sort -t$'\t' -k1,1 -k2,2 -k3,3n
 }
@@ -510,6 +557,9 @@ resolve_ownership_ref() {
 # Emette TSV: autore \t righe_possedute, al commit di riferimento $1.
 # Alias applicati qui (stesso file usato per le statistiche giornaliere): senza questo,
 # identità multiple della stessa persona spezzerebbero l'ownership fra più righe.
+# Il processo figlio aggrega per COPPIA nome+email (righe `author ` e `author-mail ` di
+# --line-porcelain, che git blame già passa dal .mailmap), così l'alias per email vale
+# anche qui; la risoluzione al nome visualizzato avviene nell'awk finale.
 collect_ownership_tsv() {
     local rev="$1" alias_tsv="$2" tmpdir="$3"
     local jobs
@@ -533,7 +583,7 @@ collect_ownership_tsv() {
 
     xargs -0 -P "$jobs" -I{} bash -c '
         git blame --line-porcelain "$1" -- "$2" 2>/dev/null \
-        | awk "/^author /{ sub(/^author /, \"\"); c[\$0]++ } END{ for (a in c) printf \"%s\t%d\n\", a, c[a] }"
+        | awk "/^author /{ n=\$0; sub(/^author /, \"\", n) } /^author-mail /{ m=\$0; sub(/^author-mail </, \"\", m); sub(/>\$/, \"\", m); c[n \"\\t\" m]++ } END{ for (k in c) printf \"%s\\t%d\\n\", k, c[k] }"
     ' _ "$rev" {} < "$filelist" \
     | awk -v aliasfile="$alias_tsv" -F'\t' '
         BEGIN {
@@ -545,10 +595,13 @@ collect_ownership_tsv() {
                 close(aliasfile)
             }
         }
+        # Colonne: nome \t email \t righe. Alias per email > alias per nome > nome.
         {
             a = $1
-            if (a in alias) a = alias[a]
-            c[a] += $2
+            e = tolower($2)
+            if (index(e, "@") && (e in alias)) a = alias[e]
+            else if (a in alias) a = alias[a]
+            c[a] += $3
         }
         END {
             for (a in c) print a "\t" c[a]
@@ -767,37 +820,55 @@ main() {
     dump_aliases_tsv > "$alias_tsv"
     [[ -s "$alias_tsv" ]] || alias_tsv=""
 
-    collect_daily_tsv "$alias_tsv" > "$raw_tsv"
-
-    # Filtro autore (match ESATTO, non più sottostringa).
-    # I dati sono già raggruppati sotto il nome-alias, quindi un filtro espresso col nome
-    # Git originale va prima risolto attraverso la mappa, altrimenti non troverebbe nulla.
+    # Filtro autore (match ESATTO, non più sottostringa), applicato in awk sui commit
+    # grezzi (vedi collect_daily_tsv). Il valore può essere un nome o, se contiene '@',
+    # un'email; in entrambi i casi va prima risolto attraverso la mappa degli alias,
+    # altrimenti un filtro col nome Git originale non troverebbe nulla (i dati sono già
+    # raggruppati sotto il nome visualizzato).
+    local filt_mode="" filt_val="" filt_disp="" authors_seen="$tmpdir/authors_seen.txt"
     if [[ -n "$CLI_AUTHOR_FILTER" ]]; then
-        local want="$CLI_AUTHOR_FILTER"
-        if [[ -n "$alias_tsv" ]]; then
-            local mapped
-            mapped=$(awk -F'\t' -v w="$want" '$1 == w { print $2; exit }' "$alias_tsv")
-            if [[ -n "$mapped" && "$mapped" != "$want" ]]; then
-                echo "Autore \"$want\" risolto in \"$mapped\" tramite gli alias." >&2
-                want="$mapped"
+        if [[ "$CLI_AUTHOR_FILTER" == *@* ]]; then
+            filt_mode="email"
+            filt_val=$(printf '%s' "$CLI_AUTHOR_FILTER" | tr '[:upper:]' '[:lower:]')
+            if [[ -n "$alias_tsv" ]]; then
+                filt_disp=$(awk -F'\t' -v w="$filt_val" '$1 == w { print $2; exit }' "$alias_tsv")
+                if [[ -n "$filt_disp" ]]; then
+                    echo "Email \"$CLI_AUTHOR_FILTER\" associata a \"$filt_disp\" tramite gli alias: incluse tutte le sue identità." >&2
+                fi
+            fi
+        else
+            filt_mode="name"
+            filt_val="$CLI_AUTHOR_FILTER"
+            if [[ -n "$alias_tsv" ]]; then
+                local mapped
+                mapped=$(awk -F'\t' -v w="$filt_val" '$1 == w { print $2; exit }' "$alias_tsv")
+                if [[ -n "$mapped" && "$mapped" != "$filt_val" ]]; then
+                    echo "Autore \"$filt_val\" risolto in \"$mapped\" tramite gli alias." >&2
+                    filt_val="$mapped"
+                fi
             fi
         fi
-        awk -F'\t' -v want="$want" '$1 == want' "$raw_tsv" > "$use_tsv"
-        if [[ ! -s "$use_tsv" ]]; then
-            echo "Avviso: nessun dato per l'autore \"$CLI_AUTHOR_FILTER\" (il match è esatto)." >&2
-            echo "Autori disponibili nel periodo:" >&2
-            cut -d$'\t' -f1 "$raw_tsv" | sort -u | sed 's/^/  - /' >&2
-        fi
-    else
-        cp "$raw_tsv" "$use_tsv"
     fi
+
+    collect_daily_tsv "$alias_tsv" "$filt_mode" "$filt_val" "$filt_disp" "$authors_seen" > "$raw_tsv"
+
+    if [[ -n "$filt_mode" && ! -s "$raw_tsv" ]]; then
+        echo "Avviso: nessun dato per l'autore \"$CLI_AUTHOR_FILTER\" (il match è esatto)." >&2
+        echo "Autori disponibili nel periodo:" >&2
+        sort -u "$authors_seen" 2>/dev/null | sed 's/^/  - /' >&2
+    fi
+    cp "$raw_tsv" "$use_tsv"
 
     if [[ "$OUTPUT_FORMAT" == "json" ]]; then
         # Ownership: solo per json (è l'unico consumatore) e solo se non disattivata.
         # Costo non banale (un git blame per file, vedi collect_ownership_tsv): non ha
         # senso pagarlo per un output testuale che non lo usa.
         local ownership_tsv="" ownership_ref="" ownership_ref_date=""
-        if [[ "$OWNERSHIP_ENABLED" == true ]]; then
+        if [[ -n "$filt_mode" ]]; then
+            # Con un filtro autore il pannello ownership mostrerebbe gli altri autori e i
+            # git blame sarebbero un costo senza beneficio: niente ownership.
+            echo "Ownership non calcolata con un filtro autore attivo." >&2
+        elif [[ "$OWNERSHIP_ENABLED" == true ]]; then
             ownership_ref=$(resolve_ownership_ref)
             if [[ -n "$ownership_ref" ]]; then
                 ownership_ref_date=$(git log -1 --format=%cd --date=short "$ownership_ref" 2>/dev/null)

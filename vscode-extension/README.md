@@ -14,6 +14,8 @@ from VS Code, for one repository or a whole workspace, over a date range of your
 - **Analyze Current Project**: activity chart of the repository you are working in.
 - **Analyze Whole Workspace (Multi-Repo)**: comparative report of every Git repository found in
   the workspace (up to 3 levels deep).
+- **Analyze My Work**: the same reports, but only for you (identity from `git config user.email`
+  or from the `git-activity.author` setting).
 - **Configurable date range**, absolute or relative (`30 days ago`, `last monday`).
 - **Integrated viewer**: the chart opens in a panel and is saved as a PNG; from the final
   notification you can save a copy or reveal it in its folder.
@@ -81,9 +83,19 @@ The extension is not (yet) published on the VS Code Marketplace.
 3. Run:
    - **Git Activity: Analyze Current Project** for a single repository.
    - **Git Activity: Analyze Whole Workspace (Multi-Repo)** for several repositories.
+   - **Git Activity: Analyze My Work** to see only your own work (see below).
 4. A progress notification is shown while the analysis runs.
 5. When it finishes, a panel shows the chart and a notification gives the file path, with
    **Save as…** and **Show in folder** buttons.
+
+### Analyze my work
+
+**Git Activity: Analyze My Work** produces the same report with only your commits. The identity is, in order:
+
+1. the `git-activity.author` setting (a name as it appears in the reports, or an email), if set;
+2. the email from `git config user.email` in the current repository.
+
+If the workspace has more than one repository, a menu asks whether to analyze the current project or the whole workspace. The collector applies the filter: with an email the comparison is exact and case-insensitive, and it also includes the other identities that your `git-activity-aliases.json` file merges with that email (or that a repository `.mailmap` merges). If you commit under several emails and have not merged them, set `git-activity.author` or add email aliases (see the [project README](https://github.com/minnogit/git-activity-reports#readme)). The single-repository report has no ownership panel in this mode, because it would show the other authors.
 
 ### Where the PNG is saved
 
@@ -105,6 +117,7 @@ Open Settings (`Ctrl+,`) and search for "Git Activity":
 - `Start Date`: start of the range (e.g. `2026-01-01` or `30 days ago`).
 - `End Date`: end of the range (e.g. `now` or `2026-12-31`).
 - `Output Dir`: folder of the generated PNG (empty = see above; a leading `~` is supported).
+- `Author`: name or email used by "Analyze My Work" (empty = `git config user.email` of the repository).
 
 Dates can be absolute (`YYYY-MM-DD`) or any relative expression understood by GNU `date -d`
 (`yesterday`, `2 weeks ago`, `last monday`, ...). The extension resolves them to an absolute

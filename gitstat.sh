@@ -14,7 +14,7 @@
 # PARAMETRI:
 #   DATA_INIZIO    Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
 #   DATA_FINE      Data fine periodo (YYYY-MM-DD) - OBBLIGATORIO
-#   autore         Filtra per autore specifico (opzionale)
+#   autore         Filtra per autore specifico (opzionale): nome oppure email (se contiene '@')
 #
 # OPZIONI:
 #   --fetch            Abilita l'aggiornamento del repository con git fetch (passata a git_stats_collector.sh)
@@ -24,8 +24,9 @@
 #   # Report per tutti gli autori
 #   gitstats 2025-12-01 2025-12-31
 #
-#   # Report per autore specifico
+#   # Report per autore specifico (nome oppure email)
 #   gitstats 2025-12-01 2025-12-31 "Mario Rossi"
+#   gitstats 2025-12-01 2025-12-31 mario.rossi@example.com
 #
 #   # Repository remoto
 #   gitstats --repo https://github.com/org/repo.git 2025-12-01 2025-12-31

@@ -43,6 +43,7 @@ suite('Estensione Git Activity Reports', () => {
         const commands = await vscode.commands.getCommands(true);
         assert.ok(commands.includes('git-activity.analyzeProject'), 'Comando git-activity.analyzeProject non registrato');
         assert.ok(commands.includes('git-activity.analyzeWorkspace'), 'Comando git-activity.analyzeWorkspace non registrato');
+        assert.ok(commands.includes('git-activity.analyzeMyWork'), 'Comando git-activity.analyzeMyWork non registrato');
     });
 });
 //# sourceMappingURL=extension.test.js.map

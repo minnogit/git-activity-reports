@@ -27,6 +27,11 @@
         "command": "git-activity.analyzeWorkspace",
         "title": "%command.analyzeWorkspace.title%",
         "category": "Git Activity"
+      },
+      {
+        "command": "git-activity.analyzeMyWork",
+        "title": "%command.analyzeMyWork.title%",
+        "category": "Git Activity"
       }
     ],
     "configuration": {
@@ -46,6 +51,11 @@
           "type": "string",
           "default": "",
           "description": "%config.outputDir%"
+        },
+        "git-activity.author": {
+          "type": "string",
+          "default": "",
+          "description": "%config.author%"
         }
       }
     }

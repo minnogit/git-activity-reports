@@ -46,11 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
             title: t('Searching for Git repositories in the workspace...'),
             cancellable: false
         }, async () => {
-            const allRepos: string[] = [];
-            for (const folder of workspaceFolders) {
-                const reposInFolder = findAllGitRepos(folder.uri.fsPath);
-                allRepos.push(...reposInFolder);
-            }
+            const allRepos = findReposInWorkspace(workspaceFolders);
 
             if (allRepos.length === 0) {
                 vscode.window.showErrorMessage(t('No Git repository found in the workspace.'));
@@ -65,7 +61,85 @@ export function activate(context: vscode.ExtensionContext) {
         });
     });
 
-    context.subscriptions.push(disposableProject, disposableWorkspace);
+    // "Analizza il mio lavoro": stessi report degli altri due comandi, filtrati su una persona
+    // (impostazione git-activity.author, altrimenti `git config user.email` del repo). Il
+    // filtro lo applica il collector (vedi --author / 4° argomento posizionale): l'estensione
+    // non conosce né alias né .mailmap, e passa l'identità così com'è.
+    let disposableMine = vscode.commands.registerCommand('git-activity.analyzeMyWork', async () => {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders) {
+            vscode.window.showErrorMessage(t('No workspace is open.'));
+            return;
+        }
+
+        const allRepos = findReposInWorkspace(workspaceFolders);
+        if (allRepos.length === 0) {
+            vscode.window.showErrorMessage(t('No Git repository found in the workspace.'));
+            return;
+        }
+
+        // Il repo "corrente" è quello del file aperto (o della prima cartella), come per
+        // "Analizza Progetto Corrente"; se non si trova, il primo repo del workspace.
+        const activeEditor = vscode.window.activeTextEditor;
+        const startPath = activeEditor
+            ? path.dirname(activeEditor.document.uri.fsPath)
+            : workspaceFolders[0].uri.fsPath;
+        const currentRepo = findClosestGitRepo(startPath) || allRepos[0];
+
+        const author = await resolveAuthor(currentRepo);
+        if (!author) {
+            vscode.window.showErrorMessage(
+                t('Could not determine your Git identity. Set "git-activity.author" in the settings, or run "git config user.email" in the repository.')
+            );
+            return;
+        }
+
+        let repos = [currentRepo];
+        if (allRepos.length > 1) {
+            const currentLabel = t('Current project');
+            const workspaceLabel = t('Whole workspace ({0} repositories)', allRepos.length);
+            const choice = await vscode.window.showQuickPick(
+                [
+                    { label: currentLabel, description: path.basename(currentRepo) },
+                    { label: workspaceLabel },
+                ],
+                { placeHolder: t('Analyze the work of {0} on:', author) }
+            );
+            if (!choice) {
+                return;
+            }
+            if (choice.label === workspaceLabel) {
+                repos = allRepos;
+            }
+        }
+        runAnalysis(context, repos, author);
+    });
+
+    context.subscriptions.push(disposableProject, disposableWorkspace, disposableMine);
+}
+
+// Repository Git trovati nelle cartelle del workspace (scansione fino a 3 livelli).
+function findReposInWorkspace(folders: readonly vscode.WorkspaceFolder[]): string[] {
+    const repos: string[] = [];
+    for (const folder of folders) {
+        repos.push(...findAllGitRepos(folder.uri.fsPath));
+    }
+    return repos;
+}
+
+// Identità di chi lancia "Analizza il mio lavoro": prima l'impostazione git-activity.author
+// (nome o email), poi l'email di `git config user.email` nel repo (rispetta gli override
+// locali). `execFile`, mai una shell: nessun problema di quoting. Stringa vuota se non c'è.
+function resolveAuthor(repoPath: string): Promise<string> {
+    const configured = (vscode.workspace.getConfiguration('git-activity').get<string>('author') || '').trim();
+    if (configured) {
+        return Promise.resolve(configured);
+    }
+    return new Promise((resolve) => {
+        cp.execFile('git', ['config', 'user.email'], { cwd: repoPath }, (error, stdout) => {
+            resolve(error ? '' : stdout.toString().trim());
+        });
+    });
 }
 
 function findClosestGitRepo(startPath: string): string | null {
@@ -271,7 +345,7 @@ function runPipeline(collector: RunnableScript, plotter: RunnableScript, collect
     });
 }
 
-async function runAnalysis(context: vscode.ExtensionContext, paths: string[]) {
+async function runAnalysis(context: vscode.ExtensionContext, paths: string[], author?: string) {
     const config = vscode.workspace.getConfiguration('git-activity');
     const startDateRaw = config.get<string>('startDate') || '30 days ago';
     const endDateRaw = config.get<string>('endDate') || 'now';
@@ -315,9 +389,11 @@ async function runAnalysis(context: vscode.ExtensionContext, paths: string[]) {
             return;
         }
 
+        // Con un autore: il multi-repo lo riceve come opzione PRIMA delle date (--author), il
+        // singolo come 4° argomento posizionale dopo 'json' (vedi gli help dei collector).
         const collectorArgs = isMulti
-            ? [...scripts.collector.args, startDate, endDate, ...paths]
-            : [...scripts.collector.args, startDate, endDate, 'json'];
+            ? [...scripts.collector.args, ...(author ? ['--author', author] : []), startDate, endDate, ...paths]
+            : [...scripts.collector.args, startDate, endDate, 'json', ...(author ? [author] : [])];
 
         try {
             const { stdout, stderr } = await runPipeline(

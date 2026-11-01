@@ -6,5 +6,7 @@
   "config.endDate": "End date of the analysis (e.g. YYYY-MM-DD or 'now').",
   "config.outputDir": "Folder where the generated PNG is written. Empty: the workspace folder for multi-repo analysis, the extension's storage folder for a single repository (so the report never appears as an untracked file in the analyzed repo). Supports a leading `~`.",
   "capabilities.untrusted": "The extension runs bash and Python scripts on the repositories of the workspace, so it needs a trusted workspace.",
-  "capabilities.virtual": "The extension needs a real filesystem: it runs git and local scripts."
+  "capabilities.virtual": "The extension needs a real filesystem: it runs git and local scripts.",
+  "command.analyzeMyWork.title": "Analyze My Work",
+  "config.author": "Whose work \"Analyze My Work\" shows: a name as it appears in the reports, or an email address (exact match, case-insensitive; with an email, every identity that your aliases file merges with it is included). Empty: the email from `git config user.email` of the repository."
 }

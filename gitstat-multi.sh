@@ -9,7 +9,7 @@
 #   di più repository contemporaneamente.
 #
 # UTILIZZO:
-#   gitstats-multi <DATA_INIZIO> <DATA_FINE> [percorso1] [percorso2] ...
+#   gitstats-multi [--author <nome|email>] <DATA_INIZIO> <DATA_FINE> [percorso1] [percorso2] ...
 #
 # PARAMETRI:
 #   DATA_INIZIO    Data inizio periodo (YYYY-MM-DD) - OBBLIGATORIO
@@ -25,6 +25,9 @@
 #   
 #   # Con file di configurazione
 #   gitstats-multi --file progetti.txt 2025-12-01 2025-12-31
+#   
+#   # Solo il lavoro di una persona (nome oppure email) su tutti i progetti
+#   gitstats-multi --author mario.rossi@example.com --file progetti.txt 2025-12-01 2025-12-31
 #
 # REQUISITI:
 #   - git_multiproject_stats_collector.sh e plot_multiproject.py devono essere disponibili globalmente

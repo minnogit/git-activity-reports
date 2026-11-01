@@ -17,5 +17,9 @@ suite('Estensione Git Activity Reports', () => {
             commands.includes('git-activity.analyzeWorkspace'),
             'Comando git-activity.analyzeWorkspace non registrato'
         );
+        assert.ok(
+            commands.includes('git-activity.analyzeMyWork'),
+            'Comando git-activity.analyzeMyWork non registrato'
+        );
     });
 });
