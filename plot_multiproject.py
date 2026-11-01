@@ -38,17 +38,13 @@ confrontare progetti diversi. Un confronto commit-vs-churn onesto richiede un pa
 dedicato (es. churn per commit per progetto), non due pannelli affiancati; per ora la
 tabella di riepilogo resta il posto dove leggere le due metriche sullo stesso progetto.
 
-L'indice composito resta disponibile come metrica SECONDARIA (solo in tabella):
-
-  indice = somma sui giorni di [ 1.0 * ln(1 + min(churn_giorno, 15000))
-                               + 0.5 * ln(1 + file_distinti_giorno) ]
-
-È ADDITIVO e non moltiplicativo di proposito, e il tetto (15000 righe, p99 osservato
-su repository reali con AI coding assistant — la cifra originale di 1000 risaliva a
-un modello di sviluppo antecedente) è applicato PER GIORNO. Nella versione precedente
-il tetto veniva applicato all'aggregato di periodo: su qualsiasi intervallo più lungo
-di pochi giorni si saturava, e l'indice finiva per dipendere solo dal numero di file
-toccati (tutti gli autori attivi ottenevano lo stesso valore di volume).
+Nota storica: fino alla v3 il report aveva anche un INDICE composito (somma sui giorni di
+ln(1 + churn_giorno con tetto) e ln(1 + file distinti)), relegato alla tabella. È stato
+rimosso: era la parte più simile a un punteggio e invitava a leggere la tabella come una
+classifica. Due lezioni misurate restano utili anche senza di lui: una forma moltiplicativa
+azzerava le giornate di sole cancellazioni, e un tetto applicato all'aggregato di periodo
+(invece che per giorno) si saturava; il valore stesso del tetto (1000, poi 15000) dipendeva
+dal modello di sviluppo — vedi CLAUDE.md.
 
 ATTENZIONE: sono indicatori di attività, non misure di produttività o di qualità.
 Code review, design, mentoring e debugging difficile sono strutturalmente invisibili.
@@ -70,9 +66,6 @@ import pandas as pd
 # Parametri delle metriche (mantenere allineati con plot_git.py)
 # -----------------------------------------------------------------------------
 DELETED_WEIGHT = 0.4      # quanto pesa una riga rimossa rispetto a una aggiunta
-DAILY_CHURN_CAP = 15000   # tetto anti-outlier, PER GIORNO per autore
-W_CHURN = 1.0             # peso del termine di volume nell'indice composito
-W_FILES = 0.5             # peso del termine di dispersione su file
 
 # -----------------------------------------------------------------------------
 # Palette validata (light surface). Ordine fisso, mai ciclato: dal 9° autore in poi
@@ -150,9 +143,8 @@ STRINGS = {
         "top_n": "  (primi {n} di {total})",
         "no_metric": {"commits": "Nessun commit nel periodo", "churn": "Nessun churn nel periodo"},
         "table_title": "Riepilogo per progetto",
-        "table_cols": ["Progetto", "Churn", "Commit", "Giorni att.", "File", "Autori", "Indice"],
-        "table_note": "Churn = aggiunte + 0.4 × rimozioni · Indice = metrica secondaria, "
-                      "additiva, con tetto giornaliero",
+        "table_cols": ["Progetto", "Churn", "Commit", "Giorni att.", "File", "Autori"],
+        "table_note": "Churn = aggiunte + 0.4 × rimozioni",
         "table_shown": "Mostrati i primi {shown} di {total} progetti. ",
         "thousands_sep": ".",
     },
@@ -172,9 +164,8 @@ STRINGS = {
         "top_n": "  (top {n} of {total})",
         "no_metric": {"commits": "No commits in the period", "churn": "No churn in the period"},
         "table_title": "Summary by project",
-        "table_cols": ["Project", "Churn", "Commits", "Active days", "Files", "Authors", "Index"],
-        "table_note": "Churn = added + 0.4 × deleted · Index = secondary metric, "
-                      "additive, with a daily cap",
+        "table_cols": ["Project", "Churn", "Commits", "Active days", "Files", "Authors"],
+        "table_note": "Churn = added + 0.4 × deleted",
         "table_shown": "Showing the top {shown} of {total} projects. ",
         "thousands_sep": ",",
     },
@@ -265,14 +256,6 @@ def churn_of(added, deleted):
     return added + DELETED_WEIGHT * deleted
 
 
-def daily_index(added, deleted, files):
-    """Indice composito di un singolo giorno (additivo, cap per giorno)."""
-    if files <= 0:
-        return 0.0
-    churn = min(churn_of(added, deleted), DAILY_CHURN_CAP)
-    return W_CHURN * np.log1p(churn) + W_FILES * np.log1p(files)
-
-
 # -----------------------------------------------------------------------------
 # Lettura input
 # -----------------------------------------------------------------------------
@@ -310,7 +293,6 @@ def flatten(payload, aliases):
         sys.exit(1)
 
     rows = []
-    legacy_aggregate = False
     for entry in entries:
         author = entry.get("author_name") or entry.get("author") or "Sconosciuto"
         if aliases_needed:
@@ -319,22 +301,11 @@ def flatten(payload, aliases):
         days = entry.get("daily_data") or []
 
         if days:
-            index = sum(
-                daily_index(int(d.get("added", 0) or 0),
-                            int(d.get("deleted", 0) or 0),
-                            int(d.get("files", 0) or 0))
-                for d in days
-            )
             active_days = entry.get("active_days")
             if active_days is None:
                 active_days = sum(1 for d in days if int(d.get("commits", 0) or 0) > 0)
         else:
-            # Formato legacy senza dettaglio giornaliero: l'indice va calcolato
-            # sull'aggregato, dove il tetto anti-outlier satura. Lo segnaliamo.
-            legacy_aggregate = True
-            index = daily_index(int(entry.get("added", 0) or 0),
-                                int(entry.get("deleted", 0) or 0),
-                                int(entry.get("files", 0) or 0))
+            # Formato legacy senza dettaglio giornaliero: restano i soli totali per entry.
             active_days = entry.get("active_days") or 0
 
         added = int(entry.get("added", 0) or 0)
@@ -352,13 +323,7 @@ def flatten(payload, aliases):
             "files": int(entry.get("files", 0) or 0),
             "churn": churn_of(added, deleted),
             "active_days": int(active_days or 0),
-            "index": index,
         })
-
-    if legacy_aggregate:
-        print("Avviso: JSON senza dettaglio giornaliero (formato precedente). "
-              "L'indice composito è calcolato sull'aggregato di periodo e non è "
-              "confrontabile con quello dei report nuovi.")
 
     if not rows:
         print("Nessun dato di attività trovato nel periodo: niente da rappresentare.")
@@ -368,8 +333,7 @@ def flatten(payload, aliases):
     # Gli alias possono aver unito due identità nello stesso progetto: riaggreghiamo.
     df = (df.groupby(["project", "author"], as_index=False)
             .agg({"commits": "sum", "added": "sum", "deleted": "sum",
-                  "files": "sum", "churn": "sum", "active_days": "max",
-                  "index": "sum"}))
+                  "files": "sum", "churn": "sum", "active_days": "max"}))
     return df, meta
 
 
@@ -389,8 +353,7 @@ def fold_tail(df, authors_by_size):
     df["author"] = df["author"].where(df["author"].isin(keep), OTHER_LABEL)
     df = (df.groupby(["project", "author"], as_index=False)
             .agg({"commits": "sum", "added": "sum", "deleted": "sum",
-                  "files": "sum", "churn": "sum", "active_days": "max",
-                  "index": "sum"}))
+                  "files": "sum", "churn": "sum", "active_days": "max"}))
     return df, authors_by_size[:MAX_SERIES] + [OTHER_LABEL]
 
 
@@ -607,7 +570,7 @@ def panel_table(ax, df):
     summary = (df.groupby("project")
                  .agg(churn=("churn", "sum"), commit=("commits", "sum"),
                       file=("files", "sum"), giorni=("active_days", "sum"),
-                      autori=("author", "nunique"), indice=("index", "sum"))
+                      autori=("author", "nunique"))
                  .sort_values("churn", ascending=False))
 
     shown = summary.head(MAX_TABLE_ROWS)
@@ -621,13 +584,12 @@ def panel_table(ax, df):
             f"{int(r['giorni'])}",
             fmt_int(r['file']),
             f"{int(r['autori'])}",
-            f"{r['indice']:.1f}",
         ])
 
     table = ax.table(
         cellText=cells,
         colLabels=T["table_cols"],
-        colWidths=[0.26, 0.14, 0.12, 0.14, 0.12, 0.10, 0.12],
+        colWidths=[0.30, 0.16, 0.14, 0.16, 0.14, 0.10],
         cellLoc="right", loc="upper center",
     )
     table.auto_set_font_size(False)

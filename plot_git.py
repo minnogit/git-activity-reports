@@ -25,16 +25,13 @@ di quanto sono attendibili — non di quanto sono impressionanti:
                    fino a 9.7x di inflazione su una singola giornata). Terzo pannello
                    (a destra, affiancato al commit per il confronto diretto).
 
-L'indice composito resta disponibile come metrica SECONDARIA (solo in tabella):
-
-  indice = somma sui giorni di [ 1.0 * ln(1 + min(churn_giorno, 15000))
-                               + 0.5 * ln(1 + file_distinti_giorno) ]
-
-È ADDITIVO e non moltiplicativo di proposito: nella forma a prodotto un fattore a
-zero azzerava tutto (una giornata di sole cancellazioni valeva 0) e i due termini si
-amplificavano a vicenda, tanto che un find/replace su 100 file superava di ~6x un fix
-profondo in un solo file. Il tetto (15000 righe, p99 osservato su repository reali con AI coding assistant) è applicato PER GIORNO: applicarlo a
-un aggregato di periodo lo saturava, appiattendo tutti gli autori sullo stesso valore.
+Nota storica: fino alla v3 il report aveva anche un INDICE composito (somma sui giorni di
+ln(1 + churn_giorno con tetto) e ln(1 + file distinti)), relegato alla tabella. È stato
+rimosso: era la parte più simile a un punteggio e invitava a leggere la tabella come una
+classifica. Due lezioni misurate restano utili anche senza di lui: una forma moltiplicativa
+azzerava le giornate di sole cancellazioni, e un tetto applicato all'aggregato di periodo
+(invece che per giorno) si saturava; il valore stesso del tetto (1000, poi 15000) dipendeva
+dal modello di sviluppo — vedi CLAUDE.md.
 
 ATTENZIONE: sono indicatori di attività, non misure di produttività o di qualità.
 Code review, design, mentoring e debugging difficile sono strutturalmente invisibili.
@@ -82,9 +79,6 @@ import pandas as pd
 # Parametri delle metriche (mantenere allineati con plot_multiproject.py)
 # -----------------------------------------------------------------------------
 DELETED_WEIGHT = 0.4      # quanto pesa una riga rimossa rispetto a una aggiunta
-DAILY_CHURN_CAP = 15000   # tetto anti-outlier, PER GIORNO per autore
-W_CHURN = 1.0             # peso del termine di volume nell'indice composito
-W_FILES = 0.5             # peso del termine di dispersione su file
 
 # -----------------------------------------------------------------------------
 # Palette validata (light surface). Ordine fisso, mai ciclato: dal 9° autore in poi
@@ -122,9 +116,8 @@ STRINGS = {
         "churn_title": "Churn per {bucket}, per autore",
         "churn_ylabel": "Righe (aggiunte + 0.4 × rimosse)",
         "table_title": "Riepilogo per autore",
-        "table_cols": ["Autore", "Churn", "Commit", "Giorni att.", "File", "Indice"],
-        "table_note": "Churn = aggiunte + 0.4 × rimozioni · Indice = metrica secondaria, "
-                      "additiva, con tetto giornaliero",
+        "table_cols": ["Autore", "Churn", "Commit", "Giorni att.", "File"],
+        "table_note": "Churn = aggiunte + 0.4 × rimozioni",
         "table_shown": "Mostrati i primi {shown} di {total} autori. ",
         "weekdays": ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"],
         "punch_title": "Quando avvengono i commit (giorno × ora)",
@@ -152,9 +145,8 @@ STRINGS = {
         "churn_title": "Churn per {bucket}, by author",
         "churn_ylabel": "Lines (added + 0.4 × deleted)",
         "table_title": "Summary by author",
-        "table_cols": ["Author", "Churn", "Commits", "Active days", "Files", "Index"],
-        "table_note": "Churn = added + 0.4 × deleted · Index = secondary metric, "
-                      "additive, with a daily cap",
+        "table_cols": ["Author", "Churn", "Commits", "Active days", "Files"],
+        "table_note": "Churn = added + 0.4 × deleted",
         "table_shown": "Showing the top {shown} of {total} authors. ",
         "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
         "punch_title": "When commits happen (day × hour)",
@@ -303,14 +295,6 @@ def churn_of(added, deleted):
     return added + DELETED_WEIGHT * deleted
 
 
-def daily_index(added, deleted, files):
-    """Indice composito di un singolo giorno (additivo, cap per giorno)."""
-    if files <= 0:
-        return 0.0
-    churn = min(churn_of(added, deleted), DAILY_CHURN_CAP)
-    return W_CHURN * np.log1p(churn) + W_FILES * np.log1p(files)
-
-
 # -----------------------------------------------------------------------------
 # Lettura input
 # -----------------------------------------------------------------------------
@@ -378,7 +362,6 @@ def flatten(payload, aliases):
                 "deleted": deleted,
                 "files": files,
                 "churn": churn_of(added, deleted),
-                "index": daily_index(added, deleted, files),
             })
 
     if not rows:
@@ -579,13 +562,12 @@ def panel_table(ax, summary):
             fmt_int(r['commit']),
             f"{int(r['giorni_attivi'])}",
             fmt_int(r['file']),
-            f"{r['indice']:.1f}",
         ])
 
     table = ax.table(
         cellText=cells,
         colLabels=T["table_cols"],
-        colWidths=[0.34, 0.14, 0.12, 0.14, 0.12, 0.12],
+        colWidths=[0.38, 0.15, 0.15, 0.17, 0.15],
         cellLoc="right", loc="upper center",
     )
     table.auto_set_font_size(False)
@@ -799,7 +781,6 @@ def main():
         "commit": df.groupby("author")["commits"].sum(),
         "giorni_attivi": df[df["commits"] > 0].groupby("author")["date"].nunique(),
         "file": df.groupby("author")["files"].sum(),
-        "indice": df.groupby("author")["index"].sum(),
     }).fillna(0).sort_values("churn", ascending=False)
 
     ownership = payload.get("ownership") if isinstance(payload, dict) else None
